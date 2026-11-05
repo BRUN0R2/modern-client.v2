@@ -314,6 +314,203 @@ TEST(AgentDeciders, ABodyInTheAirHasNotLandedAcrossALink) {
     EXPECT_GT(decided(over, true).intent.direction.y, 0.0F) << "landed, on to its goal";
 }
 
+/// A door in a wall along x = 0 across two rooms.
+constexpr nx::Aabb kDoor{.min = {.x = -16, .y = -32, .z = 0}, .max = {.x = 16, .y = 32, .z = 96}};
+
+/// The mesh of those rooms.
+auto roomsWithADoor() -> nx::navigation::NavigationMesh {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -256}, {.x = 512, .y = 256}, 0);
+    nx::test::addBox(geometry, {.x = -16, .y = -288, .z = 0}, {.x = 16, .y = -32, .z = 128});
+    nx::test::addBox(geometry, {.x = -16, .y = 32, .z = 0}, {.x = 16, .y = 288, .z = 128});
+    nx::test::addBox(geometry, kDoor.min, kDoor.max);
+    geometry.doors.push_back(kDoor);
+    return nx::test::playerMesh(geometry, 0);
+}
+
+TEST(AgentDeciders, WhatOpensADoorFromBehindItIsNoWayToOpenItHoweverNearItIs) {
+    // On a body's way through the door, what opens it on the other side is nearest: its way there goes
+    // through the door, at which it would wait for itself. It goes to what opens it on its own side.
+    const auto mesh = roomsWithADoor();
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::ecs::World world;
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    constexpr nx::Seconds kTick{0.01F};
+    const nx::Vec3 behind{.x = 100, .y = 200};
+    const nx::Vec3 onItsSide{.x = -450, .y = 200};
+    const std::vector gates{nx::navigation::Gate{
+        .middle = (kDoor.min + kDoor.max) * 0.5F, .isOpen = false, .openers = {behind, onItsSide}}};
+    nx::Vec3 feet{.x = -60};
+    const auto entity = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 400});
+    bool used = false;
+    for (int tick = 0; tick < 500 && !used; ++tick) {
+        const std::array requests{nx::agents::DecisionRequest{
+            .brain = &brain, .feet = feet, .maxSpeed = kSpeed, .body = entity, .elapsed = kTick}};
+        std::array<nx::agents::Decision, 1> decisions{};
+        deciders.decide(*jobs, requests, decisions, {}, gates);
+        const nx::agents::Intent& intent = decisions.front().intent;
+        used = intent.uses;
+        feet += intent.direction * (kSpeed.value() * intent.speedShare * kTick.count());
+    }
+    EXPECT_TRUE(used);
+    EXPECT_LT(nx::test::distanceAcross(feet, onItsSide), 64.0F);
+}
+
+TEST(AgentDeciders, AClosedDoorNothingOpensIsAsAWall) {
+    const auto mesh = roomsWithADoor();
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::ecs::World world;
+    const std::vector gates{nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F, .isOpen = false}};
+    const auto entity = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 400});
+    const std::array requests{nx::agents::DecisionRequest{.brain = &brain,
+                                                          .feet = {.x = -60},
+                                                          .maxSpeed = nx::UnitsPerSecond{250.0F},
+                                                          .body = entity,
+                                                          .elapsed = nx::Seconds{0.01F}}};
+    std::array<nx::agents::Decision, 1> decisions{};
+    deciders.decide(*jobs, requests, decisions, {}, gates);
+    EXPECT_EQ(decisions.front().behavior, nx::agents::Behavior::Blocked);
+    EXPECT_EQ(decisions.front().navigationError, nx::navigation::NavigationError::Unreachable);
+    EXPECT_FALSE(decisions.front().closedGate.has_value());
+}
+
+TEST(AgentDeciders, AWayKeepsOffAClosedDoorWhileItHasAnother) {
+    // The rooms joined round the end of the wall too, a long way: a door that opens or not, it goes round.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -256}, {.x = 512, .y = 512}, 0);
+    nx::test::addBox(geometry, {.x = -16, .y = -288, .z = 0}, {.x = 16, .y = -32, .z = 128});
+    nx::test::addBox(geometry, {.x = -16, .y = 32, .z = 0}, {.x = 16, .y = 288, .z = 128});
+    nx::test::addBox(geometry, kDoor.min, kDoor.max);
+    geometry.doors.push_back(kDoor);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    const std::vector gates{nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F,
+                                                 .isOpen = false,
+                                                 .openers = {nx::Vec3{.x = -400, .y = 100}}}};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 200});
+    const nx::agents::Decision decision = brain.decide({.x = -60}, query, true, {}, gates);
+    EXPECT_FALSE(decision.closedGate.has_value());
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    EXPECT_TRUE(std::ranges::any_of(way, [](nx::Vec3 point) { return point.y > 288.0F; }))
+        << "round the wall";
+}
+
+TEST(AgentDeciders, ADoorUsedOnlyIsUsedByTheBodyThatGetsThere) {
+    const auto mesh = roomsWithADoor();
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::ecs::World world;
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    constexpr nx::Seconds kTick{0.01F};
+    const nx::Vec3 middle = (kDoor.min + kDoor.max) * 0.5F;
+    const std::vector gates{nx::navigation::Gate{.middle = middle, .isOpen = false, .openers = {middle}}};
+    nx::Vec3 feet{.x = -200};
+    const auto entity = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 400});
+    bool used = false;
+    for (int tick = 0; tick < 300 && !used; ++tick) {
+        const std::array requests{nx::agents::DecisionRequest{
+            .brain = &brain, .feet = feet, .maxSpeed = kSpeed, .body = entity, .elapsed = kTick}};
+        std::array<nx::agents::Decision, 1> decisions{};
+        deciders.decide(*jobs, requests, decisions, {}, gates);
+        const nx::agents::Intent& intent = decisions.front().intent;
+        used = intent.uses;
+        if (used) {
+            ASSERT_TRUE(intent.lookAt.has_value());
+            EXPECT_EQ(*intent.lookAt, middle);
+        }
+        feet += intent.direction * (kSpeed.value() * intent.speedShare * kTick.count());
+    }
+    EXPECT_TRUE(used);
+    EXPECT_LT(feet.x, kDoor.min.x);
+}
+
+TEST(AgentDeciders, NoBodyGoesToOpenADoorWhenAllThatOpensItIsBehindIt) {
+    const auto mesh = roomsWithADoor();
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::ecs::World world;
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    constexpr nx::Seconds kTick{0.01F};
+    const std::vector gates{nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F,
+                                                 .isOpen = false,
+                                                 .openers = {nx::Vec3{.x = 100, .y = 200}}}};
+    const auto entity = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 400});
+    const std::array requests{nx::agents::DecisionRequest{
+        .brain = &brain, .feet = {.x = -60}, .maxSpeed = kSpeed, .body = entity, .elapsed = kTick}};
+    std::array<nx::agents::Decision, 1> decisions{};
+    deciders.decide(*jobs, requests, decisions, {}, gates);
+    EXPECT_FALSE(brain.gateItOpens().has_value());
+    EXPECT_TRUE(decisions.front().closedGate.has_value()) << "it goes on to the door, and waits";
+}
+
+TEST(AgentDeciders, TheBodyNearestWhatOpensAClosedDoorOpensItWhileTheOthersWaitAtIt) {
+    // What opens it on this side.
+    const auto mesh = roomsWithADoor();
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::ecs::World world;
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    constexpr nx::Seconds kTick{0.01F};
+    constexpr float kArrived = 24.0F;
+    const nx::Vec3 opener{.x = -200, .y = 200};
+    const nx::Vec3 goal{.x = 400};
+    std::vector gates{
+        nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F, .isOpen = false, .openers = {opener}}};
+    std::array feet{nx::Vec3{.x = -150, .y = 120}, nx::Vec3{.x = -300, .y = -120}};
+    const std::array entities{world.spawn(), world.spawn()};
+    std::vector<nx::agents::Brain> brains;
+    brains.emplace_back(rules()).setGoal(goal);
+    brains.emplace_back(rules()).setGoal(goal);
+    std::array<bool, 2> used{};
+    float farthestWhileClosed = std::numeric_limits<float>::lowest();
+    for (int tick = 0; tick < 1000; ++tick) {
+        std::vector<nx::agents::DecisionRequest> requests;
+        for (std::size_t agent = 0; agent < brains.size(); ++agent) {
+            requests.push_back({.brain = &brains[agent],
+                                .feet = feet[agent],
+                                .maxSpeed = kSpeed,
+                                .body = entities[agent],
+                                .elapsed = kTick});
+        }
+        std::vector<nx::agents::Decision> decisions(brains.size());
+        deciders.decide(*jobs, requests, decisions, {}, gates);
+        if (tick == 0) {
+            EXPECT_TRUE(brains[0].gateItOpens().has_value()) << "the nearer";
+            EXPECT_FALSE(brains[1].gateItOpens().has_value());
+        }
+        for (std::size_t agent = 0; agent < brains.size(); ++agent) {
+            const nx::agents::Intent& intent = decisions[agent].intent;
+            used[agent] = used[agent] || intent.uses;
+            feet[agent] += intent.direction * (kSpeed.value() * intent.speedShare * kTick.count());
+            if (!gates.front().isOpen) {
+                farthestWhileClosed = std::max(farthestWhileClosed, feet[agent].x);
+            }
+        }
+        // What it uses opens the door, some time on.
+        constexpr int kOpensAfter = 300;
+        gates.front().isOpen = used[0] && tick >= kOpensAfter;
+    }
+    EXPECT_TRUE(used[0]);
+    EXPECT_FALSE(used[1]) << "one to a door";
+    EXPECT_LT(farthestWhileClosed, kDoor.min.x) << "none through it closed";
+    for (std::size_t agent = 0; agent < brains.size(); ++agent) {
+        EXPECT_LT(nx::test::distanceAcross(feet[agent], goal), kArrived)
+            << "agent " << agent << " through it";
+    }
+}
+
 TEST(AgentDeciders, FewerBrainsThanABatchAndNoneDecideToo) {
     const auto mesh = boxesMesh();
     const std::size_t few = nx::agents::kSmallestBatch - 1;

@@ -63,11 +63,13 @@ struct PlacedBodyHull {
 
 /// What a mesh is built from: the surfaces of what is solid, the ladders that join its floors, each the box
 /// of its volume, upright, which a body climbs where it touches it (AreaKind::Ladder), and what stops a body
-/// besides the surfaces, standing and crouched: the world's hull, and the brush entities' hulls.
+/// besides the surfaces, standing and crouched: the world's hull, and the brush entities' hulls. A door's
+/// box, as it stands closed: solid like any other, its two sides are joined by a link (AreaKind::Door).
 struct Geometry {
     std::vector<Vec3> vertices{};
     std::vector<GeometryTriangle> triangles{};
     std::vector<Aabb> ladders{};
+    std::vector<Aabb> doors{};
     BodyHull bodyHull{};
     BodyHull crouchedBodyHull{};
     std::vector<PlacedBodyHull> brushBodyHulls{};

@@ -127,6 +127,7 @@ struct TileInput {
     std::array<float, 3> low{};
     std::array<float, 3> high{};
     std::vector<Aabb> ladders{};
+    std::vector<Aabb> doors{};
     BodyHull bodyHull{};
     BodyHull crouchedBodyHull{};
     std::vector<PlacedBodyHull> brushBodyHulls{};
@@ -190,6 +191,7 @@ struct TileInput {
         }
     }
     TileInput input{.ladders = geometry.ladders,
+                    .doors = geometry.doors,
                     .bodyHull = geometry.bodyHull,
                     .crouchedBodyHull = geometry.crouchedBodyHull,
                     .brushBodyHulls = geometry.brushBodyHulls,
@@ -666,9 +668,9 @@ struct TileLinks {
         addWay(start, end, radius, kind, narrow<std::uint32_t>(ids.size()));
     }
 
-    /// A link of the ladder whose middle is `ladder`.
-    void addLadder(Vec3 start, Vec3 end, float radius, Vec3 ladder) {
-        addWay(start, end, radius, AreaKind::Ladder, ladderIdOf(ladder));
+    /// A link of the kind `kind` through the ladder or door whose middle is `through`.
+    void addThrough(Vec3 start, Vec3 end, float radius, AreaKind kind, Vec3 through) {
+        addWay(start, end, radius, kind, throughIdOf(through));
     }
 
 private:
@@ -678,8 +680,8 @@ private:
         radii.push_back(radius);
         flags.push_back(kWalkablePolygon);
         areas.push_back(areaIdOf(kind));
-        const bool goesBothWays =
-            kind == AreaKind::Jump || kind == AreaKind::CrouchedJump || kind == AreaKind::Ladder;
+        const bool goesBothWays = kind == AreaKind::Jump || kind == AreaKind::CrouchedJump ||
+                                  kind == AreaKind::Ladder || kind == AreaKind::Door;
         ways.push_back(goesBothWays ? std::uint8_t{DT_OFFMESH_CON_BIDIR} : std::uint8_t{0});
         ids.push_back(id);
     }
@@ -988,7 +990,45 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
         const std::vector<LadderLanding> levels = landingsOf(ladder, input, near);
         const Vec3 middle = (ladder.min + ladder.max) * 0.5F;
         for (std::size_t level = 1; level < levels.size(); ++level) {
-            links.addLadder(levels[level - 1].at, levels[level].at, radius, middle);
+            links.addThrough(levels[level - 1].at, levels[level].at, radius, AreaKind::Ladder, middle);
+        }
+    }
+}
+
+/// Adds to `links` the links of the doors of `input` about the tile `bounds` holds, between the floors on the
+/// two sides of each across the way it is thin, at the height of its bottom, where a body's middle clears it:
+/// Detour keeps those that start in the tile.
+void addDoorLinks(const TileInput& input, const TileBounds& bounds, TileLinks& links) {
+    const float radius = input.profile.radius.value();
+    const float cell = input.settings.cellSize.value();
+    const float step = input.profile.stepHeight.value();
+    for (const Aabb& door : input.doors) {
+        const Vec3 middle = (door.min + door.max) * 0.5F;
+        const Vec3 half = (door.max - door.min) * 0.5F;
+        const bool isThinAlongX = half.x <= half.y;
+        const float past = (isThinAlongX ? half.x : half.y) + radius + cell;
+        const Vec3 across = isThinAlongX ? Vec3{.x = past} : Vec3{.y = past};
+        // Across, Detour's z is the game's y turned about.
+        const float reach = past + radius + cell;
+        const TileBounds about{.low = {door.min.x - reach, 0.0F, -door.max.y - reach},
+                               .high = {door.max.x + reach, 0.0F, -door.min.y + reach}};
+        if (about.high[0] < bounds.low[0] || about.low[0] > bounds.high[0] || about.high[2] < bounds.low[2] ||
+            about.low[2] > bounds.high[2]) {
+            continue;
+        }
+        const std::vector<NearTriangle> near = trianglesAbout(input, about, 0.0F);
+        const auto floorPast = [&](Vec3 way) -> std::optional<Vec3> {
+            const Vec3 point = Vec3{.x = middle.x, .y = middle.y} + way;
+            const std::vector<float> floors = floorsAt(point, near, door.min.z - step, door.min.z + step);
+            if (floors.empty()) {
+                return std::nullopt;
+            }
+            return point + Vec3{.z = std::ranges::max(floors)};
+        };
+        const std::optional<Vec3> one = floorPast(across);
+        const std::optional<Vec3> other = floorPast(across * -1.0F);
+        if (one && other) {
+            links.addThrough(*one, *other, radius, AreaKind::Door, middle);
         }
     }
 }
@@ -1056,6 +1096,7 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
         }
     }
     addLadderLinks(input, boundsOf(input, tileX, tileY), links);
+    addDoorLinks(input, boundsOf(input, tileX, tileY), links);
     return links;
 }
 
@@ -1260,7 +1301,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 9;
+constexpr std::uint32_t kTilesVersion = 10;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
@@ -1336,6 +1377,12 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
     }
     appendHull(bytes, geometry.bodyHull);
     appendHull(bytes, geometry.crouchedBodyHull);
+    appendLittleEndian(bytes, std::uint64_t{geometry.doors.size()});
+    for (const Aabb& door : geometry.doors) {
+        for (const float value : {door.min.x, door.min.y, door.min.z, door.max.x, door.max.y, door.max.z}) {
+            appendLittleEndian(bytes, value);
+        }
+    }
     for (const auto* const placed : {&geometry.brushBodyHulls, &geometry.crouchedBrushBodyHulls}) {
         appendLittleEndian(bytes, std::uint64_t{placed->size()});
         for (const PlacedBodyHull& brush : *placed) {

@@ -15,7 +15,7 @@
 # only; `leapSpeed`, how fast it leaves a ledge to jump across a gap, and `gravity`, sv_gravity, by which its
 # links span no gap it falls short of; `minGroundNormalZ`, the least upward share of a floor's unit normal it
 # stands on; and `areaCosts`, the kinds of area ("floor", "crouch", "water", "edge", "jump", "drop",
-# "ladder", "crouchedJump") that cost it more than their length, each 1 or more.
+# "ladder", "crouchedJump", "door") that cost it more than their length, each 1 or more.
 #
 # The player's is Counter-Strike's movement (cs::kStandingBox, cs::kDuckedBox, sv_stepsize and the
 # ground's normal, cs::kMinGroundNormalZ), with the jumps of Condition Zero's bots (ReGameDLL_CS's
@@ -51,6 +51,7 @@ areaCosts = [
     { area = "jump", cost = 2.0 },
     { area = "ladder", cost = 1.25 },
     { area = "crouchedJump", cost = 2.0 },
+    { area = "door", cost = 4.0 },
 ]
 
 # The voxels Recast fills with a map: `cellSize` across, a quarter of the player's radius, so that a

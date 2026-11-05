@@ -58,8 +58,8 @@ TEST_F(EntityBodyTest, DamageUsesTheHitGroupAndDeathRemovesSolidityOnce) {
     EXPECT_EQ(nx::game::attackEntity(world, *made, {.damage = nx::Damage{100}}).damage, nx::Damage{});
 }
 
-/// A floor at z = 0, on which each of a body's boxes stands.
-[[nodiscard]] auto floorHulls() -> nx::collision::BrushHulls {
+/// A floor at z = 0, on which each of a body's boxes stands, and a model that stops nothing, within `model`.
+[[nodiscard]] auto floorHulls(const nx::Aabb& model = {}) -> nx::collision::BrushHulls {
     using nx::collision::Contents;
     using nx::collision::HullChild;
     using nx::collision::HullNode;
@@ -72,11 +72,60 @@ TEST_F(EntityBodyTest, DamageUsesTheHitGroupAndDeathRemovesSolidityOnce) {
          .clipNodes = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}},
                        HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}},
                        HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Empty}}},
-         .models = {nx::collision::BrushModel{
-             .hulls = nx::collision::HullRoots{{HullChild{Contents::Empty}, HullChild{HullNodeIndex{0}},
-                                                HullChild{Contents::Empty}, HullChild{HullNodeIndex{1}}}}}}});
+         .models = {
+             nx::collision::BrushModel{
+                 .hulls =
+                     nx::collision::HullRoots{{HullChild{Contents::Empty}, HullChild{HullNodeIndex{0}},
+                                               HullChild{Contents::Empty}, HullChild{HullNodeIndex{1}}}}},
+             nx::collision::BrushModel{
+                 .hulls = nx::collision::HullRoots{{HullChild{Contents::Empty}, HullChild{Contents::Empty},
+                                                    HullChild{Contents::Empty}, HullChild{Contents::Empty}}},
+                 .bounds = model}}});
     EXPECT_TRUE(created.has_value());
     return std::move(created).value();
+}
+
+TEST_F(EntityBodyTest, ABodyUsesWhatItLooksAtAsItPressesItsUseKeyAndNotAgainHoldingIt) {
+    // A button that stays in until used again, a little ahead of the body along +x, as high as its eyes.
+    constexpr nx::Aabb kButtonBounds{.min = {.x = 0.0F, .y = -16.0F, .z = 0.0F},
+                                     .max = {.x = 8.0F, .y = 16.0F, .z = 128.0F}};
+    constexpr int kTravelTicks = 50;
+    const nx::collision::BrushHulls room = floorHulls(kButtonBounds);
+    const std::vector entities{nx::assets::BspEntity{
+        .keyValues = {
+            {"classname", "func_button"}, {"model", "*1"}, {"angles", "0 0 0"}, {"spawnflags", "32"}}}};
+    const std::vector models{nx::assets::BspModel{}, nx::assets::BspModel{.bounds = kButtonBounds}};
+    const nx::game::EntityClasses classes{
+        .brushClasses = {nx::game::BrushClass{.classname = "func_button",
+                                              .solid = nx::game::Solid::Bsp,
+                                              .behavior = nx::game::BrushBehavior::Button}}};
+    ASSERT_TRUE(nx::game::spawnBrushEntities(world, entities, models, classes).has_value());
+    std::optional<nx::ecs::Entity> button;
+    nx::ecs::Query<nx::ecs::Entity, const nx::game::Button&>{world}.forEach(
+        [&button](nx::ecs::Entity entity, const nx::game::Button&) { button = entity; });
+    ASSERT_TRUE(button.has_value());
+    auto made = cs::spawnEntityBody(world, room, type, {.origin = {.x = -40.0F, .z = 64.0F}});
+    ASSERT_TRUE(made.has_value());
+    const auto run = [&](nx::Flags<cs::Button> buttons, int ticks) {
+        const std::array commands{cs::EntityCommand{.entity = *made, .command = {.buttons = buttons}}};
+        for (int tick = 0; tick < ticks; ++tick) {
+            std::ignore = cs::runEntityBodies(world, room, commands);
+            nx::game::runThinks(world, room);
+            nx::game::runPushers(world, room);
+            nx::game::advanceTick(world);
+        }
+    };
+    const auto state = [&] {
+        return world.get<nx::game::Button>(*button)->state;
+    };
+    run({}, 1);
+    EXPECT_EQ(state(), nx::game::ButtonState::Out) << "untouched";
+    run({cs::Button::Use}, kTravelTicks);
+    EXPECT_EQ(state(), nx::game::ButtonState::In) << "pressed, and held: once";
+    run({}, 1);
+    EXPECT_EQ(state(), nx::game::ButtonState::In);
+    run({cs::Button::Use}, 1);
+    EXPECT_EQ(state(), nx::game::ButtonState::GoingOut) << "pressed again";
 }
 
 TEST_F(EntityBodyTest, ABodyDucksAsItsCommandHoldsItsKeyAndStandsUpWhenItLetsGo) {

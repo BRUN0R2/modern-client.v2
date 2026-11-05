@@ -77,6 +77,9 @@ void moveAlong(UserCommand& command, const nx::agents::Intent& intent, nx::Units
     if (intent.crouches) {
         command.buttons.set(Button::Duck);
     }
+    if (intent.uses) {
+        command.buttons.set(Button::Use);
+    }
     const nx::Vec3 way = intent.drivenWay();
     if (nx::length(way) == 0.0F) {
         return;
@@ -366,7 +369,8 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
         }
     }
     std::vector<nx::agents::Decision> decisions(requests.size());
-    deciders.decide(*jobs, requests, decisions, bodies);
+    const std::vector<nx::navigation::Gate> gates = game->gates();
+    deciders.decide(*jobs, requests, decisions, bodies, gates);
     inBatches({.label = "bots.commands", .priority = nx::jobs::Priority::Critical}, turns.size(),
               [this, &turns, &decisions, &sights](std::size_t index, nx::navigation::NavigationQuery& query) {
                   Turn& turn = turns[index];

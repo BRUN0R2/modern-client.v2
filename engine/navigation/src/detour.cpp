@@ -137,14 +137,15 @@ struct AvoidedPolygon {
 };
 
 /// Detour's filter of a way: `base`'s, each polygon of `avoided` (sorted by polygon, each once, outliving
-/// the filter) costing its share times its own, and no link it shuns. Detour is built with its filter virtual
-/// for it
+/// the filter) costing its share times its own, no link through a door closed among `request`'s gates, that
+/// it does not open, and none it shuns. Detour is built with its filter virtual for it
 /// (DT_VIRTUAL_QUERYFILTER, cmake/ports/recastnavigation).
 class WayFilter final : public dtQueryFilter {
 public:
     WayFilter(const dtQueryFilter& base, std::span<const AvoidedPolygon> avoided,
               const PathRequest& request) noexcept
-        : dtQueryFilter{base}, avoidedPolygons{avoided}, shunnedLinks{request.shunned} {}
+        : dtQueryFilter{base}, avoidedPolygons{avoided}, doors{request.gates}, opensDoors{request.opensGates},
+          shunnedLinks{request.shunned} {}
 
     [[nodiscard]] auto passFilter(dtPolyRef polygonRef, const dtMeshTile* tile, const dtPoly* polygon) const
         -> bool override {
@@ -154,7 +155,7 @@ public:
         if (polygon->getType() != DT_POLYTYPE_OFFMESH_CONNECTION) {
             return true;
         }
-        return !isShunned(*tile, *polygon);
+        return !isThroughClosedDoor(*tile, *polygon) && !isShunned(*tile, *polygon);
     }
 
     [[nodiscard]] auto getCost(const float* from, const float* to, dtPolyRef previous,
@@ -169,6 +170,20 @@ public:
     }
 
 private:
+    [[nodiscard]] auto isThroughClosedDoor(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
+        if (doors.empty() || detail::kindOfArea(polygon.getArea()) != AreaKind::Door) {
+            return false;
+        }
+        const std::span polygons{tile.polys, narrow<std::size_t>(tile.header->polyCount)};
+        const auto index = narrow<int>(&polygon - polygons.data());
+        const std::span connections{tile.offMeshCons, narrow<std::size_t>(tile.header->offMeshConCount)};
+        const Vec3 through = detail::throughOfId(
+            connections[narrow<std::size_t>(index - tile.header->offMeshBase)].userId, 0.0F);
+        return std::ranges::any_of(doors, [this, through](const Gate& gate) {
+            return !gate.isOpen && (!opensDoors || gate.openers.empty()) && isSameDoor(gate.middle, through);
+        });
+    }
+
     [[nodiscard]] auto isShunned(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
         if (shunnedLinks.empty()) {
             return false;
@@ -191,6 +206,8 @@ private:
     }
 
     std::span<const AvoidedPolygon> avoidedPolygons;
+    std::span<const Gate> doors;
+    bool opensDoors = false;
     std::span<const MeshLink> shunnedLinks;
 };
 
@@ -228,8 +245,9 @@ constexpr unsigned char kLinkEndEdge = 1;
     return MeshLink{.start = start,
                     .end = end,
                     .kind = kind,
-                    .ladder =
-                        kind == AreaKind::Ladder ? detail::ladderOfId(connection.userId, start.z) : Vec3{}};
+                    .through = kind == AreaKind::Ladder || kind == AreaKind::Door
+                                   ? detail::throughOfId(connection.userId, start.z)
+                                   : Vec3{}};
 }
 
 /// The corners of `polygon` of `tile`, in Detour's space, one point after another.

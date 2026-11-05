@@ -62,12 +62,26 @@ constexpr float kCrouchLeadRadii = 6.0F;
     const float lengths = length(toCorner) * length(beyond);
     return lengths > 0.0F ? std::clamp(dot(toCorner, beyond) / lengths, 0.0F, 1.0F) : 1.0F;
 }
+/// How far from what it uses across a body goes no nearer, what is used being in a wall its radius off the
+/// floor: well within a player's reach of 64 units (nx::game::playerUse).
+constexpr float kUseReach = 48.0F;
+/// How far from the start of a door's link, in its body's radii, it stops to wait for the door.
+constexpr float kGateWaitRadii = 2.0F;
 /// How many links a brain keeps away from at a time, having failed them.
 constexpr std::size_t kMostShunnedLinks = 4;
 /// The speed across below which a body counts as stopped, and how many decisions in a row of that end its
 /// run-up: more than the one at each end of its way back, where it turns.
 constexpr float kStoppedSpeed = 1.0F;
 constexpr int kMostRunUpStops = 5;
+/// The gate of `gates` whose middle is `middle`, by what a link keeps of it, whole units across: none when
+/// there is none, which is taken as a way open, nothing being known to close it.
+[[nodiscard]] auto gateAt(std::span<const navigation::Gate> gates, Vec3 middle) noexcept
+    -> const navigation::Gate* {
+    const auto found = std::ranges::find_if(gates, [middle](const navigation::Gate& gate) {
+        return navigation::isSameDoor(gate.middle, middle);
+    });
+    return found != gates.end() ? &*found : nullptr;
+}
 /// How near the start of a link, in its body's radii, it heads straight for it, as DetourCrowd moves an agent
 /// onto one: on a floor no bigger than a block the walls of the mesh are all round it, and it steered away
 /// from them.
@@ -89,7 +103,7 @@ constexpr float kEnoughTakeoff = 0.9F;
 [[nodiscard]] auto takeoffSpeedOf(const navigation::MeshLink& link, const navigation::AgentProfile& profile,
                                   HammerUnits early) noexcept -> float {
     const float gap = groundDistance(link.start, link.end) - (2.0F * profile.radius.value());
-    if (link.kind == navigation::AreaKind::Ladder || gap <= 0.0F) {
+    if (link.kind == navigation::AreaKind::Ladder || link.kind == navigation::AreaKind::Door || gap <= 0.0F) {
         return 0.0F;
     }
     const float gravity = profile.gravity.value();
@@ -174,7 +188,7 @@ void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
 void climbAcross(Intent& intent, Vec3 feet, const navigation::MeshLink& link, float radius,
                  float stepHeight) noexcept {
     const Vec3 span = acrossOf(link.end - link.start);
-    const Vec3 way = wayAcross(link.ladder - feet, wayAcross(span, Vec3{.x = 1.0F}));
+    const Vec3 way = wayAcross(link.through - feet, wayAcross(span, Vec3{.x = 1.0F}));
     if (link.end.z > link.start.z) {
         const bool isUp = feet.z + stepHeight >= link.end.z;
         const Vec3 going = isUp ? wayAcross(link.end - feet, way) : way;
@@ -366,7 +380,7 @@ auto Brain::choose(Vec3 feet) const -> const Memory* {
 }
 
 void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ecs::Entity> pursued,
-                         navigation::NavigationQuery& query) {
+                         navigation::NavigationQuery& query, std::span<const navigation::Gate> gates) {
     const navigation::AgentProfile& profile = query.mesh().profile();
     if (crossing) {
         leftGround = leftGround || !isOnGround;
@@ -422,12 +436,20 @@ void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ec
         forgetCorridor();
         pathError.reset();
         const navigation::PathRequest request{
-            .from = feet, .to = goal, .avoided = avoided, .shunned = shunnedLinks};
+            .from = feet, .to = goal, .avoided = avoided, .gates = gates, .shunned = shunnedLinks};
+        // By a way no door closes, however long: that is what it comes down to on its way to open one.
+        // Failing that, through what opens to it, to wait there for one of them to open it.
         auto planned = navigation::Corridor::plan(query, request);
+        if (!planned && !opening) {
+            navigation::PathRequest throughDoors = request;
+            throughDoors.opensGates = true;
+            planned = navigation::Corridor::plan(query, throughDoors);
+        }
         if (!planned && !shunnedLinks.empty()) {
             // No way but over what it failed: what stopped it may be gone.
             shunnedLinks.clear();
             navigation::PathRequest overAny = request;
+            overAny.opensGates = !opening;
             overAny.shunned = {};
             planned = navigation::Corridor::plan(query, overAny);
         }
@@ -463,8 +485,25 @@ void Brain::finishArrival(const Memory* selected) {
     }
 }
 
-auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround, Vec3 velocity)
-    -> Decision {
+void Brain::openGate(Vec3 door, Vec3 opener) noexcept {
+    opening = OpeningGate{.door = door, .opener = opener};
+    plannedGoal.reset();
+}
+
+auto Brain::gateItOpens() const noexcept -> std::optional<Vec3> {
+    return opening ? std::optional{opening->door} : std::nullopt;
+}
+
+auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround, Vec3 velocity,
+                   std::span<const navigation::Gate> gates) -> Decision {
+    if (opening) {
+        const navigation::Gate* const gate = gateAt(gates, opening->door);
+        if (gate == nullptr || gate->isOpen) {
+            // Open, by it or another: on with what it pursues.
+            opening.reset();
+            plannedGoal.reset();
+        }
+    }
     const Memory* const selected = choose(feet);
     focus = selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
     if (selected == nullptr && !givenGoal) {
@@ -476,7 +515,8 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
         return {};
     }
     // A target remembered first, else the goal given, which no entity is pursued for.
-    const Vec3 goal = selected != nullptr ? selected->observation.position : *givenGoal;
+    const Vec3 pursuedGoal = selected != nullptr ? selected->observation.position : *givenGoal;
+    const Vec3 goal = opening ? opening->opener : pursuedGoal;
     const std::optional<ecs::Entity> pursued =
         selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
     Decision decision{.behavior = Behavior::MoveTo};
@@ -488,16 +528,16 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
         };
         // Near its feet, or its eyes, what is under it: from up on a body's head its feet are out of reach,
         // while the strike goes from its own eyes down.
-        const Vec3 aimedAt = selected->observation.aimAt.value_or(goal);
+        const Vec3 aimedAt = selected->observation.aimAt.value_or(pursuedGoal);
         if (selected->isVisible &&
-            std::min(length(goal - feet), length(aimedAt - feet)) <= rules.attackDistance.value()) {
+            std::min(length(pursuedGoal - feet), length(aimedAt - feet)) <= rules.attackDistance.value()) {
             decision.behavior = Behavior::Attack;
             decision.intent.attacks = true;
             return decision;
         }
     }
     const navigation::AgentProfile& profile = query.mesh().profile();
-    planIfNeeded(feet, isOnGround, goal, pursued, query);
+    planIfNeeded(feet, isOnGround, goal, pursued, query, gates);
     if (pathError) {
         decision.behavior = Behavior::Blocked;
         decision.navigationError = pathError;
@@ -507,6 +547,15 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
     }
     invariant(corridor.has_value(), "Brain: a planned corridor or a reported path error");
     std::ignore = corridor->moveTarget(query, goal);
+    if (opening && !crossing &&
+        (groundDistance(feet, opening->opener) <= kUseReach ||
+         groundDistance(feet, corridor->target()) <= rules.arrivalDistance.value())) {
+        // Near what opens the door: it uses it, looking at it.
+        decision.intent.lookAt = opening->opener;
+        decision.intent.uses = true;
+        decision.intent.direction = {};
+        return decision;
+    }
     const HammerUnits crouchLead{kCrouchLeadRadii * profile.radius.value()};
     // At the end of a link onto floor it only fits on crouched: down a ladder into a vent, standing, its head
     // kept it in the shaft. Off the ground a duck is at once, so as it gets there: going up, as near as its
@@ -547,12 +596,36 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
         return decision;
     }
     std::optional<navigation::MeshLink> nextLink;
-    if (beginCrossing(decision, feet, velocity, query, nextLink)) {
+    if (beginCrossing(decision, feet, velocity, query, gates, nextLink)) {
         decision.intent.crouches = crouchesAcross();
         return decision;
     }
     headsForLink =
         nextLink && groundDistance(feet, nextLink->start) <= kLinkLeadRadii * profile.radius.value();
+    if (nextLink && nextLink->kind == navigation::AreaKind::Door) {
+        const navigation::Gate* const gate = gateAt(gates, nextLink->through);
+        if (gate != nullptr && !gate->isOpen) {
+            decision.closedGate = gate->middle;
+            // What opens it there, as a door used only is opened by itself, it goes on to and uses, facing
+            // it; else it waits at the door, facing it, for it to open.
+            const auto opener = std::ranges::find_if(gate->openers, [&nextLink](Vec3 opens) {
+                return groundDistance(nextLink->start, opens) <= kUseReach;
+            });
+            const bool hasOpener = opener != gate->openers.end();
+            if (hasOpener && groundDistance(feet, *opener) <= kUseReach) {
+                decision.intent.ahead = wayAcross(*opener - feet, decision.intent.ahead);
+                decision.intent.lookAt = *opener;
+                decision.intent.uses = true;
+                return decision;
+            }
+            if (!hasOpener &&
+                groundDistance(feet, nextLink->start) <= kGateWaitRadii * profile.radius.value()) {
+                decision.intent.lookAt = decision.intent.lookAt.value_or(gate->middle);
+                decision.intent.ahead = wayAcross(gate->middle - feet, decision.intent.ahead);
+                return decision;
+            }
+        }
+    }
     if (runUpFrom) {
         // Stopped on its way back, by what the mesh does not tell of: that is all the run it has.
         runUpStops = length(acrossOf(velocity)) < kStoppedSpeed ? runUpStops + 1 : 0;
@@ -661,10 +734,17 @@ void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
 }
 
 auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, navigation::NavigationQuery& query,
-                          std::optional<navigation::MeshLink>& next) -> bool {
+                          std::span<const navigation::Gate> gates, std::optional<navigation::MeshLink>& next)
+    -> bool {
     next = corridor->nextLink(query);
     if (!next || groundDistance(feet, next->start) > rules.arrivalDistance.value()) {
         return false;
+    }
+    if (next->kind == navigation::AreaKind::Door) {
+        const navigation::Gate* const gate = gateAt(gates, next->through);
+        if (gate != nullptr && !gate->isOpen) {
+            return false;
+        }
     }
     const navigation::AgentProfile& linkProfile = query.mesh().profile();
     const float takeoff = takeoffSpeedOf(*next, linkProfile, rules.arrivalDistance);

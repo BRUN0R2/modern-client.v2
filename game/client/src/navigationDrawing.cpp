@@ -31,7 +31,8 @@ constexpr nx::EnumArray<AreaKind, OverlayColor> kAreaColors{nx::EnumArray<AreaKi
     OverlayColor{.red = 255, .green = 136, .blue = 0},    // Jump: orange
     OverlayColor{.red = 208, .green = 32, .blue = 72},    // Drop: crimson
     OverlayColor{.red = 184, .green = 96, .blue = 255},   // Ladder: violet
-    OverlayColor{.red = 255, .green = 208, .blue = 96}}}; // CrouchedJump: a paler orange
+    OverlayColor{.red = 255, .green = 208, .blue = 96},   // CrouchedJump: a paler orange
+    OverlayColor{.red = 96, .green = 255, .blue = 255}}}; // Door: a pale cyan
 constexpr std::uint8_t kPolygonAlpha = 32;
 
 /// The colors of the arrows' shafts, one for each team, and for an agent of no team.

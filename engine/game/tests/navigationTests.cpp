@@ -83,6 +83,7 @@ TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     EXPECT_EQ(costs[AreaKind::Jump], 2.0F);
     EXPECT_EQ(costs[AreaKind::CrouchedJump], 2.0F);
     EXPECT_EQ(costs[AreaKind::Drop], 1.0F);
+    EXPECT_EQ(costs[AreaKind::Door], 4.0F);
     EXPECT_EQ(player.wallClearance, nx::HammerUnits{16.0F});
     EXPECT_EQ(read->build.cellSize, nx::HammerUnits{4.0F});
     EXPECT_EQ(read->build.tileCells, 64U);
@@ -171,6 +172,55 @@ TEST(NavigationGeometryTest, ASolidBrushEntityAddsItsFacesWhereItIs) {
     EXPECT_TRUE(std::ranges::any_of(geometry.vertices, [](Vec3 vertex) { return vertex.x == 16.0F; }));
     EXPECT_EQ(geometry.brushBodyHulls.size(), 1U);
     EXPECT_EQ(geometry.crouchedBrushBodyHulls.size(), 1U);
+}
+
+TEST(NavigationGatesTest, ADoorIsOpenWalkedIntoAndClosedWithWhatOpensItWhenOthersOrAUseOpenIt) {
+    const std::vector<std::byte> bytes = readSeed("boxWithEntity.bsp");
+    const auto map = nx::assets::BspView::parse(bytes);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    nx::ecs::World world;
+    ASSERT_TRUE(nx::game::registerComponents(world).has_value());
+    using KeyValues = std::vector<std::pair<std::string, std::string>>;
+    constexpr std::string_view kUseOnlyFlag = "256";
+    const auto doorWith = [](KeyValues extra) {
+        KeyValues keys{{"classname", "func_door"}, {"model", "*1"}, {"angles", "0 0 0"}};
+        keys.insert(keys.end(), extra.begin(), extra.end());
+        return nx::assets::BspEntity{.keyValues = std::move(keys)};
+    };
+    const std::vector entities{doorWith({{"targetname", "vault"}}), doorWith({}),
+                               doorWith({{"spawnflags", std::string{kUseOnlyFlag}}}),
+                               nx::assets::BspEntity{.keyValues = {{"classname", "func_button"},
+                                                                   {"model", "*1"},
+                                                                   {"angles", "0 0 0"},
+                                                                   {"target", "vault"}}}};
+    const nx::game::EntityClasses classes{
+        .brushClasses = {nx::game::BrushClass{.classname = "func_button",
+                                              .solid = nx::game::Solid::Bsp,
+                                              .behavior = nx::game::BrushBehavior::Button},
+                         nx::game::BrushClass{.classname = "func_door",
+                                              .solid = nx::game::Solid::Bsp,
+                                              .behavior = nx::game::BrushBehavior::SlidingDoor}}};
+    ASSERT_TRUE(nx::game::spawnBrushEntities(world, entities, map->models(), classes).has_value());
+
+    const std::vector<nx::navigation::Gate> gates = nx::game::gatesOf(*map, world);
+    ASSERT_EQ(gates.size(), 3U) << "the doors, not the button";
+    const auto openWalkedInto = std::ranges::count_if(
+        gates, [](const nx::navigation::Gate& gate) { return gate.isOpen && gate.openers.empty(); });
+    EXPECT_EQ(openWalkedInto, 1);
+    const auto closed = std::ranges::count_if(
+        gates, [](const nx::navigation::Gate& gate) { return !gate.isOpen && gate.openers.size() == 1; });
+    EXPECT_EQ(closed, 2) << "by a button, and by a use of itself";
+    EXPECT_TRUE(std::ranges::any_of(gates, [](const nx::navigation::Gate& gate) {
+        return !gate.openers.empty() && gate.openers.front() == gate.middle;
+    }));
+
+    nx::ecs::Query<nx::game::Door&>{world}.forEach(
+        [](nx::game::Door& door) { door.state = nx::game::DoorState::Open; });
+    EXPECT_TRUE(std::ranges::all_of(nx::game::gatesOf(*map, world), &nx::navigation::Gate::isOpen))
+        << "open, however it opens";
+
+    const Geometry geometry = nx::game::navigationGeometryOf(*map, world);
+    EXPECT_EQ(geometry.doors.size(), 3U);
 }
 
 TEST(NavigationGeometryTest, AFloorUnderWaterIsWater) {

@@ -118,6 +118,16 @@ public:
         m_world.add(m_toucher, nx::game::BoxSolidity{.box = m_world.get<nx::game::Body>(m_toucher)->box});
     }
 
+    /// The body goes through the other boxes, as those of a horde do.
+    void passThroughBoxes() { m_world.get<nx::game::Body>(m_toucher)->passesThroughBoxes = true; }
+
+    /// Another body at `origin`, solid as its box, which the door does not reach.
+    void addBodyAt(Vec3 origin) {
+        const nx::Aabb box{.min = {-16.0F, -16.0F, -36.0F}, .max = {16.0F, 16.0F, 36.0F}};
+        m_world.spawn(Transform{.origin = origin}, nx::game::Body{.box = box},
+                      nx::game::BoxSolidity{.box = box});
+    }
+
 private:
     nx::ecs::World m_world;
     nx::ecs::Entity m_door{};
@@ -229,6 +239,30 @@ TEST(DoorTest, AnOpeningDoorPushesABodySolidAsABoxThroughAllButItself) {
     game.run(hulls, 80);
     EXPECT_EQ(game.door().state, DoorState::Open) << "its own box does not hold it";
     EXPECT_NEAR(game.toucherOrigin().x, 128.0F, 0.01F);
+}
+
+TEST(DoorTest, AnOpeningDoorPushesABodyThatGoesThroughBoxesIntoOneButAnotherAgainstIt) {
+    constexpr Vec3 kPushedTo{.x = 128.0F};
+    constexpr Vec3 kOtherBody{.x = 150.0F};
+    const BrushHulls hulls = doorHulls(false);
+    {
+        DoorWorld game{slidingDoor(), nx::game::BrushBehavior::SlidingDoor, Vec3{.x = 70.0F}};
+        game.makeSolid();
+        game.passThroughBoxes();
+        game.addBodyAt(kOtherBody);
+        game.touch(hulls);
+        game.run(hulls, 80);
+        EXPECT_EQ(game.door().state, DoorState::Open)
+            << "no box holds it: a door went back from a horde at it";
+        EXPECT_NEAR(game.toucherOrigin().x, kPushedTo.x, 0.01F);
+    }
+    DoorWorld game{slidingDoor(), nx::game::BrushBehavior::SlidingDoor, Vec3{.x = 70.0F}};
+    game.makeSolid();
+    game.addBodyAt(kOtherBody);
+    game.touch(hulls);
+    game.run(hulls, 80);
+    EXPECT_NE(game.door().state, DoorState::Open);
+    EXPECT_LT(game.toucherOrigin().x, kPushedTo.x);
 }
 
 TEST(DoorTest, AnOpeningDoorPassesThroughABodyInNoclip) {
