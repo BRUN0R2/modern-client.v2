@@ -1453,6 +1453,32 @@ TEST(AgentBrain, ABodyThatRoundsACornerWideHeadsOnFromItRatherThanBackToIt) {
         << "on to the corner after it, not back to it";
 }
 
+TEST(AgentBrain, ABodyDrawnBackFromACornerItReachedAsItGotStuckReturnsToIt) {
+    auto mesh = cornerMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    const nx::Vec3 start{.x = 150, .y = 900};
+    brain.setGoal(nx::Vec3{.x = 900, .y = 150});
+    std::ignore = brain.decide(start, query);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    ASSERT_GE(way.size(), 5U) << "down the block's side, round its corner in two short turns, and on";
+    // It reaches the last turn round the block's corner, stopping just short of it as its funnel lists it
+    // only until then.
+    const nx::Vec3 corner = way[3];
+    std::ignore = brain.decide(way[2], query);
+    std::ignore = brain.decide(corner + nx::Vec3{.x = -2, .y = 2}, query);
+    // It gets stuck there, and is drawn back along the block's side.
+    constexpr float kDrawnBack = 60.0F;
+    const nx::Vec3 cameFrom = start - corner;
+    const nx::Vec3 drawnBack = corner + (cameFrom / nx::length(cameFrom) * kDrawnBack);
+    brain.noteStuck();
+    const nx::Vec3 direction = brain.decide(drawnBack, query).intent.direction;
+    const nx::Vec3 toCorner = corner - drawnBack;
+    EXPECT_GT(nx::dot(direction, toCorner / nx::length(toCorner)), 0.7F) << "back to the corner";
+    EXPECT_LT(direction.x, 0.2F) << "along the block's side, not on to the next corner through the block";
+}
+
 TEST(AgentBrain, InACrowdABodyWaitsForThoseAheadNearerItsEndAndTheyGoOn) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

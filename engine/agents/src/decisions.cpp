@@ -190,6 +190,12 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
                                          request.elapsed) == Progress::GivesUp) {
                     request.brain->giveUp(request.stuck->stuckPlace(), request.stuck->reroutes());
                 }
+                // Drawn away from its way, a body comes back short of the corner it reached, on the wrong
+                // side of what that corner rounds: heading on from it, it walked into that and along it to
+                // a dead end.
+                if (request.stuck->isStuck()) {
+                    request.brain->noteStuck();
+                }
             }
             decisions[index] = decision;
         }

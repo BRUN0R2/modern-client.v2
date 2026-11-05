@@ -220,8 +220,8 @@ public:
     /// projected destination, including an airborne observation. With no target remembered, it moves to its
     /// goal (MoveTo), which it forgets as it arrives (Idle): within arrivalDistance of its corridor's end
     /// across, and a step of its height, as it measures how near a corner is; a corner it reached it heads
-    /// on from, however far it drifts from it before its corridor drops it. Its feet within
-    /// arrivalDistance of the start of
+    /// on from, however far it drifts from it before its corridor drops it, unless it gets stuck
+    /// (noteStuck). Its feet within arrivalDistance of the start of
     /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up, and heads
     /// for the link's end, which its corridor goes on from, until it stands on the ground, `isOnGround`,
     /// within a step of the end's height as far from the start as the end is; back on it below that height,
@@ -250,6 +250,10 @@ public:
     /// link's end as it decided, off the mesh, as DetourCrowd moves an agent over a link without steering.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
+    /// Its body is stuck (StuckWatch), which draws it away from its way: it forgets the corner it last
+    /// reached, so that once back it heads for the first corner ahead of it from where it is, not on from
+    /// that one, past what that one rounds.
+    inline void noteStuck() noexcept { reachedCorner.reset(); }
     /// Gives up its way, its body stuck on it too long (StuckWatch), and searches another from where it is:
     /// around `stuckAt`, a place its ways keep away from while it pursues what it pursues, as long as it
     /// keeps away from fewer than `reroutes` places. Past them, it gives up what it pursues as well: forgets
@@ -472,7 +476,8 @@ public:
     /// Each request's brain decides at its feet (Brain::decide), then steers its decision among `bodies`,
     /// those of the tick, when it moves and its request has a speed (Brain::steer): the bodies within the
     /// steering range of it across and a standing height up or down, but its own, the nearest first, ties
-    /// by entity. Its watch, last, gets its body out when it is stuck on the way its decision follows
+    /// by entity. Its watch, last, gets its body out, its brain forgetting the corner it last reached
+    /// (Brain::noteStuck), when it is stuck on the way its decision follows
     /// (StuckWatch::watch, followsCorridor), and its brain gives up where it goes when it is stuck too long
     /// (Brain::giveUp). It judges a body only when it is not knocked back (Brain::noteKnockedBack tells its
     /// brain so) and it stands on the ground, climbs, or is stuck already, so that the jumps that get it out
