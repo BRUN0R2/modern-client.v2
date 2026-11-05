@@ -114,7 +114,7 @@ it, its way along its corridor keeps it off the walls (the avoidance, which weig
 before it meets it, held a body at rest in a passage that turns where it was), and it waits only behind a
 body in its way nearer than it to where its way ends that it finds no way round, as a queue waits (as
 Condition Zero's bot waits for a friend in its way): bodies going to one end wait in the order of how near it
-they are, and none for one that waits for it, where all of them waited in a doorway, each in another's way. Its body cannot turn on the spot: it gains speed only along the way it is driven and loses the rest
+they are, and none for one that waits for it, where all of them waited in a doorway, each in another's way. A body it overlaps, as zombies' bodies do, stopping each other not, it leaves out: the avoidance takes any move relative to one it overlaps for a collision and only going in step with it for none, so that two shot back together went on that way, far from their ways, as long as they overlapped. Its body cannot turn on the spot: it gains speed only along the way it is driven and loses the rest
 to friction (GoldSrc's PM_Accelerate and PM_Friction). Driven straight at the next point of its way, it
 kept its drift across the way and swung round the point, by two thirds of a turn and more, before it got
 within its arrival distance: at the end of its way, at a sharp corner, a doorway's jambs. So it is driven

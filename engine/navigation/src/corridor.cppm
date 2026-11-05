@@ -83,8 +83,8 @@ public:
     /// kMostSteeringBodies of them, nor the walls and ledges of the mesh about it within the time ahead it
     /// looks: velocities about its own sampled as DetourCrowd samples them (dtObstacleAvoidanceQuery), each
     /// body a circle moving at its velocity, each wall within kSteeringRangeRadii of its radii that it does
-    /// not have behind it a segment (dtLocalBoundary, found again as it moves a quarter of that). Across
-    /// the ground; the same for the same inputs.
+    /// not have behind it a segment (dtLocalBoundary, found again as it moves a quarter of that). A body it
+    /// overlaps already it leaves out. Across the ground; the same for the same inputs.
     [[nodiscard]] auto steer(NavigationQuery& query, const SteeringRequest& request) -> Vec3;
     /// Appends to `points` the way left along the corridor, straightened as findPath straightens a way:
     /// from where the agent is to the target, both among its points. It allocates nothing once `points`
