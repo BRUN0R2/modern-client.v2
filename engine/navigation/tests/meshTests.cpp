@@ -362,6 +362,30 @@ TEST(NavigationMeshTest, AWayGoesOverNoLinkItShunsWhileItHasAnother) {
     EXPECT_EQ(none.error().code, nx::navigation::NavigationError::Unreachable);
 }
 
+TEST(NavigationMeshTest, AFloorABrushEntityLeavesNoRoomOnIsNoFloor) {
+    constexpr nx::Aabb kStops{.min = {.x = 160.0F, .y = 160.0F, .z = 0.0F},
+                              .max = {.x = 352.0F, .y = 352.0F, .z = 128.0F}};
+    constexpr Vec3 kMiddle{.x = 256.0F, .y = 256.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 512.0F, .y = 512.0F}, 0.0F);
+    {
+        const NavigationMesh mesh = nx::test::playerMesh(geometry);
+        nx::navigation::NavigationQuery query{mesh};
+        const auto nearest = query.nearestPoint(kMiddle);
+        ASSERT_TRUE(nearest.has_value()) << nx::describe(nearest.error());
+        EXPECT_LT(nx::test::distanceAcross(*nearest, kMiddle), kCell) << "with none, it is floor";
+    }
+    const nx::navigation::PlacedBodyHull placed{.bounds = kStops, .hull = nx::test::bodyHullOfBox(kStops)};
+    geometry.brushBodyHulls.push_back(placed);
+    geometry.crouchedBrushBodyHulls.push_back(placed);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    nx::navigation::NavigationQuery query{mesh};
+    const auto nearest = query.nearestPoint(kMiddle);
+    ASSERT_TRUE(nearest.has_value()) << nx::describe(nearest.error());
+    EXPECT_GE(nx::test::distanceAcross(*nearest, kMiddle), (kStops.max.x - kStops.min.x) / 2.0F)
+        << "the nearest floor is past where it stops a body";
+}
+
 TEST(NavigationMeshTest, ALedgeOnlyACrouchedJumpReachesIsLinkedBothWaysOfItsOwnKind) {
     // On a floor at 0, a box 50 tall: higher than a jump and within one ducking in the air.
     constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};

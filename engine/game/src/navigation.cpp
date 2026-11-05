@@ -79,6 +79,9 @@ void addModelFaces(navigation::Geometry& geometry, const assets::BspView& map, a
 /// them (docs/07-simulation-and-physics.md, section 3.3).
 constexpr std::size_t kStandingClipHull = 0;
 constexpr std::size_t kDuckedClipHull = 2;
+/// How far past a brush model's bounds the hull of a body's box reaches, a standing player's being the
+/// largest.
+constexpr Vec3 kBodyReach{.x = 16.0F, .y = 16.0F, .z = 36.0F};
 
 /// The clip nodes of `nodes` under `root`, each before those it names: a compiler writes a subtree that
 /// several nodes share once, which may come before them.
@@ -113,11 +116,12 @@ constexpr std::size_t kDuckedClipHull = 2;
     return childrenFirst;
 }
 
-/// What stops a body in the world of `map`, by the clip hull `clipHull` its compiler grew by the body's box:
-/// its clip brushes stop bodies in these hulls alone, with no face to show them.
-[[nodiscard]] auto worldHullOf(const assets::BspView& map, std::size_t clipHull) -> navigation::BodyHull {
+/// What stops a body at `model` of `map`, by the clip hull `clipHull` its compiler grew by the body's box: a
+/// map's clip brushes stop bodies in these hulls alone, with no face to show them.
+[[nodiscard]] auto bodyHullOf(const assets::BspView& map, assets::ModelIndex model, std::size_t clipHull)
+    -> navigation::BodyHull {
     const std::span<const assets::ClipNode> nodes = map.clipNodes();
-    const assets::ClipNodeChild& root = map.models()[assets::kWorldModel.value].hulls[clipHull];
+    const assets::ClipNodeChild& root = map.models()[model.value].hulls[clipHull];
     const std::vector<std::uint32_t> order = parentsFirst(nodes, root);
     std::vector<std::uint32_t> places(nodes.size());
     for (std::uint32_t place = 0; place < order.size(); ++place) {
@@ -156,8 +160,8 @@ auto readNavigationData(std::string_view text, std::string_view sourceName)
 
 auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navigation::Geometry {
     navigation::Geometry geometry;
-    geometry.bodyHull = worldHullOf(map, kStandingClipHull);
-    geometry.crouchedBodyHull = worldHullOf(map, kDuckedClipHull);
+    geometry.bodyHull = bodyHullOf(map, assets::kWorldModel, kStandingClipHull);
+    geometry.crouchedBodyHull = bodyHullOf(map, assets::kWorldModel, kDuckedClipHull);
     addModelFaces(geometry, map, assets::kWorldModel, BrushPlacement{.axes = angleVectors(EulerAngles{})});
     ecs::Query<const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
         [&geometry, &map](const BrushModel& model, const Transform& transform,
@@ -166,6 +170,20 @@ auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navi
                 addModelFaces(
                     geometry, map, model.index,
                     BrushPlacement{.axes = angleVectors(transform.angles), .origin = transform.origin});
+                // A hull is of its model unturned: one turned stops bodies by its faces alone.
+                if (transform.angles == EulerAngles{}) {
+                    const Aabb& bounds = map.models()[model.index.value].bounds;
+                    const Aabb reached{.min = bounds.min + transform.origin - kBodyReach,
+                                       .max = bounds.max + transform.origin + kBodyReach};
+                    geometry.brushBodyHulls.push_back(
+                        {.origin = transform.origin,
+                         .bounds = reached,
+                         .hull = bodyHullOf(map, model.index, kStandingClipHull)});
+                    geometry.crouchedBrushBodyHulls.push_back(
+                        {.origin = transform.origin,
+                         .bounds = reached,
+                         .hull = bodyHullOf(map, model.index, kDuckedClipHull)});
+                }
             }
             if (solidity.contents == assets::Contents::Ladder) {
                 const Aabb& bounds = map.models()[model.index.value].bounds;

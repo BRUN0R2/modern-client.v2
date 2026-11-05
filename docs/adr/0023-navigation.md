@@ -72,8 +72,9 @@ convex polygons, through Recast and Detour.
   the world's standing hull (`BodyHull`), a copy of the planes of the tree the map's compiler grew by the player's
   box, and a tile's floor keeps only where a standing body's middle is out of its solid, within a step, or what
   the steepest floor lifts its box by, of where it stands; a link's way, a ladder's landing the same. The floor
-  is tested after its erosion from walls: the hull already keeps its radius from what it stops. Another
-  profile's size will need its own hull.
+  is tested after its erosion from walls: the hull already keeps its radius from what it stops. A solid brush
+  entity has its own hulls, about where it stands, unturned, which its faces alone tell nothing of: a beam
+  a body ducks under is low to its head as much as a ceiling. Another profile's size will need its own hull.
 - **Crouching.** Floor where a standing body does not fit and a ducked one does, by the world's ducked hull as
   much as by a low ceiling, is of the kind `Crouch`. An agent holds its duck key from six of its radii ahead of
   such floor along its way, as far as a body at full speed goes while it ducks and a decision holds, until it is
