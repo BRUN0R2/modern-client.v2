@@ -568,6 +568,35 @@ TEST(AgentBrain, ALinkItFailsTwiceInARowIsOneItsWaysKeepOffWhileTheyHaveAnother)
     EXPECT_GT(nx::length(way[1] - linkStart), 1.0F) << "by another";
 }
 
+TEST(AgentBrain, ALinkItIsKnockedOffIsNoneItFailedHoweverOftenItIs) {
+    constexpr int kKnockedOff = 5;
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 30}};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 512, .y = 256, .z = box.high.z});
+    std::ignore = brain.decide({.x = 300, .y = 256}, query);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    ASSERT_GE(way.size(), 3U);
+    const nx::Vec3 atIt = way[1] - nx::Vec3{.x = 2.0F};
+    const auto jumpsAndFallsBack = [&](bool isKnockedOff) {
+        const nx::agents::Decision atTheLink = brain.decide(atIt, query);
+        EXPECT_TRUE(atTheLink.intent.jumps) << "at it again";
+        if (isKnockedOff) {
+            brain.noteKnockedBack();
+        }
+        std::ignore = brain.decide({.x = atIt.x, .y = atIt.y, .z = box.high.z / 2.0F}, query, false);
+    };
+    for (int time = 0; time < kKnockedOff; ++time) {
+        jumpsAndFallsBack(true);
+    }
+    // Falling of itself, twice in a row, it failed it as ever.
+    jumpsAndFallsBack(false);
+    jumpsAndFallsBack(false);
+    EXPECT_FALSE(brain.decide(atIt, query).intent.jumps) << "not again";
+}
+
 TEST(AgentBrain, ABodyOnATargetsHeadStrikesItsEyesThoughItsFeetAreOutOfReach) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

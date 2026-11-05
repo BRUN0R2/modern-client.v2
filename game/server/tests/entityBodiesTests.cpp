@@ -237,8 +237,16 @@ TEST_F(EntityBodyTest, AHitKnocksABodyOfAKnockbackBackHoldingItsWalkThenSlowingI
         return cs::walkShareOf(*definition.knockback, world.get<cs::EntityBody>(*made)->knockedBack, time.now,
                                time.rate);
     };
+    const auto isKnockedBack = [&] {
+        const std::vector<cs::EntityState> states = cs::entityStatesOf(world);
+        const auto found = std::ranges::find(states, *made, &cs::EntityState::entity);
+        return found != states.end() && found->isKnockedBack;
+    };
+    EXPECT_TRUE(isKnockedBack());
     EXPECT_FLOAT_EQ(shareAfter(10), 0.5F) << "past its stagger, at half its speed";
+    EXPECT_TRUE(isKnockedBack()) << "still slowed";
     EXPECT_FLOAT_EQ(shareAfter(50), 1.0F) << "back to the whole of it";
+    EXPECT_FALSE(isKnockedBack());
 }
 
 TEST_F(EntityBodyTest, RetiredGenerationsNeverControlAReplacementBody) {

@@ -33,6 +33,7 @@ struct EntityBody {
     EntityMotion motion = EntityMotion::Idle;
     nx::GameTime attacksAgainAt{};
     KnockedBack knockedBack{};
+    bool isKnockedBack = false; ///< As of its last move, a hit still held back its walk.
     nx::HammerUnits walked{};
     nx::Vec3 movedFrom{};   ///< Where its last move started.
     nx::GameTime movedAt{}; ///< When its last move ended, as a snapshot tells the time.
