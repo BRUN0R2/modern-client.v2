@@ -169,6 +169,15 @@ void addConvexPolygon(Geometry& geometry, std::span<const Vec3> corners, AreaKin
     }
 }
 
+auto isSolidAt(std::span<const PlacedBodyHull> hulls, Vec3 middle) noexcept -> bool {
+    return std::ranges::any_of(hulls, [middle](const PlacedBodyHull& placed) {
+        return middle.x >= placed.bounds.min.x && middle.x <= placed.bounds.max.x &&
+               middle.y >= placed.bounds.min.y && middle.y <= placed.bounds.max.y &&
+               middle.z >= placed.bounds.min.z && middle.z <= placed.bounds.max.z &&
+               isSolidAt(placed.hull, middle - placed.origin);
+    });
+}
+
 auto isSolidAt(const BodyHull& hull, Vec3 middle) noexcept -> bool {
     BodyHullChild child = hull.root;
     while (const auto* index = std::get_if<std::uint32_t>(&child)) {

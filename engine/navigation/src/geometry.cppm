@@ -50,15 +50,28 @@ struct BodyHull {
 /// Whether a body's middle at `middle` is in the solid of `hull`, which must keep BodyHull's order.
 [[nodiscard]] auto isSolidAt(const BodyHull& hull, Vec3 middle) noexcept -> bool;
 
+/// What stops a body at a solid brush entity of a map: its own hull, about where the entity stands, and where
+/// a body's middle may meet it at all.
+struct PlacedBodyHull {
+    Vec3 origin{};
+    Aabb bounds{};
+    BodyHull hull{};
+};
+
+/// Whether a body's middle at `middle` is in the solid of any of `hulls`.
+[[nodiscard]] auto isSolidAt(std::span<const PlacedBodyHull> hulls, Vec3 middle) noexcept -> bool;
+
 /// What a mesh is built from: the surfaces of what is solid, the ladders that join its floors, each the box
 /// of its volume, upright, which a body climbs where it touches it (AreaKind::Ladder), and what stops a body
-/// besides the surfaces, standing and crouched.
+/// besides the surfaces, standing and crouched: the world's hull, and the brush entities' hulls.
 struct Geometry {
     std::vector<Vec3> vertices{};
     std::vector<GeometryTriangle> triangles{};
     std::vector<Aabb> ladders{};
     BodyHull bodyHull{};
     BodyHull crouchedBodyHull{};
+    std::vector<PlacedBodyHull> brushBodyHulls{};
+    std::vector<PlacedBodyHull> crouchedBrushBodyHulls{};
 };
 
 /// Adds to `geometry` the convex polygon `corners`, in the order of GeometryTriangle::corners, as a fan

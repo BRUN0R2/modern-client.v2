@@ -163,6 +163,8 @@ TEST(NavigationGeometryTest, ASolidBrushEntityAddsItsFacesWhereItIs) {
     EXPECT_EQ(geometry.triangles.size(), 8U);
     EXPECT_EQ(countFacing(geometry, {.x = 1.0F}), 4);
     EXPECT_TRUE(std::ranges::any_of(geometry.vertices, [](Vec3 vertex) { return vertex.x == 16.0F; }));
+    EXPECT_EQ(geometry.brushBodyHulls.size(), 1U);
+    EXPECT_EQ(geometry.crouchedBrushBodyHulls.size(), 1U);
 }
 
 TEST(NavigationGeometryTest, AFloorUnderWaterIsWater) {
