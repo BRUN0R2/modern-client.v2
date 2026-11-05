@@ -35,7 +35,7 @@ struct Rules {
     /// fought (saw a target it recognized), the later, so that what it perceived while it fought waits for
     /// it to look into once the fight is over.
     Seconds memoryLifetime{};
-    /// How near a target it sees must be to be attacked: its feet, or the point it is aimed at.
+    /// How near a target it sees must be to be attacked.
     HammerUnits attackDistance{};
     /// How near the corridor's end counts as arrived.
     HammerUnits arrivalDistance{};
@@ -232,8 +232,8 @@ public:
     /// toward the end and looking well below level, or straight down where the floors lie on one side of it,
     /// as a body climbs down one no faster (PM_LadderMove). A body off the mesh is Blocked as it stays there,
     /// each decision searching anew, and jumps, letting go of a ladder it holds.
-    [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround = true)
-        -> Decision;
+    [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround = true,
+                              Vec3 velocity = {}) -> Decision;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
     /// `velocity`, at `maxSpeed` at most, and no faster than it can still slow down for what the intent
@@ -250,6 +250,9 @@ public:
     /// link's end as it decided, off the mesh, as DetourCrowd moves an agent over a link without steering.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
+    /// It backs off for a run at a gap: a body that goes little and turns round, and is no stuck one for
+    /// that.
+    [[nodiscard]] inline auto isRunningUp() const noexcept -> bool { return runUpFrom.has_value(); }
     /// Gives up its way, its body stuck on it too long (StuckWatch), and searches another from where it is:
     /// around `stuckAt`, a place its ways keep away from while it pursues what it pursues, as long as it
     /// keeps away from fewer than `reroutes` places. Past them, it gives up what it pursues as well: forgets
@@ -287,8 +290,8 @@ private:
                       navigation::NavigationQuery& query);
     /// A crossing of `link` failed, its body back on the ground short of its end: twice in a row, and its
     /// ways keep off that link (PathRequest::shunned) for as long as they have another, while it goes on
-    /// after the same thing: nothing else tells it what a link takes from where it is, a ledge with no room
-    /// for the run it takes say, where it jumped and fell back for good.
+    /// after the same thing: nothing else tells it what a link flown at a leap's speed takes from where it
+    /// is, a ledge with no room for a run at it say, where it jumped and fell back for good.
     void noteLinkFailed(const navigation::MeshLink& link);
     /// Forgets a completed goal or an investigated target after arriving.
     void finishArrival(const Memory* selected);
@@ -299,9 +302,11 @@ private:
     /// takes across its way, since in the air it flies on.
     void approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
                   const navigation::AgentProfile& profile, const std::optional<navigation::MeshLink>& next);
-    /// Finds `next` and crosses it when `feet` are within arrivalDistance of its start. If crossing fails,
+    /// Finds `next` and crosses it when `feet` are within arrivalDistance of its start, a body going at
+    /// `velocity` too slowly for a gap there backing off for a run at it once (runUpFrom). If crossing fails,
     /// finds `next` again because the corridor may have changed. Returns whether it crosses one.
-    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query,
+    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity,
+                                     navigation::NavigationQuery& query,
                                      std::optional<navigation::MeshLink>& next) -> bool;
     /// Forgets the corridor it follows, and the link it crosses on it: another is searched.
     void forgetCorridor() noexcept;
@@ -320,6 +325,13 @@ private:
     std::optional<navigation::MeshLink> crossing{};
     /// Its body left the ground since it began crossing it, as it jumped, dropped or took to a ladder.
     bool leftGround = false;
+    /// The start of the next link is near: it heads straight for it, round nothing (kLinkLeadRadii).
+    bool headsForLink = false;
+    /// Where it backs off to for a run at the gap of the next link; none while it does not.
+    std::optional<Vec3> runUpFrom{};
+    int runUpStops = 0; ///< How many decisions in a row it has been stopped on its way back.
+    /// It took its run at that gap: it jumps as it gets there, however fast.
+    bool hasRunUp = false;
     /// The corner of its corridor it last reached, which it heads on from (decide).
     std::optional<Vec3> reachedCorner{};
     std::optional<navigation::NavigationError> pathError{};

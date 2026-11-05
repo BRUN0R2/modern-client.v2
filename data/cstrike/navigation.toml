@@ -5,22 +5,24 @@
 # into nx::game::NavigationData.
 #
 # Each profile is an agent's size and moves, which it has a mesh of its own for: `radius`, half its
-# width, how far its middle stays from walls and ledges; `wallClearance`, how much farther it would
+# width, how far its middle stays from walls; `wallClearance`, how much farther it would
 # rather keep from them where there is room, the floor within it of the kind "edge"; `standingHeight`,
 # and `crouchedHeight`, under which it crouches; `stepHeight`, the highest step it walks up;
 # `jumpHeight`, the highest ledge it jumps onto, which its links of the kind "jump" span, jumped up and
 # dropped down; `crouchedJumpHeight`, the highest it jumps onto ducking in the air, which its links of the
 # kind "crouchedJump" span, optional; `dropHeight`, the highest it drops from unhurt, how far below a body
 # off the mesh the floor it drops to is looked for, which its links of the kind "drop" span, dropped down
-# only; `minGroundNormalZ`, the least upward share of a floor's unit normal it stands on; and `areaCosts`,
-# the kinds of area ("floor", "crouch", "water", "edge", "jump", "drop", "ladder", "crouchedJump") that cost
-# it more than their length, each 1 or more.
+# only; `leapSpeed`, how fast it leaves a ledge to jump across a gap, and `gravity`, sv_gravity, by which its
+# links span no gap it falls short of; `minGroundNormalZ`, the least upward share of a floor's unit normal it
+# stands on; and `areaCosts`, the kinds of area ("floor", "crouch", "water", "edge", "jump", "drop",
+# "ladder", "crouchedJump") that cost it more than their length, each 1 or more.
 #
 # The player's is Counter-Strike's movement (cs::kStandingBox, cs::kDuckedBox, sv_stepsize and the
 # ground's normal, cs::kMinGroundNormalZ), with the jumps of Condition Zero's bots (ReGameDLL_CS's
-# nav.h; GPL, consulted: docs/20 section 3), each some units under what the movement reaches, 45 standing
-# and 63 ducked in the air, and the drop of playerHarm.toml's `fall.safeSpeed`, 500
-# units a second, reached falling 500² / (2 × 800) units at sv_gravity 800; a kind of area costs it as
+# nav.h; GPL, consulted: docs/20 section 3), standing some units under what the movement reaches, 45, and
+# ducked in the air just under its 63, every ledge a player gets onto being one an agent must, and the drop
+# of playerHarm.toml's `fall.safeSpeed`, 500 units a second, reached falling 500² / (2 × 800) units at
+# sv_gravity 800; a kind of area costs it as
 # many times its length as it is slower there: crouched a third of its speed (0.333), in water four
 # fifths (0.8); a jump twice its length, crouched or not, as a Condition Zero bot's path weighs a jump area
 # (CSBot's PathCost, its jumpPenalty), a drop it takes unhurt its length, and a ladder as many times as it
@@ -37,8 +39,10 @@ standingHeight = 72.0
 crouchedHeight = 36.0
 stepHeight = 18.0
 jumpHeight = 41.8
-crouchedJumpHeight = 58.0
+crouchedJumpHeight = 62.5
 dropHeight = 156.25
+leapSpeed = 230.0
+gravity = 800.0
 minGroundNormalZ = 0.7
 areaCosts = [
     { area = "crouch", cost = 3.0 },
@@ -61,7 +65,7 @@ areaCosts = [
 cellSize = 4.0
 cellHeight = 2.0
 tileCells = 64
-smallestIsland = 32.0
+smallestIsland = 16.0
 smallestRegion = 80.0
 longestEdge = 96.0
 edgeError = 5.0

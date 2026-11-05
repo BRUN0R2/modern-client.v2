@@ -1296,7 +1296,9 @@ auto Corridor::steer(NavigationQuery& query, const SteeringRequest& request) -> 
         const std::array<float, 3> velocity = acrossOf(body.velocity);
         avoidance.addCircle(feet.data(), body.radius.value(), velocity.data(), velocity.data());
     }
-    // The ledge the link it crosses next leaves from is its way on, no wall to keep off.
+    // The ledge the link it crosses next leaves from is its way on, no wall to keep off: the link's start is
+    // on it, or just inside it where it is the side of a tile.
+    constexpr float kOnLedge = detail::kLinkInsetFromTileSide + kTouching;
     const std::optional<std::array<float, 3>> linkStart =
         nextLinkOf(detourState->corridor, *search.query->getAttachedNavMesh(), *search.query, search.filter)
             .transform([](const NextLink& next) { return detail::detourOf(next.link.start); });
@@ -1308,7 +1310,7 @@ auto Corridor::steer(NavigationQuery& query, const SteeringRequest& request) -> 
         }
         float along = 0.0F;
         if (linkStart && dtDistancePtSegSqr2D(linkStart->data(), segment, segment + kCoordinates, along) <
-                             kTouching * kTouching) {
+                             kOnLedge * kOnLedge) {
             continue;
         }
         avoidance.addSegment(segment, segment + kCoordinates);

@@ -64,6 +64,44 @@ constexpr float kCrouchLeadRadii = 6.0F;
 }
 /// How many links a brain keeps away from at a time, having failed them.
 constexpr std::size_t kMostShunnedLinks = 4;
+/// The speed across below which a body counts as stopped, and how many decisions in a row of that end its
+/// run-up: more than the one at each end of its way back, where it turns.
+constexpr float kStoppedSpeed = 1.0F;
+constexpr int kMostRunUpStops = 5;
+/// How near the start of a link, in its body's radii, it heads straight for it, as DetourCrowd moves an agent
+/// onto one: on a floor no bigger than a block the walls of the mesh are all round it, and it steered away
+/// from them.
+constexpr float kLinkLeadRadii = 4.0F;
+/// What a body gains across in the air (PM_AirAccelerate's cap on the speed it wishes): a flight that takes
+/// no more than this takes no run at it.
+constexpr float kAirSpeed = 30.0F;
+/// How much faster than it just gets there a body leaves the edge of a gap, so that it is over the far side
+/// while well above it: at just the speed, it met the side of the block it jumped at a few units below the
+/// top.
+constexpr float kTakeoffMargin = 1.6F;
+/// The share of that speed that takes it: a little short of it as it gets there is no reason to back off
+/// again.
+constexpr float kEnoughTakeoff = 0.9F;
+
+/// How fast across a body is to jump from the start of `link`, up to `early` short of it, for its box to come
+/// down over the floor at its end: over the gap between them, what its two sides do not span, by the time it
+/// is in the air to that height, as fast as its profile's leap at most. None for a ladder, or with no gap.
+[[nodiscard]] auto takeoffSpeedOf(const navigation::MeshLink& link, const navigation::AgentProfile& profile,
+                                  HammerUnits early) noexcept -> float {
+    const float gap = groundDistance(link.start, link.end) - (2.0F * profile.radius.value());
+    if (link.kind == navigation::AreaKind::Ladder || gap <= 0.0F) {
+        return 0.0F;
+    }
+    const float gravity = profile.gravity.value();
+    const float jump = link.kind == navigation::AreaKind::CrouchedJump && profile.crouchedJumpHeight
+                           ? profile.crouchedJumpHeight->value()
+                           : profile.jumpHeight.value();
+    const float rising = std::sqrt(2.0F * gravity * jump);
+    const float falling =
+        std::sqrt(std::max((rising * rising) - (2.0F * gravity * (link.end.z - link.start.z)), 0.0F));
+    const float inTheAir = (rising + falling) / gravity;
+    return std::min((gap + early.value()) * kTakeoffMargin / inTheAir, profile.leapSpeed.value());
+}
 
 /// The speed a body can still stop from by friction alone within `distance`, as PM_Friction slows it by
 /// `rules`: below its stop speed it loses stopSpeed times braking a second, so the root of twice that times
@@ -353,9 +391,20 @@ void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ec
     // link searches none until it lands, as DetourCrowd plans none for an agent over a link.
     const bool walksAlong = corridor && !crossing;
     const auto standsAt = walksAlong ? query.nearestPoint(feet) : Result<Vec3, navigation::NavigationError>{};
-    const bool isAwayFromCorridor =
-        walksAlong && (!standsAt || groundDistance(corridor->moveAgent(query, feet), *standsAt) >
-                                        rules.replanDistance.value());
+    const bool isAwayFromCorridor = [&] {
+        if (!walksAlong) {
+            return false;
+        }
+        if (!standsAt) {
+            return true;
+        }
+        const Vec3 alongCorridor = corridor->moveAgent(query, feet);
+        // On the ground on another floor than its corridor, as it fell off a block it stood on: right below
+        // it that is no way off across, and pushing on at the block's face it stayed.
+        return groundDistance(alongCorridor, *standsAt) > rules.replanDistance.value() ||
+               (isOnGround &&
+                std::abs(alongCorridor.z - standsAt->z) > query.mesh().profile().stepHeight.value());
+    }();
     // A body off the mesh may land on it at any moment; how far a way is not there changes only as it or its
     // goal moves.
     const bool wasOffTheMesh = pathError == navigation::NavigationError::OutsideMesh;
@@ -414,7 +463,8 @@ void Brain::finishArrival(const Memory* selected) {
     }
 }
 
-auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround) -> Decision {
+auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround, Vec3 velocity)
+    -> Decision {
     const Memory* const selected = choose(feet);
     focus = selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
     if (selected == nullptr && !givenGoal) {
@@ -497,9 +547,23 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
         return decision;
     }
     std::optional<navigation::MeshLink> nextLink;
-    if (beginCrossing(decision, feet, query, nextLink)) {
+    if (beginCrossing(decision, feet, velocity, query, nextLink)) {
         decision.intent.crouches = crouchesAcross();
         return decision;
+    }
+    headsForLink =
+        nextLink && groundDistance(feet, nextLink->start) <= kLinkLeadRadii * profile.radius.value();
+    if (runUpFrom) {
+        // Stopped on its way back, by what the mesh does not tell of: that is all the run it has.
+        runUpStops = length(acrossOf(velocity)) < kStoppedSpeed ? runUpStops + 1 : 0;
+        if (nextLink && groundDistance(feet, *runUpFrom) > rules.arrivalDistance.value() &&
+            runUpStops < kMostRunUpStops) {
+            headFor(decision.intent, feet, *runUpFrom);
+            return decision;
+        }
+        runUpFrom.reset();
+        runUpStops = 0;
+        hasRunUp = true;
     }
     // Up to a crouched jump it goes standing, its link's start room enough for that: what lifts its feet is
     // ducking in the air, and from the ground ducked already it fell short.
@@ -542,6 +606,11 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
         const Vec3 direction = length(anticipated) > 0.0F ? anticipated : toNext;
         decision.intent.direction = direction / length(direction);
         decision.intent.ahead = decision.intent.direction;
+    } else if (!corners.empty()) {
+        // All it sees of a way that goes on within arrival of it, corners of small polygons just short of a
+        // link's start: on to the last of them, as it stood for good with nothing to head for, moving nowhere
+        // and so not stuck.
+        headFor(decision.intent, feet, corners.back());
     }
     return decision;
 }
@@ -579,19 +648,41 @@ void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
             const Vec3 beyond = acrossOf(pointAlong(way, corner, span) - way[corner]);
             const bool jumpsThere = corner == lastCorner && next &&
                                     next->kind != navigation::AreaKind::Ladder && next->end.z > next->start.z;
+            // Over a gap, as fast as the flight takes, and no faster: it lands past a small floor else.
+            const float takeoff =
+                corner == lastCorner && next ? takeoffSpeedOf(*next, profile, rules.arrivalDistance) : 0.0F;
+            const float passShare = takeoff > kAirSpeed ? takeoff / profile.leapSpeed.value()
+                                    : jumpsThere        ? jumpShareOf(into, beyond)
+                                                        : passShareOf(into, beyond);
             intent.approaches[intent.approachCount++] = {.distance = HammerUnits{along},
-                                                         .passShare = jumpsThere ? jumpShareOf(into, beyond)
-                                                                                 : passShareOf(into, beyond)};
+                                                         .passShare = passShare};
         }
     }
 }
 
-auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query,
+auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, navigation::NavigationQuery& query,
                           std::optional<navigation::MeshLink>& next) -> bool {
     next = corridor->nextLink(query);
     if (!next || groundDistance(feet, next->start) > rules.arrivalDistance.value()) {
         return false;
     }
+    const navigation::AgentProfile& linkProfile = query.mesh().profile();
+    const float takeoff = takeoffSpeedOf(*next, linkProfile, rules.arrivalDistance);
+    const Vec3 across = wayAcross(next->end - next->start, Vec3{.x = 1.0F});
+    if (takeoff > kAirSpeed && !hasRunUp && dot(acrossOf(velocity), across) < takeoff * kEnoughTakeoff) {
+        // Too slow for the gap, it backs off along the way across it, as far as the mesh goes, for a run at
+        // it.
+        const float gaining =
+            (rules.acceleration * linkProfile.leapSpeed.value()) - (rules.braking * takeoff);
+        const float run = linkProfile.radius.value() + (gaining > 0.0F ? takeoff * takeoff / (2.0F * gaining)
+                                                                       : linkProfile.radius.value());
+        const Vec3 back = next->start - (across * run);
+        const auto walk = query.raycast(next->start, back);
+        runUpFrom = walk ? walk->end : next->start;
+        return false;
+    }
+    hasRunUp = false;
+    runUpFrom.reset();
     crossing = corridor->crossLink(query);
     if (!crossing) {
         next = corridor->nextLink(query);
@@ -603,8 +694,9 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQ
         climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());
         return true;
     }
-    // A link up it jumps once, from its start; one down it walks off.
-    decision.intent.jumps = crossing->end.z > crossing->start.z;
+    // A link up it jumps once, from its start, and one over a gap; one down it walks off.
+    decision.intent.jumps = crossing->end.z > crossing->start.z ||
+                            takeoffSpeedOf(*crossing, linkProfile, rules.arrivalDistance) > kAirSpeed;
     headFor(decision.intent, feet, crossing->end);
     return true;
 }
@@ -613,6 +705,9 @@ void Brain::forgetCorridor() noexcept {
     corridor.reset();
     crossing.reset();
     reachedCorner.reset();
+    runUpFrom.reset();
+    runUpStops = 0;
+    hasRunUp = false;
 }
 
 void Brain::giveUp(const navigation::AvoidedPlace& stuckAt, std::size_t reroutes) {
@@ -674,7 +769,7 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
     // before it meets it, held a body at rest in a passage that turns where it was. It waits only behind a
     // body in its way nearer than it to where its way ends that it finds no way round: of bodies that all
     // waited when none found a way on worth a tenth of its speed, each in another's way, none went on.
-    const Vec3 avoiding = nearby.empty()
+    const Vec3 avoiding = nearby.empty() || headsForLink
                               ? intent.direction * wished
                               : acrossOf(corridor->steer(query, {.velocity = velocity,
                                                                  .desired = intent.direction * wished,
@@ -691,7 +786,10 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
     const float speed =
         intent.crouches ? wished : std::clamp(avoidingSpeed, std::min(leastWalk, wished), wished);
     const Vec3 steered = intent.direction * speed;
-    intent.speedShare = speed / maxSpeed.value();
+    // Short of that speed it asks all it has, what a GoldSrc body gains going by what it asks
+    // (PM_Accelerate): next to a drop, on the friction of an edge (PM_Friction's edgefriction), a walk asked
+    // for at the speed it wants gained it nothing, and a body landed on a small block crept off it.
+    intent.speedShare = (length(acrossOf(velocity)) < speed ? maxSpeed.value() : speed) / maxSpeed.value();
     intent.steered = steered;
     intent.drive = driveToward(steered, velocity);
 }

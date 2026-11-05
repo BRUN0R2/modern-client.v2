@@ -167,14 +167,16 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
         std::vector<navigation::SteeringBody> nearby;
         for (std::size_t index = first; index < last; ++index) {
             const DecisionRequest& request = requests[index];
-            Decision decision = request.brain->decide(request.feet, query, request.isOnGround);
+            Decision decision =
+                request.brain->decide(request.feet, query, request.isOnGround, request.velocity);
             if (length(decision.intent.direction) > 0.0F && request.maxSpeed > UnitsPerSecond{}) {
                 bodiesNear(request, grid, range, height, sorted, nearby);
                 request.brain->steer(decision.intent, request.velocity, request.maxSpeed, nearby, query);
             }
             // Last, so that what gets a stuck body out overrides how it steers (UpdatePathMovement). A body
             // told to wait, its way taken by other bodies, is not stuck: it moves on as they make way.
-            const bool moves = followsCorridor(decision.behavior) && length(decision.intent.direction) > 0.0F;
+            const bool moves = followsCorridor(decision.behavior) &&
+                               length(decision.intent.direction) > 0.0F && !request.brain->isRunningUp();
             if (request.stuck != nullptr &&
                 request.stuck->watch(decision.intent, request.feet, request.maxSpeed, moves,
                                      request.elapsed) == Progress::GivesUp) {
