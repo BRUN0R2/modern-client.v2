@@ -141,7 +141,7 @@ ground, and fallen short it searches its way anew from where it landed. A body t
 the others make way is not stuck. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
 `stuck` table): it moves ahead, back or to a side, jumping now and then, and when it stays stuck it
 searches another way, which keeps away from where it got stuck (`nx::navigation::PathRequest::avoided`)
-while it chases. A body farther across from its corridor than its replan distance, teleported or
+while it chases. A body knocked back by a hit (`nx::agents::DecisionRequest::isKnockedBack`, `cs::EntityState::isKnockedBack`) goes nowhere of its own doing, nor does one in the air: neither is stuck for that, though one stuck already stays so through the jumps that get it out, and a link it is shot off is none it failed. A body farther across from its corridor than its replan distance, teleported or
 pushed off the mesh, searches its way anew from where it is. A zombie hears every player's noise
 within the ranges of its `hearing` table, roughly where it was made (`cs::heardBy`), and goes to look,
 where it placed it holding 3 seconds against a vaguer or farther noise (`shortTermMemory`); a far goal

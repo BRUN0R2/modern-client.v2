@@ -285,6 +285,91 @@ TEST(AgentDeciders, ABodyThatCannotMoveWigglesOutSearchesAnotherWayAndThenGivesU
     EXPECT_FALSE(agent.stuck.isStuck());
 }
 
+TEST(AgentDeciders, ABodyKnockedBackWhereItIsIsNoStuckOneAndKeepsToItsWay) {
+    constexpr int kTicksShotAt = 300;
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -512}, {.x = 512, .y = 512}, 0);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::agents::Agent agent{.brain = nx::agents::Brain{rules()}, .stuck = nx::test::stuckWatch()};
+    agent.brain.setGoal(nx::Vec3{.x = 400});
+    // Its feet stay where they are, as each shot takes back what it walks.
+    const std::array requests{nx::agents::DecisionRequest{.brain = &agent.brain,
+                                                          .feet = {},
+                                                          .maxSpeed = nx::UnitsPerSecond{250.0F},
+                                                          .stuck = &agent.stuck,
+                                                          .elapsed = nx::Seconds{0.01F},
+                                                          .isKnockedBack = true}};
+    std::array<nx::agents::Decision, 1> decisions{};
+    for (int tick = 0; tick < kTicksShotAt; ++tick) {
+        deciders.decide(*jobs, requests, decisions);
+        EXPECT_FALSE(agent.stuck.isStuck());
+        EXPECT_GT(decisions.front().intent.direction.x, 0.9F) << "on along its way";
+    }
+    EXPECT_TRUE(agent.brain.goal().has_value());
+}
+
+TEST(AgentDeciders, ABodyInTheAirIsNoStuckOneButOneStuckStaysSoThroughItsJumps) {
+    constexpr int kTicksLong = 100;
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -512}, {.x = 512, .y = 512}, 0);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::agents::Agent agent{.brain = nx::agents::Brain{rules()}, .stuck = nx::test::stuckWatch()};
+    agent.brain.setGoal(nx::Vec3{.x = 400});
+    std::array<nx::agents::Decision, 1> decisions{};
+    const auto decideFor = [&](bool isOnGround) {
+        const std::array requests{nx::agents::DecisionRequest{.brain = &agent.brain,
+                                                              .feet = {},
+                                                              .isOnGround = isOnGround,
+                                                              .maxSpeed = nx::UnitsPerSecond{250.0F},
+                                                              .stuck = &agent.stuck,
+                                                              .elapsed = nx::Seconds{0.01F}}};
+        for (int tick = 0; tick < kTicksLong; ++tick) {
+            deciders.decide(*jobs, requests, decisions);
+        }
+    };
+    decideFor(false);
+    EXPECT_FALSE(agent.stuck.isStuck()) << "going straight down, say";
+    decideFor(true);
+    EXPECT_TRUE(agent.stuck.isStuck());
+    decideFor(false);
+    EXPECT_TRUE(agent.stuck.isStuck()) << "up on a jump that gets it out";
+}
+
+TEST(AgentDeciders, ALinkItsBodyIsKnockedOffIsNoneItFailed) {
+    constexpr int kKnockedOff = 5;
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 512}, 0);
+    nx::test::addBox(geometry, {.x = 384, .y = 128, .z = -16}, {.x = 640, .y = 384, .z = 40});
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::navigation::NavigationQuery query{mesh};
+    const nx::Vec3 goal{.x = 512, .y = 360, .z = 40};
+    auto corridor = nx::navigation::Corridor::plan(query, {.from = {.x = 100, .y = 256}, .to = goal});
+    ASSERT_TRUE(corridor.has_value());
+    const auto link = corridor->nextLink(query);
+    ASSERT_TRUE(link.has_value());
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(goal);
+    std::array<nx::agents::Decision, 1> decisions{};
+    const auto decided = [&](nx::Vec3 feet, bool isOnGround, bool isKnockedBack) {
+        const std::array requests{nx::agents::DecisionRequest{
+            .brain = &brain, .feet = feet, .isOnGround = isOnGround, .isKnockedBack = isKnockedBack}};
+        deciders.decide(*jobs, requests, decisions);
+        return decisions.front();
+    };
+    const nx::Vec3 atIt = link->start - nx::Vec3{.x = 1};
+    const nx::Vec3 halfWayUp = atIt + nx::Vec3{.z = 20};
+    for (int time = 0; time < kKnockedOff; ++time) {
+        EXPECT_TRUE(decided(atIt, true, false).intent.jumps) << "at it again";
+        std::ignore = decided(halfWayUp, false, true);
+    }
+}
+
 TEST(AgentDeciders, ABodyInTheAirHasNotLandedAcrossALink) {
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 512}, 0);

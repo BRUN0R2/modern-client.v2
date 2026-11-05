@@ -144,6 +144,7 @@ struct EntityState {
     std::uint32_t ticksPerMove = 1; ///< How many ticks it shows going for: its next move comes then.
     bool isDucked = false;          ///< Its box is the ducked one, its origin lower over the same feet.
     bool isOnGround = false;        ///< Its body stands on the ground.
+    bool isKnockedBack = false;     ///< As of its last move, a hit still held back its walk (walkShareOf).
 };
 
 /// A step an entity's body took in a tick, as it walked a stride on the ground: the body, and where its

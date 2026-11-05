@@ -459,7 +459,8 @@ void Horde::findTurns(const cs::EntityStates& bodies, std::span<const cs::Percep
                                        .maxSpeed = settings.body.speed,
                                        .body = member.entity,
                                        .stuck = &agent->stuck,
-                                       .elapsed = elapsed * static_cast<float>(turnsPerThink)};
+                                       .elapsed = elapsed * static_cast<float>(turnsPerThink),
+                                       .isKnockedBack = body->isKnockedBack};
             ++count;
         }
         written[batch] = {.first = first, .count = count};
