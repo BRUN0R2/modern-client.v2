@@ -285,6 +285,11 @@ private:
     /// as its body comes back to the ground below the link it crossed.
     void planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ecs::Entity> pursued,
                       navigation::NavigationQuery& query);
+    /// A crossing of `link` failed, its body back on the ground short of its end: twice in a row, and its
+    /// ways keep off that link (PathRequest::shunned) for as long as they have another, while it goes on
+    /// after the same thing: nothing else tells it what a link takes from where it is, a ledge with no room
+    /// for the run it takes say, where it jumped and fell back for good.
+    void noteLinkFailed(const navigation::MeshLink& link);
     /// Forgets a completed goal or an investigated target after arriving.
     void finishArrival(const Memory* selected);
     /// Tells `decision`'s intent what it approaches from `feet` along `ahead`, the corners from the one it
@@ -320,6 +325,9 @@ private:
     std::optional<navigation::NavigationError> pathError{};
     /// Where its body got stuck on its way to what it pursues, which its ways keep away from (giveUp).
     std::vector<navigation::AvoidedPlace> avoided{};
+    /// The link whose crossing it failed last, and those it failed twice in a row (noteLinkFailed).
+    std::optional<navigation::MeshLink> failedLink{};
+    std::vector<navigation::MeshLink> shunnedLinks{};
     /// The target its last decision pursued, attacked or not; none for a goal or nothing.
     std::optional<ecs::Entity> focus{};
     /// When it last saw a target it recognized, which its memory's lifetime counts from too.

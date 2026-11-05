@@ -551,6 +551,34 @@ TEST(AgentBrain, ABodyOnATargetsHeadStrikesItsEyesThoughItsFeetAreOutOfReach) {
                                                       .aimAt = nx::Vec3{.z = -reach / 2.0F}}},
                    {}, nx::kDefaultTickRate);
     EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Attack);
+
+TEST(AgentBrain, ALinkItFailsTwiceInARowIsOneItsWaysKeepOffWhileTheyHaveAnother) {
+    // A jump onto a box, as a ledge with no room for a run at it has it: the body comes back down short of
+    // it.
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 30}};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 512, .y = 256, .z = box.high.z});
+    std::ignore = brain.decide({.x = 300, .y = 256}, query);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    ASSERT_GE(way.size(), 3U);
+    const nx::Vec3 linkStart = way[1];
+    const nx::Vec3 atIt = linkStart - nx::Vec3{.x = 2.0F};
+    const auto jumpsAndFallsBack = [&] {
+        const nx::agents::Decision atTheLink = brain.decide(atIt, query);
+        EXPECT_TRUE(atTheLink.intent.jumps);
+        std::ignore = brain.decide({.x = atIt.x, .y = atIt.y, .z = box.high.z / 2.0F}, query, false);
+    };
+    jumpsAndFallsBack();
+    jumpsAndFallsBack(); // once more: once may be another body in the way
+    const nx::agents::Decision third = brain.decide(atIt, query);
+    EXPECT_FALSE(third.intent.jumps) << "not again";
+    way.clear();
+    brain.appendWay(query, way);
+    ASSERT_GE(way.size(), 3U);
+    EXPECT_GT(nx::length(way[1] - linkStart), 1.0F) << "by another";
 }
 
 TEST(AgentBrain, ABodyJumpsUpALedgeOfItsCrouchedJumpDuckingUntilItLandsAndWalksOffItUpright) {

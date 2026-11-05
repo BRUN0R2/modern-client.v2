@@ -353,6 +353,36 @@ TEST(NavigationMeshTest, AFloorABrushEntityLeavesNoRoomOnIsNoFloor) {
     ASSERT_TRUE(nearest.has_value()) << nx::describe(nearest.error());
     EXPECT_GE(nx::test::distanceAcross(*nearest, kMiddle), (kStops.max.x - kStops.min.x) / 2.0F)
         << "the nearest floor is past where it stops a body";
+
+TEST(NavigationMeshTest, AWayGoesOverNoLinkItShunsWhileItHasAnother) {
+    constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};
+    constexpr Vec3 kHigh{.x = 512.0F, .y = 384.0F, .z = 30.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, kLow, kHigh);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 here{.x = 128.0F, .y = 256.0F};
+    const Vec3 there{.x = 384.0F, .y = 256.0F, .z = kHigh.z};
+    const auto way = query.findPath({.from = here, .to = there});
+    ASSERT_TRUE(way.has_value());
+    ASSERT_GE(way->points.size(), 3U);
+    // Either way: it goes up a link that leaves from the box.
+    const auto isOnTheWay = [&way](Vec3 end) {
+        return nx::test::distanceAcross(end, way->points[1]) < 1.0F;
+    };
+    const auto taken = std::ranges::find_if(outline.links, [&isOnTheWay](const MeshLink& link) {
+        return isOnTheWay(link.start) || isOnTheWay(link.end);
+    });
+    ASSERT_NE(taken, outline.links.end());
+    const std::array shunned{*taken};
+    const auto around = query.findPath({.from = here, .to = there, .shunned = shunned});
+    ASSERT_TRUE(around.has_value()) << nx::describe(around.error());
+    EXPECT_GT(nx::test::distanceAcross(around->points[1], way->points[1]), 1.0F);
+    const auto none = query.findPath({.from = here, .to = there, .shunned = outline.links});
+    ASSERT_FALSE(none.has_value());
+    EXPECT_EQ(none.error().code, nx::navigation::NavigationError::Unreachable);
 }
 
 TEST(NavigationMeshTest, ALedgeOnlyACrouchedJumpReachesIsLinkedBothWaysOfItsOwnKind) {
