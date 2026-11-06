@@ -114,7 +114,7 @@ it, its way along its corridor keeps it off the walls (the avoidance, which weig
 before it meets it, held a body at rest in a passage that turns where it was), and it waits only behind a
 body in its way nearer than it to where its way ends that it finds no way round, as a queue waits (as
 Condition Zero's bot waits for a friend in its way): bodies going to one end wait in the order of how near it
-they are, and none for one that waits for it, where all of them waited in a doorway, each in another's way. Its body cannot turn on the spot: it gains speed only along the way it is driven and loses the rest
+they are, and none for one that waits for it, where all of them waited in a doorway, each in another's way. A body it overlaps, as zombies' bodies do, stopping each other not, it leaves out: the avoidance takes any move relative to one it overlaps for a collision and only going in step with it for none, so that two shot back together went on that way, far from their ways, as long as they overlapped. Its body cannot turn on the spot: it gains speed only along the way it is driven and loses the rest
 to friction (GoldSrc's PM_Accelerate and PM_Friction). Driven straight at the next point of its way, it
 kept its drift across the way and swung round the point, by two thirds of a turn and more, before it got
 within its arrival distance: at the end of its way, at a sharp corner, a doorway's jambs. So it is driven
@@ -136,12 +136,14 @@ sharp corner or round a body near it to less, a zombie of the first waves, at 10
 dead and crept on at 2; it arrives within its arrival distance across and a step of height, as it reaches
 a corner, and heads on from a corner it reached however wide it rounds it: its funnel lists the corner
 until it crosses the edge of the polygon the corner ends, and measured anew, the corner was behind it, and
-it turned back to it. A link up it comes to with little speed across its way, has crossed it only on the
+it turned back to it. Stuck, it forgets that corner (`nx::agents::Brain::noteStuck`): drawn back short of it,
+it heads back to it, where heading on from it took it into what the corner rounds and along that to a dead
+end. A link up it comes to with little speed across its way, has crossed it only on the
 ground, and fallen short it searches its way anew from where it landed. A body that waits as
 the others make way is not stuck. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
 `stuck` table): it moves ahead, back or to a side, jumping now and then, and when it stays stuck it
 searches another way, which keeps away from where it got stuck (`nx::navigation::PathRequest::avoided`)
-while it chases. A body farther across from its corridor than its replan distance, teleported or
+while it chases. A body knocked back by a hit (`nx::agents::DecisionRequest::isKnockedBack`, `cs::EntityState::isKnockedBack`) goes nowhere of its own doing, nor does one in the air: neither is stuck for that, though one stuck already stays so through the jumps that get it out, and a link it is shot off is none it failed. A body farther across from its corridor than its replan distance, teleported or
 pushed off the mesh, searches its way anew from where it is. A zombie hears every player's noise
 within the ranges of its `hearing` table, roughly where it was made (`cs::heardBy`), and goes to look,
 where it placed it holding 3 seconds against a vaguer or farther noise (`shortTermMemory`); a far goal

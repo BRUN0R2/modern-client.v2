@@ -380,6 +380,62 @@ TEST_F(BotsTest, ABotFiresAtNoTeammateAndSeesNoEnemyBehindIt) {
     EXPECT_GT(hunting.move.forward.value(), 0.0F) << "along its way, facing it";
 }
 
+TEST_F(BotsTest, ABotWithAnEmptyClipReloadsAndPressesNoAttack) {
+    constexpr std::uint32_t kLongestFiring = 2000;
+    constexpr float kMiddle = kMapSide * 0.5F;
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
+    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    play(kPastTheCommence + kPastAFreeze);
+    // A rifle, and a clip of it to carry from the second given: sprayed at an enemy near, its trigger never
+    // lets go, where a pistol's pauses reload it all the same.
+    const std::optional<cs::WeaponIndex> rifle = content->weapons.indexOf("ak47");
+    ASSERT_TRUE(rifle.has_value());
+    game->give(bot, *rifle);
+    game->give(bot, *rifle);
+    ASSERT_EQ(game->ownStateOf(bot).heldSlot, cs::WeaponSlot::Primary);
+    const auto clip = [&] {
+        return game->ownStateOf(bot).heldRounds->clip;
+    };
+    // The bot made to stand still facing +x, its attack down or up, while it thinks on.
+    const auto hold = [&](bool isAttackDown) {
+        std::vector<cs::PlayerCommand> made = bots->commands();
+        ASSERT_EQ(made.size(), 1U);
+        cs::UserCommand held{.number = made.front().command.number,
+                             .duration = made.front().command.duration};
+        if (isAttackDown) {
+            held.buttons.set(cs::Button::Attack);
+        }
+        made.front().command = held;
+        game->tick(made);
+    };
+    // It empties its clip with the enemy at its back, where it does not see it.
+    standAt(bot, kMiddle);
+    standAt(enemy, kMiddle - kApart);
+    for (std::uint32_t tick = 0; tick < kLongestFiring && clip() > 0; ++tick) {
+        hold(tick % 2 == 0);
+    }
+    ASSERT_EQ(clip(), 0U);
+    ASSERT_GT(game->ownStateOf(bot).heldRounds->carried, 0U);
+    // The enemy ahead of it, it takes it on with its attack held, which leaves the clip empty.
+    standAt(enemy, kMiddle + kApart);
+    for (std::uint32_t tick = 0; tick < kReactingTicks; ++tick) {
+        hold(true);
+    }
+    ASSERT_EQ(clip(), 0U);
+    // On its own from there: pressing on nothing it would never reload. It reloads, and fires after that.
+    for (std::uint32_t tick = 0; tick < kLongestFiring && clip() == 0; ++tick) {
+        const cs::UserCommand command = step();
+        ASSERT_TRUE(command.buttons.test(cs::Button::Reload)) << "at " << tick;
+        ASSERT_FALSE(command.buttons.test(cs::Button::Attack)) << "at " << tick;
+    }
+    ASSERT_GT(clip(), 0U) << "reloaded";
+    bool fires = false;
+    for (std::uint32_t tick = 0; tick < kReactingTicks && !fires; ++tick) {
+        fires = step().buttons.test(cs::Button::Attack);
+    }
+    EXPECT_TRUE(fires) << "it saw the enemy all along";
+}
+
 TEST_F(BotsTest, ABotFrozenByTheRoundIsNotStuckAndNeitherWigglesNorJumps) {
     const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Easy, kNoPrefix);
     std::ignore = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");

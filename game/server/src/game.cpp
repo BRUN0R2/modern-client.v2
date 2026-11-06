@@ -162,6 +162,15 @@ auto Game::bodyStatusOf(nx::ecs::Entity body) const -> BodyStatus {
 auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
     const Player& player = playerAt(m_state, index);
     const OwnedWeapon* const held = player.inventory.held();
+    std::optional<GunRounds> rounds;
+    if (held != nullptr) {
+        if (const std::optional<WeaponMagazine>& magazine =
+                m_state.content.weapons.weapon(held->weapon).magazine) {
+            rounds = GunRounds{.clip = held->clip,
+                               .clipSize = magazine->clipSize,
+                               .carried = player.inventory.reserve(magazine->ammo)};
+        }
+    }
     return PlayerOwnState{.team = player.team,
                           .isAlive = player.status.isAlive(),
                           .spawnedAt = player.spawnedAt,
@@ -174,7 +183,8 @@ auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
                           .heldSlot = held != nullptr
                                           ? std::optional{m_state.content.weapons.weapon(held->weapon).slot}
                                           : std::nullopt,
-                          .hurtFrom = player.hurtFrom};
+                          .hurtFrom = player.hurtFrom,
+                          .heldRounds = rounds};
 }
 
 void Game::give(PlayerIndex index, WeaponIndex weapon) {
