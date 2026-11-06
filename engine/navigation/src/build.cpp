@@ -340,7 +340,102 @@ struct ProfileBody {
     return true;
 }
 
-/// Sorts the floor of `compact`, eroded by the profile's radius already, by the bodies that fit on it, which
+/// Whether a body on `span`, at `column`, `row` of `compact`, has a wall on its side `direction`: no floor it
+/// walks on to there, and something solid in `solid` where its body would go, from a step up to its crouched
+/// height. Nothing there makes that side a ledge, whatever the floor below is.
+[[nodiscard]] auto hasWallOn(const rcCompactHeightfield& compact, const rcHeightfield& solid, int column,
+                             int row, const rcCompactSpan& span, int direction,
+                             const VoxelProfile& voxels) noexcept -> bool {
+    if (rcGetCon(span, direction) != RC_NOT_CONNECTED) {
+        return false;
+    }
+    const int nextColumn = column + rcGetDirOffsetX(direction);
+    const int nextRow = row + rcGetDirOffsetY(direction);
+    if (nextColumn < 0 || nextRow < 0 || nextColumn >= compact.width || nextRow >= compact.height) {
+        return true;
+    }
+    const int knees = int{span.y} + voxels.climbVoxels;
+    const int head = int{span.y} + voxels.crouchedVoxels;
+    const std::span columns{solid.spans, narrow<std::size_t>(solid.width * solid.height)};
+    for (const rcSpan* other = columns[narrow<std::size_t>(nextColumn + (nextRow * solid.width))];
+         other != nullptr; other = other->next) {
+        if (int{other->smin} < head && int{other->smax} > knees) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Takes out of `compact` the floor within the profile's radius of a wall, where a body's middle cannot be,
+/// by the square its box is. Unlike rcErodeWalkableArea it leaves a ledge its floor to the very edge: a
+/// body's box holds it up with its middle there, and a block no wider than a body is floor it stands on.
+void keepFromWalls(rcCompactHeightfield& compact, const rcHeightfield& solid, const VoxelProfile& voxels) {
+    const auto count = narrow<std::size_t>(compact.spanCount);
+    const std::span cells{compact.cells, narrow<std::size_t>(compact.width * compact.height)};
+    const std::span spans{compact.spans, count};
+    const std::span areas{compact.areas, count};
+    struct Place {
+        int column = 0;
+        int row = 0;
+        std::size_t span = 0;
+    };
+    std::vector<Place> reached;
+    std::vector<bool> isReached(count);
+    const auto reach = [&](int column, int row, std::size_t span) {
+        if (areas[span] != RC_NULL_AREA && !isReached[span]) {
+            isReached[span] = true;
+            reached.push_back({.column = column, .row = row, .span = span});
+        }
+    };
+    constexpr int kSides = 4;
+    for (int row = 0; row < compact.height; ++row) {
+        for (int column = 0; column < compact.width; ++column) {
+            const rcCompactCell& cell = cells[narrow<std::size_t>(column + (row * compact.width))];
+            const std::size_t firstSpan = cell.index;
+            for (std::size_t span = firstSpan; span < firstSpan + cell.count; ++span) {
+                for (int side = 0; side < kSides; ++side) {
+                    if (hasWallOn(compact, solid, column, row, spans[span], side, voxels)) {
+                        reach(column, row, span);
+                    }
+                }
+            }
+        }
+    }
+    // Then the cells next to those, the corners too, a layer of cells at a time.
+    const auto next = [&](const Place& from, int side) -> std::optional<Place> {
+        const int connection = rcGetCon(spans[from.span], side);
+        if (connection == RC_NOT_CONNECTED) {
+            return std::nullopt;
+        }
+        const int column = from.column + rcGetDirOffsetX(side);
+        const int row = from.row + rcGetDirOffsetY(side);
+        const rcCompactCell& cell = cells[narrow<std::size_t>(column + (row * compact.width))];
+        return Place{
+            .column = column, .row = row, .span = std::size_t{cell.index} + narrow<std::size_t>(connection)};
+    };
+    std::size_t first = 0;
+    for (int layer = 1; layer < voxels.radiusCells; ++layer) {
+        const std::size_t last = reached.size();
+        for (; first < last; ++first) {
+            const Place from = reached[first];
+            for (int side = 0; side < kSides; ++side) {
+                const std::optional<Place> beside = next(from, side);
+                if (!beside) {
+                    continue;
+                }
+                reach(beside->column, beside->row, beside->span);
+                if (const std::optional<Place> corner = next(*beside, (side + 1) % kSides)) {
+                    reach(corner->column, corner->row, corner->span);
+                }
+            }
+        }
+    }
+    for (const Place& place : reached) {
+        areas[place.span] = RC_NULL_AREA;
+    }
+}
+
+/// Sorts the floor of `compact`, kept from walls already, by the bodies that fit on it, which
 /// no surface may show (BodyHull): where no standing one does, it is of the kind Crouch where a crouched one
 /// of a profile that crouches does, else no floor.
 void sortFloorByBodies(rcCompactHeightfield& compact, const TileInput& input) {
@@ -373,7 +468,7 @@ void sortFloorByBodies(rcCompactHeightfield& compact, const TileInput& input) {
     }
 }
 
-/// Marks the floor of `compact`, eroded by the profile's radius already, that lies within `clearanceCells`
+/// Marks the floor of `compact`, kept from walls already, that lies within `clearanceCells`
 /// of where the profile may not stand as the kind Edge: Recast erodes a copy of the areas that much farther,
 /// and each span of floor the copy loses lies along a wall or a ledge. Crouching and water keep their
 /// kinds. Errors: TileRefused, with the tile and Recast's diagnostic.
@@ -414,9 +509,8 @@ struct TileBounds {
     return bounds;
 }
 
-/// The voxels of tile `tileX`, `tileY`, filtered as the profile walks: what it steps onto, what it
-/// cannot stand at the edge of, and where it has no room. None without a triangle there. Errors:
-/// TileRefused.
+/// The voxels of tile `tileX`, `tileY`, filtered as the profile walks: what it steps onto, and where it has
+/// no room. None without a triangle there. Errors: TileRefused.
 [[nodiscard]] auto rasterize(RecastLog& log, const TileInput& input, std::int32_t tileX, std::int32_t tileY)
     -> Result<std::optional<Heightfield>, MeshBuildError> {
     const TileBounds bounds = boundsOf(input, tileX, tileY);
@@ -448,7 +542,6 @@ struct TileBounds {
         return refused(log, tileX, tileY, "its triangles");
     }
     rcFilterLowHangingWalkableObstacles(&log, climb, *heightfield);
-    rcFilterLedgeSpans(&log, input.voxels.crouchedVoxels, climb, *heightfield);
     rcFilterWalkableLowHeightSpans(&log, input.voxels.crouchedVoxels, *heightfield);
     return std::optional{std::move(heightfield)};
 }
@@ -456,6 +549,12 @@ struct TileBounds {
 /// How far apart the links along a ledge are, in the profile's radii: a body's two widths, so that one is
 /// within a width of anywhere along it.
 constexpr float kLinkSpacingRadii = 4.0F;
+
+/// How far across a body of `profile` flies at its leap's speed, landing as high as it left.
+[[nodiscard]] auto farthestLeapOf(const AgentProfile& profile) noexcept -> float {
+    return profile.leapSpeed.value() * 2.0F *
+           std::sqrt(2.0F * profile.jumpHeight.value() / profile.gravity.value());
+}
 /// What a ray's direction and a triangle's plane are taken as parallel below, by Möller and Trumbore's
 /// determinant.
 constexpr float kParallel = 1.0e-6F;
@@ -603,53 +702,6 @@ private:
     return topArea != RC_NULL_AREA ? top : std::nullopt;
 }
 
-/// The link of a body leaving the floor at `start`, across the ledge its outward way `outward` faces, to
-/// the floor below `near` holds, the profile of `input` dropping from it unhurt: of the kind Jump, both
-/// ways, within the jump height, CrouchedJump, both ways, within the crouched one, else Drop; none where a
-/// wall or a step is there instead, no floor it lands
-/// on, or what stops a body on its way (BodyHull). It lands its radius and a cell past where the floor ends,
-/// the mesh's floor below starting its radius from the ledge, so that it lands on the mesh. How high the
-/// ledge is is the geometry's, on both sides: a polygon's corners stand up to a cell above the floor they
-/// cover.
-[[nodiscard]] auto linkFrom(Vec3 start, Vec3 outward, const TileInput& input,
-                            std::span<const NearTriangle> near) -> std::optional<std::pair<Vec3, AreaKind>> {
-    const AgentProfile& profile = input.profile;
-    const float step = profile.stepHeight.value();
-    // The floor it leaves within a step of its polygon's corner, as Detour finds the polygon a link starts
-    // on (walkableClimb).
-    const std::optional<float> ledge = floorAt(start, near, start.z - step, start.z + step);
-    if (!ledge) {
-        return std::nullopt;
-    }
-    const Vec3 leaves{.x = start.x, .y = start.y, .z = *ledge};
-    const float across = profile.radius.value() + profile.radius.value() + input.settings.cellSize.value();
-    const Vec3 beyond = leaves + (outward * across);
-    // A wall across the way, above a step, is a wall's edge, no ledge.
-    const Vec3 aboveStep{.z = step + input.settings.cellHeight.value()};
-    if (std::ranges::any_of(near, [&](const NearTriangle& triangle) {
-            return meets(leaves + aboveStep, beyond + aboveStep, triangle);
-        })) {
-        return std::nullopt;
-    }
-    // The highest floor below, within a step up and the drop height down.
-    const std::optional<float> landing =
-        floorAt(beyond, near, *ledge - profile.dropHeight.value(), *ledge + step);
-    if (!landing || *ledge - *landing <= step) {
-        return std::nullopt;
-    }
-    const Vec3 lands{.x = beyond.x, .y = beyond.y, .z = *landing};
-    if (!bodyPassesAlong(input, leaves, beyond) || !bodyPassesAlong(input, beyond, lands)) {
-        return std::nullopt;
-    }
-    const float height = *ledge - *landing;
-    if (height <= profile.jumpHeight.value()) {
-        return std::pair{lands, AreaKind::Jump};
-    }
-    return std::pair{lands, profile.crouchedJumpHeight && height <= profile.crouchedJumpHeight->value()
-                                ? AreaKind::CrouchedJump
-                                : AreaKind::Drop};
-}
-
 /// The heights of the floors over `point`, from `lowest` to `highest`, that the profile stands on.
 [[nodiscard]] auto floorsAt(Vec3 point, std::span<const NearTriangle> near, float lowest, float highest)
     -> std::vector<float> {
@@ -664,6 +716,190 @@ private:
         }
     }
     return floors;
+}
+
+/// The longest a flight is looked at, in seconds: past the fall from any ledge a body drops from unhurt.
+constexpr float kLongestFlight = 3.0F;
+
+/// Whether `body` comes down on the floor at `to` when it leaves the floor at `from`, jumping `jump` high, at
+/// the profile's speed across, under its gravity, as the game moves it: on across where nothing stops it, to
+/// no farther than `to`; going on up or down along a wall that stops it there, as its box slides; and falling
+/// once its head meets a ceiling. What stops it is its hull, and the surfaces at its knees and at its head,
+/// which no hull has of a brush entity.
+[[nodiscard]] auto bodyFlies(const TileInput& input, std::span<const NearTriangle> near,
+                             const ProfileBody& body, Vec3 from, Vec3 to, float jump) -> bool {
+    const AgentProfile& profile = input.profile;
+    const float gravity = profile.gravity.value();
+    const float speed = profile.leapSpeed.value();
+    const Vec3 span{.x = to.x - from.x, .y = to.y - from.y};
+    const float across = length(span);
+    const Vec3 way = across > 0.0F ? span / across : Vec3{};
+    const float tick = input.settings.cellSize.value() / speed;
+    const float cellHeight = input.settings.cellHeight.value();
+    const Vec3 middle{.z = (body.height.value() * 0.5F) + cellHeight};
+    const Vec3 knees{.z = profile.stepHeight.value() + cellHeight};
+    const Vec3 head{.z = body.height.value() - cellHeight};
+    const auto isOpen = [&](Vec3 was, Vec3 feet) {
+        return !body.isSolidAt(feet + middle) &&
+               std::ranges::none_of(near, [&](const NearTriangle& triangle) {
+                   return meets(was + knees, feet + knees, triangle) ||
+                          meets(was + head, feet + head, triangle);
+               });
+    };
+    float rising = std::sqrt(2.0F * gravity * jump);
+    float gone = 0.0F;
+    Vec3 at = from;
+    for (float time = tick; time < kLongestFlight; time += tick) {
+        // By the mean of its speed over the tick, exact under a constant pull: by its speed at the end alone,
+        // a flight peaked short of what the jump reaches by half a tick's rise, a few units.
+        const float wasRising = rising;
+        rising -= gravity * tick;
+        const float flown = at.z + ((wasRising + rising) * 0.5F * tick);
+        const bool comesDown = rising < 0.0F && flown <= to.z;
+        const float height = comesDown ? to.z : flown;
+        const float further = std::min(gone + (speed * tick), across);
+        const Vec3 aheadAndUp{.x = from.x + (way.x * further), .y = from.y + (way.y * further), .z = height};
+        const Vec3 ahead{.x = aheadAndUp.x, .y = aheadAndUp.y, .z = at.z};
+        const Vec3 straight{.x = at.x, .y = at.y, .z = height};
+        if (isOpen(at, aheadAndUp)) {
+            gone = further;
+            at = aheadAndUp;
+        } else if (isOpen(at, straight)) {
+            at = straight;
+        } else if (isOpen(at, ahead)) {
+            // Its head on a ceiling, or its feet on a floor, it goes on across as it stops rising or falling.
+            gone = further;
+            at = ahead;
+            rising = std::min(rising, 0.0F);
+        } else {
+            rising = std::min(rising, 0.0F);
+        }
+        if (comesDown && at.z <= to.z) {
+            return gone >= across;
+        }
+    }
+    return false;
+}
+
+/// How a body crosses between the floor at `high` and the floor at `low`, no more than a step above it: of
+/// the kind Jump, both ways, when standing it jumps back up; CrouchedJump, both ways, when it does so ducking
+/// in the air, for the height or for the room there; else Drop, down only; none when it does not come down on
+/// it.
+[[nodiscard]] auto kindOfFlight(const TileInput& input, std::span<const NearTriangle> near, Vec3 high,
+                                Vec3 low) -> std::optional<AreaKind> {
+    const AgentProfile& profile = input.profile;
+    const float height = high.z - low.z;
+    const float radius = profile.radius.value();
+    const bool standsAbove = standingBodyFitsAt(input, high);
+    const bool standsBelow = standingBodyFitsAt(input, low);
+    const auto ducksAt = [&](Vec3 feet) {
+        return profile.crouchedHeight < profile.standingHeight &&
+               bodyFitsAt(input, duckedBodyOf(input), feet);
+    };
+    const bool ducksAbove = ducksAt(high);
+    const bool ducksBelow = ducksAt(low);
+    if ((!standsAbove && !ducksAbove) || (!standsBelow && !ducksBelow)) {
+        return std::nullopt;
+    }
+    const ProfileBody standing = standingBodyOf(input);
+    const ProfileBody ducked = duckedBodyOf(input);
+    if (standsAbove && standsBelow && height <= profile.jumpHeight.value() &&
+        bodyFlies(input, near, standing, low, high, profile.jumpHeight.value())) {
+        return AreaKind::Jump;
+    }
+    if (profile.crouchedJumpHeight && ducksAbove && ducksBelow &&
+        height <= profile.crouchedJumpHeight->value() &&
+        bodyFlies(input, near, ducked, low, high, profile.crouchedJumpHeight->value())) {
+        return AreaKind::CrouchedJump;
+    }
+    if (height > profile.dropHeight.value()) {
+        return std::nullopt;
+    }
+    const Vec3 span{.x = high.x - low.x, .y = high.y - low.y};
+    // Off the edge of a ledge it walks; only across a gap does it jump.
+    const float hop =
+        length(span) > radius + radius ? profile.jumpHeight.value() : profile.stepHeight.value();
+    if (standsAbove && standsBelow && bodyFlies(input, near, standing, high, low, hop)) {
+        return AreaKind::Drop;
+    }
+    return ducksAbove && ducksBelow && bodyFlies(input, near, ducked, high, low, hop)
+               ? std::optional{AreaKind::Drop}
+               : std::nullopt;
+}
+
+/// A link of a body leaving the floor of a polygon: where it lands, and how it crosses.
+struct FoundLink {
+    Vec3 end{};
+    AreaKind kind = AreaKind::Drop;
+};
+
+/// The links of a body leaving the floor at `start`, across the edge its way `outward` faces, as far as it
+/// flies at the profile's speed: to the nearest floor of each height it comes down on (kindOfFlight), below
+/// it within its drop height, once its box is past the edge, and level with it past a gap; none past a wall,
+/// above a step of it. A floor higher than a step has links of its own, to this one. How high the ledge is is
+/// the geometry's: a polygon's corners stand up to a cell above the floor they cover.
+[[nodiscard]] auto linksFrom(Vec3 start, Vec3 outward, const TileInput& input,
+                             std::span<const NearTriangle> near) -> std::vector<FoundLink> {
+    const AgentProfile& profile = input.profile;
+    const float step = profile.stepHeight.value();
+    const float cell = input.settings.cellSize.value();
+    // The floor it leaves within a step of its polygon's corner, as Detour finds the polygon a link starts
+    // on (walkableClimb): a polygon's outline strays from the floor's edge by a little, so that the floor may
+    // end just short of an edge of it.
+    std::optional<float> ledge;
+    for (float back = 0.0F; !ledge && back <= input.settings.edgeError.value() + cell; back += cell) {
+        ledge = floorAt(start - (outward * back), near, start.z - step, start.z + step);
+    }
+    if (!ledge) {
+        return {};
+    }
+    const Vec3 leaves{.x = start.x, .y = start.y, .z = *ledge};
+    const Vec3 aboveStep{.z = step + input.settings.cellHeight.value()};
+    const float farthest = farthestLeapOf(profile);
+    std::vector<float> levels;
+    std::vector<FoundLink> found;
+    std::optional<float> edgeAt;
+    Vec3 previous = leaves;
+    for (float distance = cell; distance <= farthest; distance += cell) {
+        const Vec3 point = leaves + (outward * distance);
+        if (std::ranges::any_of(near, [&](const NearTriangle& triangle) {
+                return meets(previous + aboveStep, point + aboveStep, triangle);
+            })) {
+            break;
+        }
+        previous = point;
+        std::vector<float> floors = floorsAt(point, near, *ledge - profile.dropHeight.value(), *ledge + step);
+        std::ranges::sort(floors, std::greater{});
+        const auto isLevel = [&](float floor) {
+            return std::abs(floor - *ledge) <= step;
+        };
+        if (!edgeAt && std::ranges::none_of(floors, isLevel)) {
+            edgeAt = distance;
+        }
+        // A body's box holds it up on this floor until its middle is its radius past the edge: it comes down
+        // on no lower floor before that.
+        const bool hasLeftLedge = edgeAt && distance >= *edgeAt + profile.radius.value();
+        for (const float floor : floors) {
+            if ((isLevel(floor) ? !edgeAt.has_value() : !hasLeftLedge) ||
+                std::ranges::any_of(levels, [=](float other) { return std::abs(other - floor) <= step; })) {
+                continue;
+            }
+            // Right at the edge of that floor, as it leaves this one: a link goes both ways, and a body
+            // taking it the other way has all the floor behind that edge for its run at the gap.
+            const Vec3 lands = point + Vec3{.z = floor - point.z};
+            if (const std::optional<AreaKind> kind = kindOfFlight(input, near, leaves, lands)) {
+                levels.push_back(floor);
+                found.push_back({.end = lands, .kind = *kind});
+            }
+        }
+        // The floor goes on past where a polygon's outline strays from its edge: this is no edge of the
+        // floor, the side of a tile say, and no link leaves from here, as a body that walks on gets to the
+        // real one.
+        if (!edgeAt && distance > input.settings.edgeError.value() + cell) {
+            return {};
+        }
+    }
+    return found;
 }
 
 /// A floor a ladder leads to: where a body lands on it, and how far from the ladder's middle across its edge
@@ -757,14 +993,18 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
     }
 }
 
+/// What Recast marks an edge along the side of a tile with (rcBuildPolyMesh's portal edges).
+constexpr std::uint16_t kTileSideEdge = 0x8000;
+
 /// The links of the polygons of `polygons`, tile `tileX`, `tileY` of `input`: along each edge of a polygon
-/// no other polygon shares (a wall's or a ledge's, not the side of the tile), one a body's two widths or
-/// less apart, its middle first, where a body walking off the edge lands on floor below (linkFrom).
+/// no other polygon shares, a wall's or a ledge's, one a body's two widths or less apart, its middle first
+/// (linksFrom). An edge along the side of the tile is a ledge too where no floor goes on past it, so its
+/// links start just inside the tile, the only one Detour keeps them in.
 [[nodiscard]] auto linksOf(const TileInput& input, const rcPolyMesh& polygons, std::int32_t tileX,
                            std::int32_t tileY) -> TileLinks {
     const AgentProfile& profile = input.profile;
     const float spacing = profile.radius.value() * kLinkSpacingRadii;
-    const float reach = profile.radius.value() + profile.radius.value() + input.settings.cellSize.value();
+    const float reach = farthestLeapOf(profile) + profile.radius.value() + input.settings.cellSize.value();
     const std::vector<NearTriangle> near = trianglesAbout(input, boundsOf(input, tileX, tileY), reach);
     const auto vertexOf = [&polygons](std::uint16_t vertex) {
         const std::array<float, 3> point{
@@ -786,8 +1026,10 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
         }
         middle = middle / static_cast<float>(count);
         for (std::size_t edge = 0; edge < count; ++edge) {
-            if (record[sides + edge] != RC_MESH_NULL_IDX) {
-                continue; // shared, or the side of the tile
+            const std::uint16_t neighbor = record[sides + edge];
+            const bool isTileSide = neighbor != RC_MESH_NULL_IDX && (neighbor & kTileSideEdge) != 0;
+            if (neighbor != RC_MESH_NULL_IDX && !isTileSide) {
+                continue; // shared
             }
             const Vec3 from = vertexOf(record[edge]);
             const Vec3 to = vertexOf(record[(edge + 1) % count]);
@@ -805,9 +1047,10 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
                 std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(length / spacing)));
             for (std::size_t sample = 0; sample < samples; ++sample) {
                 const float share = (static_cast<float>(sample) + 0.5F) / static_cast<float>(samples);
-                const Vec3 start = from + ((to - from) * share);
-                if (const auto link = linkFrom(start, outward, input, near)) {
-                    links.add(start, link->first, profile.radius.value(), link->second);
+                const Vec3 start = (from + ((to - from) * share)) -
+                                   (isTileSide ? outward * detail::kLinkInsetFromTileSide : Vec3{});
+                for (const FoundLink& link : linksFrom(start, outward, input, near)) {
+                    links.add(start, link.end, profile.radius.value(), link.kind);
                 }
             }
         }
@@ -892,10 +1135,8 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
         !rcBuildCompactHeightfield(&log, voxels.crouchedVoxels, voxels.climbVoxels, *heightfield, *compact)) {
         return refused(log, tileX, tileY, "its compact heightfield");
     }
+    keepFromWalls(*compact, *heightfield, voxels);
     heightfield.reset(); // what is left is in the compact one
-    if (!rcErodeWalkableArea(&log, voxels.radiusCells, *compact)) {
-        return refused(log, tileX, tileY, "its floor kept from walls");
-    }
     markCrouching(*compact, voxels.standingVoxels);
     sortFloorByBodies(*compact, input);
     if (auto marked = markEdges(log, *compact, voxels.clearanceCells, tileX, tileY); !marked) {
@@ -1019,7 +1260,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 8;
+constexpr std::uint32_t kTilesVersion = 9;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
@@ -1063,7 +1304,7 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
          {profile.radius.value(), profile.wallClearance.value(), profile.standingHeight.value(),
           profile.crouchedHeight.value(), profile.stepHeight.value(), profile.jumpHeight.value(),
           profile.crouchedJumpHeight.value_or(HammerUnits{}).value(), profile.dropHeight.value(),
-          profile.minGroundNormalZ}) {
+          profile.leapSpeed.value(), profile.gravity.value(), profile.minGroundNormalZ}) {
         appendLittleEndian(bytes, value);
     }
     for (const float value :

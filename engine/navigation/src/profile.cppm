@@ -47,7 +47,8 @@ using AreaCosts = EnumArray<AreaKind, float>;
 /// and crouches under, and what each kind of area costs it.
 struct AgentProfile {
     std::string name{}; ///< How data, the console and plugins name it ("player").
-    /// Half its width: its middle stays this far from walls and ledges.
+    /// Half its width: its middle stays this far from walls. A ledge's floor it has to the very edge, where
+    /// its box holds it up.
     HammerUnits radius{};
     /// How much farther than its radius it would rather keep from walls and ledges where there is room:
     /// the floor within it is of the kind Edge, which areaCosts weighs; none for none.
@@ -65,6 +66,11 @@ struct AgentProfile {
     /// The highest ledge it drops from unhurt: how far below a body off the mesh the floor it drops to is
     /// looked for (NavigationQuery), and what its links of the kind Drop span; at least stepHeight.
     HammerUnits dropHeight{};
+    /// How fast it leaves a ledge to jump across a gap, the slowest of those that walk its mesh: its links
+    /// span no gap such a flight falls short of.
+    UnitsPerSecond leapSpeed{};
+    /// What pulls it down in the air.
+    UnitsPerSecondSquared gravity{};
     /// The least upward share of a floor's unit normal it stands on: a steeper floor is a wall.
     float minGroundNormalZ = 0.0F;
     /// The kinds of area that do not cost their length, each once and at least 1: A* finds the cheapest
@@ -140,6 +146,8 @@ struct nx::meta::Description<nx::navigation::AgentProfile> {
         nx::meta::field<&nx::navigation::AgentProfile::jumpHeight>("jumpHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::crouchedJumpHeight>("crouchedJumpHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::dropHeight>("dropHeight"),
+        nx::meta::field<&nx::navigation::AgentProfile::leapSpeed>("leapSpeed"),
+        nx::meta::field<&nx::navigation::AgentProfile::gravity>("gravity"),
         nx::meta::field<&nx::navigation::AgentProfile::minGroundNormalZ>("minGroundNormalZ"),
         nx::meta::field<&nx::navigation::AgentProfile::areaCosts>("areaCosts"),
     };

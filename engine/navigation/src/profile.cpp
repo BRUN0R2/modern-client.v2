@@ -113,6 +113,10 @@ auto checkProfile(const AgentProfile& profile, const BuildSettings& settings)
                                  "from the one up to the other",
                                  *profile.crouchedJumpHeight, profile.jumpHeight, profile.dropHeight));
     }
+    if (!std::isfinite(profile.leapSpeed.value()) || profile.leapSpeed <= UnitsPerSecond{} ||
+        !std::isfinite(profile.gravity.value()) || profile.gravity <= UnitsPerSecondSquared{}) {
+        return invalidProfile(profile, "a leap's speed and gravity must be finite and positive");
+    }
     if (!std::isfinite(profile.wallClearance.value()) || profile.wallClearance < HammerUnits{}) {
         return invalidProfile(profile, "a wall clearance must be finite and none or more");
     }

@@ -222,6 +222,9 @@ namespace nx::navigation::detail {
 /// Watershed cells read beyond a tile besides its agent-radius border (Recast's three-cell pad).
 inline constexpr int borderPadCells = 3;
 
+/// How far inside its tile a link leaving from the tile's side starts: Detour keeps a link in one tile alone.
+inline constexpr float kLinkInsetFromTileSide = 1.0F;
+
 /// A point of the game's space (z up) in Recast's and Detour's (y up), turned about x: the same
 /// handedness, so a polygon keeps its winding.
 [[nodiscard]] inline auto detourOf(Vec3 position) noexcept -> std::array<float, 3> {

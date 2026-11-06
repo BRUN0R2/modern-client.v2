@@ -37,21 +37,34 @@ convex polygons, through Recast and Detour.
   does not. A query also weighs places of its own, the polygons about them costing more (an agent
   keeping away from where it got stuck), through a query filter of ours: Detour is built with its
   filter virtual for it.
+- **Floor.** Walls keep a mesh's floor off by the profile's radius, by the square a body's box is; a ledge does
+  not. A body's box holds it up with its middle at the very edge of a floor, and on a block no wider than
+  itself, so that Recast's erosion from everything, which took those away, is not what keeps it
+  (`keepFromWalls`). A floor is the top of whatever a body fits on; an island smaller than `smallestIsland` is
+  left out.
 - **Links.** Ladders, jumps, drops and teleporters are links between polygons, found in the map
   (`func_ladder`, ledges, `trigger_teleport`) and added by plugins. Jumps and drops are found at the
   ledges as each tile is built: along each edge of a polygon that no other shares, one every two
-  widths of the profile, where a body walking off lands on floor within its drop height below, its
-  radius and a cell past the ledge; of the kind jump, both ways, within its jump height, else drop,
-  down only, both heights the geometry's. A brain crosses one from its start, jumping once for a
-  link up, having slowed down for what the link's way turns across its own, since in the air a body
-  flies on, and heads for its end without steering, as DetourCrowd moves an agent over a link. It has
-  crossed only on the ground, at the height of the end and as far from the start; back on the ground
-  below that height it fell short, and searches its way anew from where it stands. Back short of one link
-  twice in a row, its ways keep off that link (`PathRequest::shunned`) for as long as they have another: nothing
-  else tells it that a ledge has no room for what the link takes. The
-  ledge its next link leaves from is no wall to its steering. A decision reuses its next-link lookup
-  to anticipate the way over it when braking; after an attempted crossing fails and may have changed
-  the corridor, it looks again.
+  widths of the profile, and along the side of a tile, where no floor goes on past it. From each it looks
+  outward as far as a leap flies, for the nearest floor of each height a body comes down on: one lower once
+  its box is past the edge, one level past a gap. Whether it does is flown as the game moves a body, under the
+  profile's `gravity` at its `leapSpeed`: stopped by what stops a body, which its hulls and the surfaces at its
+  knees and head tell, rising along a wall and falling from a ceiling, the kinds tried in turn: `jump` both ways
+  within its jump height, `crouchedJump` both ways within its crouched one, or where only a ducked body fits,
+  and else `drop`, down only. A brain crosses one from its start, jumping once for a link up or across a gap,
+  having slowed down for what the link's way turns across its own, since in the air a body flies on, and heads
+  for its end without steering, as DetourCrowd moves an agent over a link. It has crossed only on the ground, at
+  the height of the end and as far from the start; back on the ground below that height it fell short, and
+  searches its way anew from where it stands. Back short of one link twice in a row, its ways keep off that link
+  (`PathRequest::shunned`) for as long as they have another: a link is flown at a leap's speed, and nothing else
+  tells it that a floor has no room for that. The ledge its next link leaves from is no wall to its steering, and
+  within four radii of it, it heads straight for it, the walls of a floor no bigger than a block being all round
+  it. Over a gap it needs the speed the flight takes: too slow, it backs off along the way across it for a run at
+  it (`Brain::isRunningUp`), as far as anything lets it, and it comes no faster than a small floor lets it land
+  on. On the ground on another floor than its corridor, as a body that fell, it searches its way anew. While its
+  way goes on it never stands with nothing to head for: the corners of small polygons may all lie within its
+  arrival of it just short of a link. A decision reuses its next-link lookup to anticipate the way over it when
+  braking; after an attempted crossing fails and may have changed the corridor, it looks again.
 - **What changes in a match.** Doors and breakables turn their areas and links on and off as the
   game reports them, without rebuilding; moving agents avoid each other locally (ADR-0024).
 - **Tactical layer.** Hiding spots, sniper spots, encounter spots, choke points and places (named
@@ -72,7 +85,7 @@ convex polygons, through Recast and Detour.
   the world's standing hull (`BodyHull`), a copy of the planes of the tree the map's compiler grew by the player's
   box, and a tile's floor keeps only where a standing body's middle is out of its solid, within a step, or what
   the steepest floor lifts its box by, of where it stands; a link's way, a ladder's landing the same. The floor
-  is tested after its erosion from walls: the hull already keeps its radius from what it stops. A solid brush
+  is tested after it is kept from walls: the hull already keeps its radius from what it stops. A solid brush
   entity has its own hulls, about where it stands, unturned, which its faces alone tell nothing of: a beam
   a body ducks under is low to its head as much as a ceiling. Another profile's size will need its own hull.
 - **Crouching.** Floor where a standing body does not fit and a ducked one does, by the world's ducked hull as
@@ -83,9 +96,10 @@ convex polygons, through Recast and Detour.
   body ducked at the top of a ladder walks to it at a third of its speed. It gains speed slowly ducked, 83 units
   a second each second, and a jump's cost for a second takes all of it: its stuck watch holds it to a third of
   the stuck speed, and draws no jump. A ledge higher than its jump and within its crouched one is linked both
-  ways by the kind `CrouchedJump`, 58 units as a Condition Zero bot has it: the movement reaches 45 units
-  jumping and 63 ducking in the air, its feet lifted by as much as its box is shorter, whenever from the jump to
-  its top it presses the key, so that a brain holds the key from the jump until it lands.
+  ways by the kind `CrouchedJump`, 62.5 units, just under the 63 the movement reaches ducking in the air, its feet
+  lifted by as much as its box is shorter, whenever from the jump to its top it presses the key, against 45
+  jumping; every ledge a player gets onto being one an agent must, a Condition Zero bot's 58 left some out. A brain
+  holds the key from the jump until it lands.
 - **Queries.** `findPath` (A* over the polygons, then the funnel that straightens the path),
   `nearestPoint`, `raycast` (whether a straight walk is possible), `randomPoint` within a radius,
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it

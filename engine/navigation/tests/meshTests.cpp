@@ -45,7 +45,7 @@ constexpr float kCell = 4.0F;
     });
 }
 
-TEST(NavigationMeshTest, AFloorIsCoveredAsFarAsTheRadiusFromItsEdges) {
+TEST(NavigationMeshTest, AFloorWithNoWallIsCoveredToItsEdges) {
     Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 512.0F, .y = 384.0F}, 0.0F);
     const NavigationMesh mesh = nx::test::playerMesh(geometry);
@@ -53,13 +53,19 @@ TEST(NavigationMeshTest, AFloorIsCoveredAsFarAsTheRadiusFromItsEdges) {
     ASSERT_FALSE(outline.polygons.empty());
     EXPECT_EQ(mesh.polygonCount(), outline.polygons.size());
     EXPECT_GT(mesh.tileCount(), 1U); // 512 units are 4 tiles of 128
+    // A body's box holds it up with its middle at a ledge.
+    Vec3 least{.x = std::numeric_limits<float>::max(), .y = std::numeric_limits<float>::max()};
+    Vec3 most{.x = std::numeric_limits<float>::lowest(), .y = std::numeric_limits<float>::lowest()};
     for (const Vec3 corner : outline.corners) {
-        EXPECT_GE(corner.x, kRadius - kCell);
-        EXPECT_LE(corner.x, 512.0F - kRadius + kCell);
-        EXPECT_GE(corner.y, kRadius - kCell);
-        EXPECT_LE(corner.y, 384.0F - kRadius + kCell);
+        least = {.x = std::min(least.x, corner.x), .y = std::min(least.y, corner.y)};
+        most = {.x = std::max(most.x, corner.x), .y = std::max(most.y, corner.y)};
         EXPECT_NEAR(corner.z, 0.0F, 2.0F * kCell);
     }
+    EXPECT_NEAR(least.x, 0.0F, kCell);
+    EXPECT_NEAR(most.x, 512.0F, kCell);
+    EXPECT_NEAR(least.y, 0.0F, kCell);
+    EXPECT_NEAR(most.y, 384.0F, kCell);
+    EXPECT_TRUE(outline.links.empty()) << "its floor goes on past the sides of its tiles, and nowhere else";
     EXPECT_TRUE(std::ranges::all_of(outline.polygons, [](const nx::navigation::MeshPolygon& polygon) {
         return polygon.kind == AreaKind::Floor && polygon.cornerCount >= 3;
     }));
@@ -270,23 +276,21 @@ TEST(NavigationMeshTest, TheFloorWithinTheWallClearanceOfItsEdgesIsOfTheKindEdge
     const MeshOutline outline = nx::test::playerMesh(geometry, 3, nx::test::clearedPlayerProfile()).outline();
     ASSERT_TRUE(hasKind(outline, AreaKind::Edge));
     ASSERT_TRUE(hasKind(outline, AreaKind::Floor));
-    // The floor past the radius and the clearance from the edges; the edge's polygons between, as far
-    // as the radius.
-    constexpr float kKept = kRadius + kClearance;
-    bool reachesTheRadius = false;
+    // The floor past the clearance from the edges; the edge's polygons between, as far as the very edges.
+    bool reachesTheEdge = false;
     for (const nx::navigation::MeshPolygon& polygon : outline.polygons) {
         for (const Vec3 corner :
              std::span{outline.corners}.subspan(polygon.firstCorner, polygon.cornerCount)) {
             if (polygon.kind == AreaKind::Floor) {
-                EXPECT_GE(corner.x, kKept - kCell);
-                EXPECT_LE(corner.x, 512.0F - kKept + kCell);
-                EXPECT_GE(corner.y, kKept - kCell);
-                EXPECT_LE(corner.y, 384.0F - kKept + kCell);
+                EXPECT_GE(corner.x, kClearance - kCell);
+                EXPECT_LE(corner.x, 512.0F - kClearance + kCell);
+                EXPECT_GE(corner.y, kClearance - kCell);
+                EXPECT_LE(corner.y, 384.0F - kClearance + kCell);
             }
-            reachesTheRadius = reachesTheRadius || corner.x <= kRadius + kCell;
+            reachesTheEdge = reachesTheEdge || corner.x <= kCell;
         }
     }
-    EXPECT_TRUE(reachesTheRadius) << "the floor along the edges is still walked";
+    EXPECT_TRUE(reachesTheEdge) << "the floor along the edges is still walked";
 }
 
 /// Whether `point` is over the box from `low` to `high` across.
@@ -331,6 +335,101 @@ TEST(NavigationMeshTest, ALedgeItJumpsOntoIsLinkedBothWaysAndOneItDropsFromDownO
     EXPECT_GT(drops, 0U);
 }
 
+TEST(NavigationMeshTest, ABoxIsLinkedDownFromEachOfItsSidesAlongTheSidesOfTilesOrNot) {
+    constexpr float kTileSide = 0.0F;
+    constexpr float kInsideTiles = 20.0F;
+    for (const float inset : {kTileSide, kInsideTiles}) {
+        const Vec3 low{.x = 384.0F + inset, .y = 128.0F + inset, .z = -16.0F};
+        const Vec3 high{.x = 640.0F - inset, .y = 384.0F - inset, .z = 120.0F};
+        Geometry geometry;
+        nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+        nx::test::addBox(geometry, low, high);
+        const MeshOutline outline = nx::test::playerMesh(geometry).outline();
+        const auto hasLinkDownTo = [&outline](auto isThere) {
+            return std::ranges::any_of(outline.links, [&isThere](const MeshLink& link) {
+                return link.start.z > link.end.z && isThere(link.end);
+            });
+        };
+        const auto past = [](float side, float position, float way) {
+            return (position - side) * way > 0.0F;
+        };
+        EXPECT_TRUE(hasLinkDownTo([&](Vec3 end) { return past(high.x, end.x, 1.0F); })) << inset;
+        EXPECT_TRUE(hasLinkDownTo([&](Vec3 end) { return past(low.x, end.x, -1.0F); })) << inset;
+        EXPECT_TRUE(hasLinkDownTo([&](Vec3 end) { return past(high.y, end.y, 1.0F); })) << inset;
+        EXPECT_TRUE(hasLinkDownTo([&](Vec3 end) { return past(low.y, end.y, -1.0F); })) << inset;
+    }
+}
+
+TEST(NavigationMeshTest, AWallKeepsTheFloorOffAsFarAsABodysRadius) {
+    constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = 0.0F};
+    constexpr Vec3 kHigh{.x = 512.0F, .y = 384.0F, .z = 128.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, kLow, kHigh);
+    const MeshOutline outline = nx::test::playerMesh(geometry).outline();
+    constexpr float kOff = kRadius - kCell;
+    float nearestOff = std::numeric_limits<float>::max();
+    for (const Vec3 corner : outline.corners) {
+        const float off =
+            std::max({kLow.x - corner.x, corner.x - kHigh.x, kLow.y - corner.y, corner.y - kHigh.y});
+        // On top of the box, or inside it, where the floor its faces do not cover goes on just as well.
+        if (corner.z >= kHigh.z / 2.0F || off <= -kOff) {
+            continue;
+        }
+        EXPECT_GE(off, kOff) << std::format("{}", corner);
+        nearestOff = std::min(nearestOff, off);
+    }
+    EXPECT_LE(nearestOff, kRadius + (2.0F * kCell)) << "and no farther";
+}
+
+TEST(NavigationMeshTest, ABlockABodysBoxStandsOnIsFloorItJumpsOntoAndDownFrom) {
+    constexpr Vec3 kLow{.x = 544.0F, .y = 160.0F, .z = -16.0F};
+    constexpr Vec3 kHigh{.x = 584.0F, .y = 200.0F, .z = 30.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, kLow, kHigh);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    EXPECT_TRUE(
+        std::ranges::any_of(mesh.outline().corners, [](Vec3 corner) { return corner.z > kHigh.z / 2.0F; }));
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 top{.x = 564.0F, .y = 180.0F, .z = kHigh.z};
+    const Vec3 floor{.x = 100.0F, .y = 100.0F};
+    EXPECT_TRUE(query.isReachable(floor, top).value_or(false));
+    EXPECT_TRUE(query.isReachable(top, floor).value_or(false));
+}
+
+TEST(NavigationMeshTest, AGapALeapSpansIsLinkedBothWaysAndOneWiderIsNot) {
+    // Two floors with nothing under what is between them. A leap at 230 units a second, 41.8 high, flies 148
+    // units.
+    const auto meshOver = [](float gap) {
+        Geometry geometry;
+        nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 512.0F, .y = 512.0F}, 0.0F);
+        nx::test::addFloor(geometry, {.x = 512.0F + gap, .y = 0.0F}, {.x = 1024.0F + gap, .y = 512.0F}, 0.0F);
+        return nx::test::playerMesh(geometry);
+    };
+    constexpr float kSpanned = 100.0F;
+    constexpr float kTooWide = 200.0F;
+    const Vec3 here{.x = 256.0F, .y = 256.0F};
+    {
+        const NavigationMesh mesh = meshOver(kSpanned);
+        const MeshOutline outline = mesh.outline();
+        ASSERT_FALSE(outline.links.empty());
+        for (const MeshLink& link : outline.links) {
+            EXPECT_EQ(link.kind, AreaKind::Jump);
+            EXPECT_NEAR(nx::test::distanceAcross(link.start, link.end), kSpanned, 2.0F * kCell)
+                << "edge to edge";
+        }
+        nx::navigation::NavigationQuery query{mesh};
+        const Vec3 there{.x = 512.0F + kSpanned + 256.0F, .y = 256.0F};
+        EXPECT_TRUE(query.isReachable(here, there).value_or(false));
+        EXPECT_TRUE(query.isReachable(there, here).value_or(false));
+    }
+    const NavigationMesh mesh = meshOver(kTooWide);
+    EXPECT_TRUE(mesh.outline().links.empty());
+    nx::navigation::NavigationQuery query{mesh};
+    EXPECT_FALSE(query.isReachable(here, {.x = 512.0F + kTooWide + 256.0F, .y = 256.0F}).value_or(true));
+}
+
 TEST(NavigationMeshTest, AWayGoesOverNoLinkItShunsWhileItHasAnother) {
     constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};
     constexpr Vec3 kHigh{.x = 512.0F, .y = 384.0F, .z = 30.0F};
@@ -360,6 +459,31 @@ TEST(NavigationMeshTest, AWayGoesOverNoLinkItShunsWhileItHasAnother) {
     const auto none = query.findPath({.from = here, .to = there, .shunned = outline.links});
     ASSERT_FALSE(none.has_value());
     EXPECT_EQ(none.error().code, nx::navigation::NavigationError::Unreachable);
+}
+
+TEST(NavigationMeshTest, ALedgeWithRoomOnlyForADuckedBodyIsACrouchedJumpThoughAStandingOneIsHighEnough) {
+    // A box 30 tall, what stops a standing body over it alone: a ceiling that no surface shows.
+    constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};
+    constexpr Vec3 kHigh{.x = 512.0F, .y = 384.0F, .z = 30.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, kLow, kHigh);
+    geometry.bodyHull = nx::test::bodyHullOfBox(
+        {.min = {.x = kLow.x, .y = kLow.y, .z = 60.0F}, .max = {.x = kHigh.x, .y = kHigh.y, .z = 256.0F}});
+    nx::navigation::AgentProfile jumping = nx::test::playerProfile();
+    jumping.crouchedJumpHeight = nx::HammerUnits{62.5F};
+    const NavigationMesh mesh = nx::test::playerMesh(geometry, 3, jumping);
+    const MeshOutline outline = mesh.outline();
+    ASSERT_FALSE(outline.links.empty());
+    for (const MeshLink& link : outline.links) {
+        EXPECT_EQ(link.kind, AreaKind::CrouchedJump) << std::format("{}", link.start);
+    }
+    EXPECT_TRUE(hasKind(outline, AreaKind::Crouch));
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 top{.x = 384.0F, .y = 256.0F, .z = kHigh.z};
+    const Vec3 floor{.x = 128.0F, .y = 256.0F};
+    EXPECT_TRUE(query.isReachable(floor, top).value_or(false));
+    EXPECT_TRUE(query.isReachable(top, floor).value_or(false));
 }
 
 TEST(NavigationMeshTest, AFloorABrushEntityLeavesNoRoomOnIsNoFloor) {
@@ -548,9 +672,11 @@ TEST(NavigationMeshesTest, AProfileIsFoundByItsNameAndHasAMeshOnceBuilt) {
     ASSERT_TRUE(bossIndex.has_value());
     EXPECT_EQ(meshes->meshOf(*player).error().code, NavigationError::NoMesh);
 
-    // A corridor 64 units wide: the player passes, the boss, 128 wide, does not fit.
+    // A corridor 64 units wide between walls: the player passes, the boss, 128 wide, does not fit.
     Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 512.0F, .y = 64.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 0.0F, .y = -32.0F, .z = 0.0F}, {.x = 512.0F, .y = 0.0F, .z = 128.0F});
+    nx::test::addBox(geometry, {.x = 0.0F, .y = 64.0F, .z = 0.0F}, {.x = 512.0F, .y = 96.0F, .z = 128.0F});
     auto jobs = nx::test::jobSystem();
     for (const nx::navigation::ProfileIndex profile : {*player, *bossIndex}) {
         const auto built = meshes->build(*jobs, geometry, profile);
@@ -560,8 +686,12 @@ TEST(NavigationMeshesTest, AProfileIsFoundByItsNameAndHasAMeshOnceBuilt) {
     const auto bossMesh = meshes->meshOf(*bossIndex);
     ASSERT_TRUE(playerMesh.has_value());
     ASSERT_TRUE(bossMesh.has_value());
-    EXPECT_GT(playerMesh->get().polygonCount(), 0U);
-    EXPECT_EQ(bossMesh->get().polygonCount(), 0U);
+    const auto isOnCorridorFloor = [](Vec3 corner) {
+        return corner.z < 64.0F;
+    };
+    EXPECT_TRUE(std::ranges::any_of(playerMesh->get().outline().corners, isOnCorridorFloor));
+    EXPECT_TRUE(std::ranges::none_of(bossMesh->get().outline().corners, isOnCorridorFloor))
+        << "the tops of the walls alone";
     EXPECT_EQ(playerMesh->get().profile().name, "player");
 
     meshes->clear();

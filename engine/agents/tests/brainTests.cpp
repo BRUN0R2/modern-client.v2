@@ -529,14 +529,31 @@ TEST(AgentBrain, ABodyAcrossALinkSearchesNoWayUntilItLands) {
     for (int decision = 0; decision < 1000 && box.isUnder(feet); ++decision) {
         feet = box.stepped(feet, brain.decide(feet, query).intent.direction, false);
     }
-    ASSERT_FALSE(box.isUnder(feet)) << "off the box, short of where its link lands";
+    ASSERT_FALSE(box.isUnder(feet)) << "off the box";
     const nx::Vec3 aside{.x = 700, .y = 480}; // on the floor beside the box
     brain.setGoal(aside);
-    const nx::Vec3 way = brain.decide(feet, query).intent.direction;
+    const nx::Vec3 falling{.x = feet.x, .y = feet.y, .z = box.high.z / 2.0F};
+    const nx::Vec3 way = brain.decide(falling, query, false).intent.direction;
     EXPECT_GT(way.x, std::abs(way.y)) << "on to where the link lands, not aside";
     const Walked walked = walkAbout(box, brain, query, feet, 1000);
     EXPECT_TRUE(walked.isArrived) << "aside once it landed";
     EXPECT_LE(nx::length(walked.feet - aside), rules().arrivalDistance.value() + 3.0F);
+}
+
+TEST(AgentBrain, ABodyFallenOntoAnotherFloorThanItsCorridorsSearchesItsWayAnewFromThere) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 30}};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 600, .y = 256, .z = box.high.z});
+    std::ignore = brain.decide({.x = 420, .y = 256, .z = box.high.z}, query);
+    // Off the box's side, on the floor beside it: no way off where it walked, across.
+    std::ignore = brain.decide({.x = 370, .y = 256}, query);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    ASSERT_FALSE(way.empty());
+    EXPECT_LT(way.front().z, box.high.z / 2.0F) << "from the floor it is on";
+    EXPECT_NEAR(way.back().z, box.high.z, 4.0F);
 }
 
 TEST(AgentBrain, ALinkItFailsTwiceInARowIsOneItsWaysKeepOffWhileTheyHaveAnother) {
@@ -1030,7 +1047,7 @@ TEST(AgentBrain, GivingUpItSearchesAnotherWayAroundWhereItGotStuckThenGivesUpIts
     brain.giveUp(stuckAt(jammed), 1);
     ASSERT_TRUE(brain.goal().has_value());
     const std::vector<nx::Vec3> around = wayFrom(from);
-    EXPECT_TRUE(std::ranges::any_of(around, [](nx::Vec3 point) { return point.y > 512; })) << "the far way";
+    EXPECT_TRUE(std::ranges::any_of(around, [](nx::Vec3 point) { return point.y > 384; })) << "the far way";
     // Stuck again: it gives its goal up, and pursues nothing for its owner to give it another.
     brain.giveUp(stuckAt({.x = 128, .y = 600}), 1);
     EXPECT_FALSE(brain.goal().has_value());
@@ -1272,6 +1289,51 @@ auto brakingRules() -> nx::agents::Rules {
     return braking;
 }
 
+TEST(AgentBrain, ABodyTooSlowForAGapBacksOffForARunAtItAndJumpsItAtSpeed) {
+    // Two floors a gap of 100 apart, nothing under it.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 512, .y = 512}, 0);
+    nx::test::addFloor(geometry, {.x = 612, .y = 0}, {.x = 1124, .y = 512}, 0);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    const nx::Vec3 goal{.x = 900, .y = 256};
+    auto planned = nx::navigation::Corridor::plan(query, {.from = {.x = 400, .y = 256}, .to = goal});
+    ASSERT_TRUE(planned.has_value());
+    const auto link = planned->nextLink(query);
+    ASSERT_TRUE(link.has_value());
+    ASSERT_EQ(link->kind, nx::navigation::AreaKind::Jump);
+
+    // Within arrival of its start: right on it, Detour's way goes on past it with no sign of the link.
+    const nx::Vec3 atTheEdge = link->start - nx::Vec3{.x = 2.0F};
+    nx::agents::Brain slow{brakingRules()};
+    slow.setGoal(goal);
+    const nx::agents::Decision backing = slow.decide(atTheEdge, query);
+    EXPECT_FALSE(backing.intent.jumps);
+    EXPECT_TRUE(slow.isRunningUp());
+    EXPECT_LT(backing.intent.direction.x, 0.0F) << "back from the edge";
+
+    // Stopped on its way back, by what the mesh does not tell of, it goes at the gap with what run it has.
+    constexpr nx::Vec3 kStopped{};
+    const nx::Vec3 pressedBack = atTheEdge - nx::Vec3{.x = 24.0F};
+    bool jumpedAtLast = false;
+    for (int decision = 0; decision < 12 && !jumpedAtLast; ++decision) {
+        nx::Vec3 feet = pressedBack;
+        if (!slow.isRunningUp()) {
+            feet = atTheEdge; // on to the edge again, at last
+        }
+        jumpedAtLast = slow.decide(feet, query, true, kStopped).intent.jumps;
+    }
+    EXPECT_TRUE(jumpedAtLast);
+
+    nx::agents::Brain fast{brakingRules()};
+    fast.setGoal(goal);
+    constexpr nx::Vec3 kAtSpeed{.x = 230.0F};
+    const nx::agents::Decision leaping = fast.decide(atTheEdge, query, true, kAtSpeed);
+    EXPECT_TRUE(leaping.intent.jumps);
+    EXPECT_FALSE(fast.isRunningUp());
+    EXPECT_GT(leaping.intent.direction.x, 0.0F) << "on across";
+}
+
 void expectApproachToLink(const nx::agents::Decision& decision, nx::Vec3 start,
                           const nx::navigation::MeshLink& next) {
     constexpr float kDistanceTolerance = 1.0F;
@@ -1340,10 +1402,13 @@ TEST(AgentBrain, ABrakingBodyAnticipatesAndCrossesADrop) {
 }
 
 /// A floor with a block in its far corner, which the way from the top left to the bottom right turns round.
+/// The corner of cornerMesh's block that a way from the floor's top left to its bottom right turns round.
+constexpr nx::Vec3 kBlockCorner{.x = 300, .y = 300};
+
 auto cornerMesh() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 1024}, 0);
-    nx::test::addBox(geometry, {.x = 300, .y = 300}, {.x = 1024, .y = 1024, .z = 300});
+    nx::test::addBox(geometry, kBlockCorner, {.x = 1024, .y = 1024, .z = 300});
     return nx::test::playerMesh(geometry, 0);
 }
 
@@ -1400,10 +1465,11 @@ TEST(AgentBrain, ItsIntentTellsTheCornerItTurnsAtAndTheStopItsWayEndsAtButNotATa
     const nx::agents::Intent intent = moving.decide({.x = 150, .y = 900}, query).intent;
     const std::span<const nx::agents::Approach> approached = intent.approached();
     ASSERT_GE(approached.size(), 2U) << "the corners it sees ahead";
-    // Its way turns a right angle round the block's corner, which the mesh rounds into short turns: the
-    // turn is measured over the way on past each, so that the corner is slowed for as a whole.
-    const float sharpest =
-        std::ranges::min(approached | std::views::transform(&nx::agents::Approach::passShare));
+    // Its way turns round the block's corner, the turn measured over the way on past each corner of the mesh,
+    // so that it is slowed for as a whole. A share of none is the stop at its end.
+    auto turning = approached | std::views::transform(&nx::agents::Approach::passShare) |
+                   std::views::filter([](float passShare) { return passShare > 0.0F; });
+    const float sharpest = std::ranges::min(turning);
     // Down the strip and out along the other, about three quarters of a right angle: slowed for, not stopped.
     EXPECT_GT(sharpest, 0.5F);
     EXPECT_LT(sharpest, 0.9F);
@@ -1457,21 +1523,21 @@ TEST(AgentBrain, ABodyDrawnBackFromACornerItReachedAsItGotStuckReturnsToIt) {
     auto mesh = cornerMesh();
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{brakingRules()};
-    const nx::Vec3 start{.x = 150, .y = 900};
     brain.setGoal(nx::Vec3{.x = 900, .y = 150});
-    std::ignore = brain.decide(start, query);
+    std::ignore = brain.decide({.x = 150, .y = 900}, query);
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
-    ASSERT_GE(way.size(), 5U) << "down the block's side, round its corner in two short turns, and on";
-    // It reaches the last turn round the block's corner, stopping just short of it as its funnel lists it
-    // only until then.
-    const nx::Vec3 corner = way[3];
-    std::ignore = brain.decide(way[2], query);
+    // Down the block's side, round its corner, and on: the turn round it is the way's corner nearest it.
+    const auto turn =
+        std::ranges::min_element(way, {}, [](nx::Vec3 point) { return nx::length(point - kBlockCorner); });
+    ASSERT_TRUE(turn != way.begin() && std::ranges::next(turn) != way.end());
+    const nx::Vec3 corner = *turn;
+    // It reaches that turn, stopping just short of it as its funnel lists it only until then.
+    std::ignore = brain.decide(*std::ranges::prev(turn), query);
     std::ignore = brain.decide(corner + nx::Vec3{.x = -2, .y = 2}, query);
-    // It gets stuck there, and is drawn back along the block's side.
-    constexpr float kDrawnBack = 60.0F;
-    const nx::Vec3 cameFrom = start - corner;
-    const nx::Vec3 drawnBack = corner + (cameFrom / nx::length(cameFrom) * kDrawnBack);
+    // It gets stuck there, and is drawn back up the block's side.
+    constexpr nx::Vec3 kDrawnBack{.y = 60.0F};
+    const nx::Vec3 drawnBack = corner + kDrawnBack;
     brain.noteStuck();
     const nx::Vec3 direction = brain.decide(drawnBack, query).intent.direction;
     const nx::Vec3 toCorner = corner - drawnBack;
@@ -1552,8 +1618,16 @@ TEST(AgentBrain, SteeringNeverGoesFasterThanItCanStillSlowDownForWhatItApproache
     brain.steer(decision.intent, {}, nx::UnitsPerSecond{160}, {}, query);
     // Twenty units short of its stop, braking four times its speed a second and below 75 as at 75: 75 and
     // four times the 10.6 units farther than it stops from 75 in, 117.5 units a second, 0.73 of its full.
-    EXPECT_NEAR(decision.intent.speedShare, 117.5F / 160.0F, 0.02F);
+    constexpr float kMostSpeed = 117.5F;
+    ASSERT_TRUE(decision.intent.steered.has_value());
+    EXPECT_NEAR(nx::length(*decision.intent.steered), kMostSpeed, 3.0F);
     EXPECT_GT(nx::length(decision.intent.direction), 0.0F) << "it goes on, slower";
+    // What a GoldSrc body gains going by what it asks (PM_Accelerate), it asks all it has short of that
+    // speed, and only that speed once it goes so fast.
+    EXPECT_EQ(decision.intent.speedShare, 1.0F);
+    nx::agents::Decision atThatSpeed = brain.decide({}, query);
+    brain.steer(atThatSpeed.intent, {.x = kMostSpeed + 3.0F}, nx::UnitsPerSecond{160}, {}, query);
+    EXPECT_NEAR(atThatSpeed.intent.speedShare, kMostSpeed / 160.0F, 0.02F);
 }
 
 TEST(AgentBrain, ABodyAtRestShortOfItsStopWalksThereRatherThanCreep) {

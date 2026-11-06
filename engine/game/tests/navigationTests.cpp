@@ -71,8 +71,10 @@ TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     const nx::navigation::AgentProfile& player = read->profiles.front();
     EXPECT_EQ(player.name, "player");
     EXPECT_EQ(player.jumpHeight, nx::HammerUnits{41.8F});
-    EXPECT_EQ(player.crouchedJumpHeight, nx::HammerUnits{58.0F});
+    EXPECT_EQ(player.crouchedJumpHeight, nx::HammerUnits{62.5F});
     EXPECT_EQ(player.dropHeight, nx::HammerUnits{156.25F});
+    EXPECT_EQ(player.leapSpeed, nx::UnitsPerSecond{230.0F});
+    EXPECT_EQ(player.gravity, nx::UnitsPerSecondSquared{800.0F});
     const nx::navigation::AreaCosts costs = nx::navigation::areaCostsOf(player);
     EXPECT_EQ(costs[AreaKind::Floor], 1.0F);
     EXPECT_EQ(costs[AreaKind::Crouch], 3.0F);
@@ -109,6 +111,8 @@ crouchedHeight = 36.0
 stepHeight = 18.0
 jumpHeight = 41.8
 dropHeight = 156.25
+leapSpeed = 230.0
+gravity = 800.0
 minGroundNormalZ = 0.7
 areaCosts = []
 )";
@@ -122,6 +126,8 @@ crouchedHeight = 36.0
 stepHeight = 18.0
 jumpHeight = 41.8
 dropHeight = 156.25
+leapSpeed = 230.0
+gravity = 800.0
 minGroundNormalZ = 0.7
 areaCosts = [{ area = "water", cost = 0.5 }]
 )";
