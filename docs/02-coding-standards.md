@@ -229,7 +229,9 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
   `nx::GameTime` (ticks + fraction) from M3 on. Wall clock only through `nx.platform`; the
   one exception is the time stamped on log records, which `nx.core` takes itself because it
   sits below `nx.platform`.
-- Angles: `nx::Degrees` and `nx::Radians`, with no implicit conversion between them.
+- Angles: `nx::Degrees` and `nx::Radians`, with no implicit conversion between them: `nx::toRadians`
+  converts, `nx::vectorAngles` turns a direction into angles, and a turn is `nx::kQuarterTurnDegrees`,
+  `nx::kHalfTurnDegrees` or `nx::kFullTurnDegrees`, never a 90, 180 or 360 of a module's own.
 - IDs and handles: dedicated types (`Entity`, `AssetHandle<Model>`, `ClientSlot`),
   **never** raw indices.
 

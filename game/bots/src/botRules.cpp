@@ -14,9 +14,9 @@ namespace cs {
 namespace {
 
 /// The widest cone a bot may see in: all around it.
-constexpr float kWholeTurnDegrees = 360.0F;
+constexpr nx::Degrees kWidestFieldOfView = nx::kFullTurnDegrees;
 /// The steepest a view may look up or down: straight up or down.
-constexpr float kQuarterTurnDegrees = 90.0F;
+constexpr nx::Degrees kSteepestPitch = nx::kQuarterTurnDegrees;
 
 [[nodiscard]] auto isPositive(float value) noexcept -> bool {
     return std::isfinite(value) && value > 0.0F;
@@ -69,7 +69,7 @@ constexpr float kQuarterTurnDegrees = 90.0F;
 
 [[nodiscard]] auto isValid(const BotLookRules& look) noexcept -> bool {
     return isValid(look.attacking) && isValid(look.roaming) && isPositive(look.pitchStiffness.value()) &&
-           isPositive(look.pitchLimit.value()) && look.pitchLimit.value() <= kQuarterTurnDegrees;
+           isPositive(look.pitchLimit.value()) && look.pitchLimit <= kSteepestPitch;
 }
 
 [[nodiscard]] auto isValid(const BotAimRules& aim) noexcept -> bool {
@@ -92,7 +92,7 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
         return nx::fail(BotError::InvalidData, std::string{sourceName}, std::move(rules.error()));
     }
     const bool isValidRules =
-        isPositive(rules->fieldOfView.value()) && rules->fieldOfView.value() <= kWholeTurnDegrees &&
+        isPositive(rules->fieldOfView.value()) && rules->fieldOfView <= kWidestFieldOfView &&
         rules->perceptionBudget > 0 && isPositive(rules->sightInterval.count()) &&
         isPositive(rules->memoryLifetime.count()) && rules->memoryLimit > 0 &&
         isPositive(rules->attackDistance.value()) && isPositive(rules->arrivalDistance.value()) &&

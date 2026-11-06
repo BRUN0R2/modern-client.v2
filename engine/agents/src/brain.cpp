@@ -143,12 +143,12 @@ constexpr float kWayConeCosine = std::numbers::sqrt2_v<float> / 2.0F;
 /// How far below level a body looks climbing down a ladder it walks over to from behind, and one it has in
 /// front of it, as far as its view turns: past 45 degrees what looks down outweighs what goes into the
 /// ladder's face, and from behind, what goes into it brings it round to the ladder's front.
-constexpr float kLookDownFromBehindDegrees = 60.0F;
-constexpr float kLookDownInFrontDegrees = 89.0F;
+constexpr Degrees kLookDownFromBehind{60.0F};
+constexpr Degrees kLookDownInFront{89.0F};
 
-/// `way`, a unit direction on the ground plane, looking `degrees` below level.
-[[nodiscard]] auto lookingDown(Vec3 way, float degrees) noexcept -> Vec3 {
-    const float radians = degrees * std::numbers::pi_v<float> / 180.0F;
+/// `way`, a unit direction on the ground plane, looking `below` under level.
+[[nodiscard]] auto lookingDown(Vec3 way, Degrees below) noexcept -> Vec3 {
+    const float radians = toRadians(below).value();
     return (way * std::cos(radians)) - Vec3{.z = std::sin(radians)};
 }
 
@@ -189,7 +189,7 @@ void climbAcross(Intent& intent, Vec3 feet, const navigation::MeshLink& link, fl
     const Vec3 going = isFromBehind ? span / length(span) : way;
     intent.direction = going;
     intent.ahead = going;
-    intent.climb = lookingDown(going, isFromBehind ? kLookDownFromBehindDegrees : kLookDownInFrontDegrees);
+    intent.climb = lookingDown(going, isFromBehind ? kLookDownFromBehind : kLookDownInFront);
 }
 
 /// Whether a body at `feet` crossed `link`: it stands within `stepHeight` of the height of the link's end,

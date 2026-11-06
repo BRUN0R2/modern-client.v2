@@ -31,8 +31,8 @@ constexpr double kMouthFullyOpen = 64.0;
 /// The highest setting of a controller, and the settings of a turn of a cyclic one.
 constexpr double kControllerTop = 255.0;
 constexpr double kControllerTurn = 256.0;
-constexpr double kDegreesPerTurn = 360.0;
-constexpr double kRadiansPerDegree = std::numbers::pi / 180.0;
+constexpr double kDegreesPerTurn = double{nx::kFullTurnDegrees.value()};
+constexpr double kRadiansPerDegree = std::numbers::pi / double{nx::kHalfTurnDegrees.value()};
 /// The highest blending.
 constexpr float kBlendingTop = 255.0F;
 
@@ -43,8 +43,8 @@ constexpr double kNearlyParallel = 0.000001;
 /// SetController: a range this much wider than its start is a whole turn or more, and the turn and
 /// half turn it brings a value within.
 constexpr double kWholeTurnLess = 359.0;
-constexpr float kWholeTurn = 360.0F;
-constexpr float kHalfTurn = 180.0F;
+constexpr float kWholeTurn = nx::kFullTurnDegrees.value();
+constexpr float kHalfTurn = nx::kHalfTurnDegrees.value();
 
 /// How far short of its last frame a sequence that does not loop stops.
 constexpr double kShortOfTheLastFrame = 1.001;

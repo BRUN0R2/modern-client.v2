@@ -26,7 +26,6 @@ constexpr double kBlendingTop = 255.0;
 constexpr std::uint8_t kMiddleBlending = 127;
 constexpr std::uint8_t kLastBlending = 255;
 constexpr double kShortestBlendWay = 0.1;
-constexpr float kDegreesPerTurn = 360.0F;
 
 /// The hitboxes of a player's `model` a line's trace meets: all but the last, a shield's, which a player
 /// without one has none of (pev->gamestate 1).
@@ -138,7 +137,7 @@ auto tracedBonesOf(const PlayerPose& pose, nx::Vec3 origin) -> std::vector<nx::M
     const nx::assets::StudioSequence& sequence =
         sequences[pose.sequence.value < sequences.size() ? pose.sequence.value : 0];
     const PlayerBlend blend = playerBlendOf(sequence, pose.angles.pitch.value());
-    const float yaw = pose.gaitYaw < 0.0F ? pose.gaitYaw + kDegreesPerTurn : pose.gaitYaw;
+    const float yaw = pose.gaitYaw < 0.0F ? pose.gaitYaw + nx::kFullTurnDegrees.value() : pose.gaitYaw;
     const nx::EulerAngles turn{
         .pitch = nx::Degrees{-blend.pitch}, .yaw = nx::Degrees{yaw}, .roll = pose.angles.roll};
     return posePlayerBones(model, pose.model->animations, pose.sequence,

@@ -49,19 +49,17 @@ struct PassUniform {
 } // namespace
 
 auto probeSideAngles(std::uint32_t side) noexcept -> EulerAngles {
-    constexpr float kQuarter = 90.0F;
-    constexpr float kHalf = 180.0F;
     switch (side) {
     case 1:
-        return {.yaw = Degrees{kHalf}};
+        return {.yaw = kHalfTurnDegrees};
     case 2:
-        return {.yaw = Degrees{kQuarter}};
+        return {.yaw = kQuarterTurnDegrees};
     case 3:
-        return {.yaw = Degrees{-kQuarter}};
+        return {.yaw = -kQuarterTurnDegrees};
     case 4:
-        return {.pitch = Degrees{-kQuarter}}; // up: the pitch looks down as it grows
+        return {.pitch = -kQuarterTurnDegrees}; // up: the pitch looks down as it grows
     case rhi::kCubeFaces - 1:
-        return {.pitch = Degrees{kQuarter}};
+        return {.pitch = kQuarterTurnDegrees};
     default:
         return {};
     }
