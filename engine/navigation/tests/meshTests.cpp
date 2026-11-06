@@ -13,6 +13,7 @@ import nx.math;
 import nx.jobs;
 import nx.navigation;
 
+#include "contractRecorder.hpp"
 #include "testGeometry.hpp"
 
 namespace {
@@ -565,6 +566,21 @@ TEST(NavigationMeshTest, ABodyLeavesAGapsStartAsFastAsItsGroundLetsIt) {
     EXPECT_EQ(nx::navigation::leastLeapSpeedOf(floor, profile, {}),
               nx::navigation::leastLeapSpeedOf(open, profile, {}))
         << "as from open ground where nothing stops it rising";
+}
+
+TEST(NavigationMeshTest, TheTakeoffModelRequiresAProfileThatFliesAndAMotionThatMoves) {
+    const nx::navigation::AgentProfile profile = nx::test::playerProfile();
+    const MeshLink gap{.start = {}, .end = {.x = 100.0F}, .kind = AreaKind::Jump};
+    const nx::test::ContractRecorder recorder;
+    nx::navigation::AgentProfile weightless = profile;
+    weightless.gravity = {};
+    EXPECT_EQ(nx::navigation::leastLeapSpeedOf(gap, weightless, {}),
+              nx::UnitsPerSecond{std::numeric_limits<float>::infinity()})
+        << "no body takes it";
+    const nx::navigation::BodyMotion backwards{.runSpeed = nx::UnitsPerSecond{-1.0F}};
+    EXPECT_EQ(nx::navigation::fastestTakeoffOf(gap, profile, backwards), nx::UnitsPerSecond{});
+    EXPECT_FALSE(nx::navigation::runUpOf(gap, profile, backwards, nx::UnitsPerSecond{1.0F}).has_value());
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 3);
 }
 
 TEST(NavigationMeshTest, NoWayGoesOverAGapFromASillItHasNoRoomToRunAtItOn) {

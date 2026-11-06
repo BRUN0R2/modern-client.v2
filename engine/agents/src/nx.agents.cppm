@@ -545,7 +545,8 @@ public:
     /// Of the brains whose way leads to a closed door of `gates` (Decision::closedGate), the one nearest what
     /// opens it, by a way there through no closed door, goes to open it (Brain::openGate), one a door, so
     /// that the rest do not all run off: it holds that door until it no longer goes to open it, or its body
-    /// has not decided for a while.
+    /// has not decided for a while. The requests are of one tick: each `elapsed` as long after its last, by
+    /// which the doors claimed age.
     void decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> requests,
                 std::span<Decision> decisions, std::span<const Body> bodies = {},
                 std::span<const navigation::Gate> gates = {});
@@ -558,9 +559,9 @@ private:
         std::optional<ecs::Entity> body{};
         Seconds left{};
     };
-    /// Picks who goes to open each door of `gates`, one at most.
+    /// Picks who goes to open each door of `gates`, one at most, the claims made before `elapsed` older.
     void assignGates(std::span<const DecisionRequest> requests, std::span<const Decision> decisions,
-                     std::span<const navigation::Gate> gates);
+                     std::span<const navigation::Gate> gates, Seconds elapsed);
 
     std::vector<GateClaim> gateClaims;
     const navigation::NavigationMesh* decidedOn;
