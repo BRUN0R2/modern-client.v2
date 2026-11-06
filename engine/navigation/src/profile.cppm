@@ -68,8 +68,9 @@ struct AgentProfile {
     /// The highest ledge it drops from unhurt: how far below a body off the mesh the floor it drops to is
     /// looked for (NavigationQuery), and what its links of the kind Drop span; at least stepHeight.
     HammerUnits dropHeight{};
-    /// How fast it leaves a ledge to jump across a gap, the slowest of those that walk its mesh: its links
-    /// span no gap such a flight falls short of.
+    /// How fast the fastest of those that walk its mesh leaves a ledge to jump across a gap: its links span
+    /// no gap such a flight falls short of, and a slower body's ways go over none whose gap takes more than
+    /// it leaves a ledge at (leastLeapSpeedOf, PathRequest::leapSpeed).
     UnitsPerSecond leapSpeed{};
     /// What pulls it down in the air.
     UnitsPerSecondSquared gravity{};

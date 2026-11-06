@@ -171,8 +171,8 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
             if (request.isKnockedBack) {
                 request.brain->noteKnockedBack();
             }
-            Decision decision =
-                request.brain->decide(request.feet, query, request.isOnGround, request.velocity, gates);
+            Decision decision = request.brain->decide(request.feet, query, request.maxSpeed,
+                                                      request.isOnGround, request.velocity, gates);
             if (length(decision.intent.direction) > 0.0F && request.maxSpeed > UnitsPerSecond{}) {
                 bodiesNear(request, grid, range, height, sorted, nearby);
                 request.brain->steer(decision.intent, request.velocity, request.maxSpeed, nearby, query);
@@ -272,7 +272,11 @@ void Deciders::assignGates(std::span<const DecisionRequest> requests, std::span<
         std::ranges::sort(candidates, {}, &Candidate::distance);
         // By a way through no closed door: by this one, it would wait at it for itself.
         const auto chosen = std::ranges::find_if(candidates, [&](const Candidate& candidate) {
-            return query.findPath({.from = candidate.request->feet, .to = candidate.opener, .gates = gates})
+            return query
+                .findPath({.from = candidate.request->feet,
+                           .to = candidate.opener,
+                           .gates = gates,
+                           .leapSpeed = leapSpeedOf(candidate.request->maxSpeed)})
                 .has_value();
         });
         if (chosen != candidates.end()) {

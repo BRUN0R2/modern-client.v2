@@ -44,27 +44,32 @@ convex polygons, through Recast and Detour.
   left out.
 - **Links.** Ladders, doors, jumps, drops and teleporters are links between polygons, found in the map
   (`func_ladder`, `func_door`, ledges, `trigger_teleport`) and added by plugins. Jumps and drops are found at the
-  ledges as each tile is built: along each edge of a polygon that no other shares, one every two
-  widths of the profile, and along the side of a tile, where no floor goes on past it. From each it looks
-  outward as far as a leap flies, for the nearest floor of each height a body comes down on: one lower once
-  its box is past the edge, one level past a gap. Whether it does is flown as the game moves a body, under the
-  profile's `gravity` at its `leapSpeed`: stopped by what stops a body, which its hulls and the surfaces at its
-  knees and head tell, rising along a wall and falling from a ceiling, the kinds tried in turn: `jump` both ways
-  within its jump height, `crouchedJump` both ways within its crouched one, or where only a ducked body fits,
-  and else `drop`, down only. A brain crosses one from its start, jumping once for a link up or across a gap,
-  having slowed down for what the link's way turns across its own, since in the air a body flies on, and heads
-  for its end without steering, as DetourCrowd moves an agent over a link. It has crossed only on the ground, at
-  the height of the end and as far from the start; back on the ground below that height it fell short, and
-  searches its way anew from where it stands. Back short of one link twice in a row, its ways keep off that link
-  (`PathRequest::shunned`) for as long as they have another: a link is flown at a leap's speed, and nothing else
-  tells it that a floor has no room for that. The ledge its next link leaves from is no wall to its steering, and
-  within four radii of it, it heads straight for it, the walls of a floor no bigger than a block being all round
-  it. Over a gap it needs the speed the flight takes: too slow, it backs off along the way across it for a run at
-  it (`Brain::isRunningUp`), as far as anything lets it, and it comes no faster than a small floor lets it land
-  on. On the ground on another floor than its corridor, as a body that fell, it searches its way anew. While its
-  way goes on it never stands with nothing to head for: the corners of small polygons may all lie within its
-  arrival of it just short of a link. A decision reuses its next-link lookup to anticipate the way over it when
-  braking; after an attempted crossing fails and may have changed the corridor, it looks again.
+  ledges as each tile is built: along each edge of a polygon that no other shares, one every two widths of the
+  profile, and along the side of a tile, where no floor goes on past it. From each it looks outward as far as a
+  leap flies, for the nearest floor of each height a body comes down on: one lower once its box is past the edge,
+  one level past a gap. Whether it does is flown as the game moves a body, under the profile's `gravity` at its
+  `leapSpeed`, the fastest of those that walk the mesh: stopped by what stops a body, which its hulls and the
+  surfaces at its knees and head tell, rising along a wall and falling from a ceiling, the kinds tried in turn:
+  `jump` both ways within its jump height, `crouchedJump` both ways within its crouched one, or where only a
+  ducked body fits, and else `drop`, down only. A brain crosses one from its start, jumping once for a link up or
+  across a gap, having slowed down for what the link's way turns across its own, since in the air a body flies on,
+  and heads for its end without steering, as DetourCrowd moves an agent over a link. It has crossed only on the
+  ground, at the height of the end and as far from the start; back on the ground below that height it fell short,
+  and searches its way anew from where it stands. Back short of one link twice in a row, its ways keep off that
+  link (`PathRequest::shunned`) for as long as they have another: a link is flown at a leap's speed, and nothing
+  else tells it that a floor has no room for that. The ledge its next link leaves from is no wall to its steering,
+  and within four radii of it, it heads straight for it, the walls of a floor no bigger than a block being all
+  round it. What a gap takes is how fast across a body covers what its box does not span in the time it is in the
+  air (`leastLeapSpeedOf`; of a link both ways, the way up): a body's way goes over no link that takes more than
+  it leaves a ledge at, its run or what the air gives it (`PathRequest::leapSpeed`, `nx::agents::leapSpeedOf`),
+  and is searched anew as that changes, so that a zombie slower than a gap takes goes round it, and a bot frozen
+  at a round's start searches again once it may run. Over a gap it needs the speed the flight takes, and a margin:
+  too slow, it backs off along the way across it for a run at it (`Brain::isRunningUp`), as far as anything lets
+  it, and it comes no faster than a small floor lets it land on. On the ground on another floor than its corridor,
+  as a body that fell, it searches its way anew. While its way goes on it never stands with nothing to head for:
+  the corners of small polygons may all lie within its arrival of it just short of a link. A decision reuses its
+  next-link lookup to anticipate the way over it when braking; after an attempted crossing fails and may have
+  changed the corridor, it looks again.
 - **Doors.** The box of a door, solid like any other as it stands closed, has its two sides joined by a link of the
   kind `Door`, both ways, which names it. How it stands is not in the mesh: the game reports it each turn
   (`nx::navigation::Gate`, `nx::game::gatesOf`), open, or opened by walking into it, or closed with what opens it,

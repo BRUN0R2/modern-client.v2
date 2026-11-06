@@ -20,6 +20,8 @@ auto rules() -> nx::agents::Rules {
             .replanDistance = nx::HammerUnits{16.0F},
             .memoryLimit = 2};
 }
+/// How fast the body a brain decides for runs: a player's with a knife or a pistol.
+constexpr nx::UnitsPerSecond kRunSpeed{250.0F};
 auto floorMesh() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = -512, .y = -512}, {.x = 512, .y = 512}, 0);
@@ -54,7 +56,7 @@ TEST(AgentBrain, ForgetsATargetThatIsNoLongerThereAndPlansNoWayToIt) {
         {}, nx::kDefaultTickRate);
     brain.perceive({}, {}, nx::kDefaultTickRate);
     ASSERT_EQ(brain.memories().size(), 2U);
-    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Investigate);
+    ASSERT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Investigate);
 
     std::array present{living};
     std::ranges::sort(present);
@@ -64,7 +66,8 @@ TEST(AgentBrain, ForgetsATargetThatIsNoLongerThereAndPlansNoWayToIt) {
 
     brain.forgetAbsent({});
     EXPECT_TRUE(brain.memories().empty());
-    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle) << "nothing left to go to";
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Idle)
+        << "nothing left to go to";
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
     EXPECT_TRUE(way.empty()) << "its corridor forgotten with it";
@@ -83,7 +86,7 @@ TEST(AgentBrain, ATargetHeardIsInvestigatedWhereItWasHeardLookingThere) {
                 {}, nx::kDefaultTickRate);
     ASSERT_EQ(brain.memories().size(), 1U);
     EXPECT_FALSE(brain.memories().front().isVisible) << "heard, not seen";
-    const nx::agents::Decision decision = brain.decide({}, query);
+    const nx::agents::Decision decision = brain.decide({}, query, kRunSpeed);
     EXPECT_EQ(decision.behavior, nx::agents::Behavior::Investigate);
     EXPECT_EQ(decision.target, heard);
     EXPECT_EQ(decision.intent.lookAt, eye) << "it turns to look where it heard it";
@@ -223,7 +226,7 @@ TEST(AgentBrain, AFarGoalThatMovesLessThanItsShareKeepsItsWayAndOneThatMovesMore
     const nx::Vec3 feet{.x = 128, .y = 128};
     const auto wayEnd = [&](nx::Vec3 goal) {
         brain.setGoal(goal);
-        std::ignore = brain.decide(feet, query);
+        std::ignore = brain.decide(feet, query, kRunSpeed);
         std::vector<nx::Vec3> way;
         brain.appendWay(query, way);
         return way.empty() ? nx::Vec3{} : way.back();
@@ -286,17 +289,17 @@ TEST(AgentBrain, LosingSightOfWhatItFoughtItKeepsAfterItUnlessAThreatIsMuchNeare
         return nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate);
     };
     brain.perceive(std::array{nx::agents::Observation{fought, {.x = 400}}}, at(0.0F), nx::kDefaultTickRate);
-    ASSERT_EQ(brain.decide({}, query).target, fought);
+    ASSERT_EQ(brain.decide({}, query, kRunSpeed).target, fought);
     // Lost from sight; a step heard since, nearer and fresher, does not draw it off.
     brain.perceive({}, at(0.1F), nx::kDefaultTickRate);
     brain.sense(std::array{estimateOf(stepping, {.y = 200}, Salience::Low, 200)}, at(0.1F),
                 nx::kDefaultTickRate);
-    EXPECT_EQ(brain.decide({}, query).target, fought) << "it keeps after what it fought";
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).target, fought) << "it keeps after what it fought";
     // A shot fired 250 nearer does.
     brain.perceive({}, at(0.2F), nx::kDefaultTickRate);
     brain.sense(std::array{estimateOf(shooting, {.y = -150}, Salience::High, 150)}, at(0.2F),
                 nx::kDefaultTickRate);
-    EXPECT_EQ(brain.decide({}, query).target, shooting) << "a threat much nearer";
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).target, shooting) << "a threat much nearer";
 }
 
 TEST(AgentBrain, AShotHeardLessThanTheThreatsMarginNearerOrLongAgoDrawsItNotOff) {
@@ -315,15 +318,15 @@ TEST(AgentBrain, AShotHeardLessThanTheThreatsMarginNearerOrLongAgoDrawsItNotOff)
         return nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate);
     };
     brain.perceive(std::array{nx::agents::Observation{fought, {.x = 300}}}, at(0.0F), nx::kDefaultTickRate);
-    ASSERT_EQ(brain.decide({}, query).target, fought);
+    ASSERT_EQ(brain.decide({}, query, kRunSpeed).target, fought);
     brain.perceive({}, at(0.1F), nx::kDefaultTickRate);
     brain.sense(std::array{estimateOf(shooting, {.y = -250}, Salience::High, 250)}, at(0.1F),
                 nx::kDefaultTickRate);
-    EXPECT_EQ(brain.decide({}, query).target, fought) << "50 nearer, not 100";
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).target, fought) << "50 nearer, not 100";
     brain.sense(std::array{estimateOf(shooting, {.y = -150}, Salience::High, 150)}, at(0.1F),
                 nx::kDefaultTickRate);
     brain.perceive({}, at(1.0F), nx::kDefaultTickRate);
-    EXPECT_EQ(brain.decide({}, query).target, fought) << "a shot heard long ago is no threat";
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).target, fought) << "a shot heard long ago is no threat";
 }
 
 TEST(AgentBrain, CapsMemoryAndEvictsTheOldestFact) {
@@ -348,13 +351,13 @@ TEST(AgentBrain, ChasesOnTheMeshAndAttacksOnlyWhileItSeesTheTarget) {
     const auto target = world.spawn();
     nx::agents::Brain brain{rules()};
     brain.perceive(std::array{nx::agents::Observation{target, {.x = 200}}}, {}, nx::kDefaultTickRate);
-    const auto chase = brain.decide({}, query);
+    const auto chase = brain.decide({}, query, kRunSpeed);
     EXPECT_EQ(chase.behavior, nx::agents::Behavior::Chase);
     EXPECT_GT(chase.intent.direction.x, 0);
-    const auto attack = brain.decide({.x = 180}, query);
+    const auto attack = brain.decide({.x = 180}, query, kRunSpeed);
     EXPECT_TRUE(attack.intent.attacks);
     brain.perceive({}, {}, nx::kDefaultTickRate);
-    EXPECT_FALSE(brain.decide({.x = 180}, query).intent.attacks);
+    EXPECT_FALSE(brain.decide({.x = 180}, query, kRunSpeed).intent.attacks);
 }
 
 TEST(AgentBrain, PursuesATargetOnlyItsReactionTimeAfterItFirstSawIt) {
@@ -371,15 +374,16 @@ TEST(AgentBrain, PursuesATargetOnlyItsReactionTimeAfterItFirstSawIt) {
     };
     brain.perceive(seen, at(0.0F), nx::kDefaultTickRate);
     EXPECT_FALSE(brain.memories().front().isRecognized);
-    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle) << "seen, not reacted to";
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Idle)
+        << "seen, not reacted to";
     brain.perceive(seen, at(0.49F), nx::kDefaultTickRate);
-    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Idle);
     brain.perceive({}, at(0.5F), nx::kDefaultTickRate);
-    const auto investigated = brain.decide({}, query);
+    const auto investigated = brain.decide({}, query, kRunSpeed);
     EXPECT_EQ(investigated.behavior, nx::agents::Behavior::Investigate) << "recognized out of sight too";
     EXPECT_EQ(investigated.target, target);
     brain.perceive(seen, at(0.6F), nx::kDefaultTickRate);
-    const auto attack = brain.decide({}, query);
+    const auto attack = brain.decide({}, query, kRunSpeed);
     EXPECT_EQ(attack.behavior, nx::agents::Behavior::Attack);
     EXPECT_EQ(attack.target, target);
     // Forgotten, it is noticed anew when it is seen again.
@@ -396,7 +400,7 @@ TEST(AgentBrain, ReportsAnUnreachableGoalWithoutDirectMovement) {
     const auto target = world.spawn();
     nx::agents::Brain brain{rules()};
     brain.perceive(std::array{nx::agents::Observation{target, {.x = 5000}}}, {}, nx::kDefaultTickRate);
-    const auto decision = brain.decide({}, query);
+    const auto decision = brain.decide({}, query, kRunSpeed);
     EXPECT_EQ(decision.behavior, nx::agents::Behavior::Blocked);
     EXPECT_TRUE(decision.navigationError.has_value());
     EXPECT_EQ(decision.intent.direction, nx::Vec3{});
@@ -414,7 +418,7 @@ TEST(AgentBrain, ABodyOnAWallOffTheMeshWalksBackToTheFloorAlongItsWay) {
     const nx::Vec3 onTop{.x = 6, .y = -256, .z = 150}; // nearer the side of its goal
     brain.setGoal(nx::Vec3{.x = 400, .y = -256});
     for (int decision = 0; decision < 3; ++decision) {
-        const auto moving = brain.decide(onTop, query);
+        const auto moving = brain.decide(onTop, query, kRunSpeed);
         ASSERT_EQ(moving.behavior, nx::agents::Behavior::MoveTo) << "not blocked off the mesh";
         EXPECT_GT(moving.intent.direction.x, 0.0F) << "off the wall, toward its goal";
     }
@@ -424,15 +428,15 @@ TEST(AgentBrain, MovesToItsGoalWithNoTargetAndForgetsItAsItArrives) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{rules()};
-    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Idle);
     const nx::Vec3 goal{.y = 200};
     brain.setGoal(goal);
-    const auto moving = brain.decide({}, query);
+    const auto moving = brain.decide({}, query, kRunSpeed);
     EXPECT_EQ(moving.behavior, nx::agents::Behavior::MoveTo);
     EXPECT_GT(moving.intent.direction.y, 0.0F);
     EXPECT_FALSE(moving.intent.lookAt.has_value());
     EXPECT_FALSE(moving.intent.attacks);
-    EXPECT_EQ(brain.decide(goal, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_EQ(brain.decide(goal, query, kRunSpeed).behavior, nx::agents::Behavior::Idle);
     EXPECT_FALSE(brain.goal().has_value());
 }
 
@@ -441,7 +445,7 @@ TEST(AgentBrain, FacesAheadAlongItsWayAsItMoves) {
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.y = 200});
-    const nx::agents::Intent intent = brain.decide({}, query).intent;
+    const nx::agents::Intent intent = brain.decide({}, query, kRunSpeed).intent;
     EXPECT_EQ(intent.ahead, intent.direction) << "until it steers or wiggles";
     EXPECT_FALSE(intent.jumps);
 }
@@ -493,7 +497,7 @@ auto walkAbout(const Platform& platform, nx::agents::Brain& brain, nx::navigatio
                nx::Vec3 feet, int most) -> Walked {
     Walked walked{.feet = feet};
     for (int decision = 0; decision < most; ++decision) {
-        const nx::agents::Decision decided = brain.decide(walked.feet, query);
+        const nx::agents::Decision decided = brain.decide(walked.feet, query, kRunSpeed);
         EXPECT_NE(decided.behavior, nx::agents::Behavior::Blocked) << std::format("{}", walked.feet);
         if (decided.behavior == nx::agents::Behavior::Idle) {
             walked.isArrived = true;
@@ -527,13 +531,13 @@ TEST(AgentBrain, ABodyAcrossALinkSearchesNoWayUntilItLands) {
     brain.setGoal(nx::Vec3{.x = 900, .y = 256});
     nx::Vec3 feet{.x = 512, .y = 256, .z = 120};
     for (int decision = 0; decision < 1000 && box.isUnder(feet); ++decision) {
-        feet = box.stepped(feet, brain.decide(feet, query).intent.direction, false);
+        feet = box.stepped(feet, brain.decide(feet, query, kRunSpeed).intent.direction, false);
     }
     ASSERT_FALSE(box.isUnder(feet)) << "off the box";
     const nx::Vec3 aside{.x = 700, .y = 480}; // on the floor beside the box
     brain.setGoal(aside);
     const nx::Vec3 falling{.x = feet.x, .y = feet.y, .z = box.high.z / 2.0F};
-    const nx::Vec3 way = brain.decide(falling, query, false).intent.direction;
+    const nx::Vec3 way = brain.decide(falling, query, kRunSpeed, false).intent.direction;
     EXPECT_GT(way.x, std::abs(way.y)) << "on to where the link lands, not aside";
     const Walked walked = walkAbout(box, brain, query, feet, 1000);
     EXPECT_TRUE(walked.isArrived) << "aside once it landed";
@@ -546,9 +550,9 @@ TEST(AgentBrain, ABodyFallenOntoAnotherFloorThanItsCorridorsSearchesItsWayAnewFr
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 600, .y = 256, .z = box.high.z});
-    std::ignore = brain.decide({.x = 420, .y = 256, .z = box.high.z}, query);
+    std::ignore = brain.decide({.x = 420, .y = 256, .z = box.high.z}, query, kRunSpeed);
     // Off the box's side, on the floor beside it: no way off where it walked, across.
-    std::ignore = brain.decide({.x = 370, .y = 256}, query);
+    std::ignore = brain.decide({.x = 370, .y = 256}, query, kRunSpeed);
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
     ASSERT_FALSE(way.empty());
@@ -564,20 +568,21 @@ TEST(AgentBrain, ALinkItFailsTwiceInARowIsOneItsWaysKeepOffWhileTheyHaveAnother)
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 512, .y = 256, .z = box.high.z});
-    std::ignore = brain.decide({.x = 300, .y = 256}, query);
+    std::ignore = brain.decide({.x = 300, .y = 256}, query, kRunSpeed);
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
     ASSERT_GE(way.size(), 3U);
     const nx::Vec3 linkStart = way[1];
     const nx::Vec3 atIt = linkStart - nx::Vec3{.x = 2.0F};
     const auto jumpsAndFallsBack = [&] {
-        const nx::agents::Decision atTheLink = brain.decide(atIt, query);
+        const nx::agents::Decision atTheLink = brain.decide(atIt, query, kRunSpeed);
         EXPECT_TRUE(atTheLink.intent.jumps);
-        std::ignore = brain.decide({.x = atIt.x, .y = atIt.y, .z = box.high.z / 2.0F}, query, false);
+        std::ignore =
+            brain.decide({.x = atIt.x, .y = atIt.y, .z = box.high.z / 2.0F}, query, kRunSpeed, false);
     };
     jumpsAndFallsBack();
     jumpsAndFallsBack(); // once more: once may be another body in the way
-    const nx::agents::Decision third = brain.decide(atIt, query);
+    const nx::agents::Decision third = brain.decide(atIt, query, kRunSpeed);
     EXPECT_FALSE(third.intent.jumps) << "not again";
     way.clear();
     brain.appendWay(query, way);
@@ -592,18 +597,19 @@ TEST(AgentBrain, ALinkItIsKnockedOffIsNoneItFailedHoweverOftenItIs) {
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 512, .y = 256, .z = box.high.z});
-    std::ignore = brain.decide({.x = 300, .y = 256}, query);
+    std::ignore = brain.decide({.x = 300, .y = 256}, query, kRunSpeed);
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
     ASSERT_GE(way.size(), 3U);
     const nx::Vec3 atIt = way[1] - nx::Vec3{.x = 2.0F};
     const auto jumpsAndFallsBack = [&](bool isKnockedOff) {
-        const nx::agents::Decision atTheLink = brain.decide(atIt, query);
+        const nx::agents::Decision atTheLink = brain.decide(atIt, query, kRunSpeed);
         EXPECT_TRUE(atTheLink.intent.jumps) << "at it again";
         if (isKnockedOff) {
             brain.noteKnockedBack();
         }
-        std::ignore = brain.decide({.x = atIt.x, .y = atIt.y, .z = box.high.z / 2.0F}, query, false);
+        std::ignore =
+            brain.decide({.x = atIt.x, .y = atIt.y, .z = box.high.z / 2.0F}, query, kRunSpeed, false);
     };
     for (int time = 0; time < kKnockedOff; ++time) {
         jumpsAndFallsBack(true);
@@ -611,7 +617,7 @@ TEST(AgentBrain, ALinkItIsKnockedOffIsNoneItFailedHoweverOftenItIs) {
     // Falling of itself, twice in a row, it failed it as ever.
     jumpsAndFallsBack(false);
     jumpsAndFallsBack(false);
-    EXPECT_FALSE(brain.decide(atIt, query).intent.jumps) << "not again";
+    EXPECT_FALSE(brain.decide(atIt, query, kRunSpeed).intent.jumps) << "not again";
 }
 
 TEST(AgentBrain, ABodyOnATargetsHeadStrikesItsEyesThoughItsFeetAreOutOfReach) {
@@ -625,7 +631,7 @@ TEST(AgentBrain, ABodyOnATargetsHeadStrikesItsEyesThoughItsFeetAreOutOfReach) {
                                                       .position = {.z = -2.0F * reach},
                                                       .aimAt = nx::Vec3{.z = -reach / 2.0F}}},
                    {}, nx::kDefaultTickRate);
-    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Attack);
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Attack);
 }
 
 TEST(AgentBrain, ABodyJumpsUpALedgeOfItsCrouchedJumpDuckingUntilItLandsAndWalksOffItUpright) {
@@ -639,7 +645,7 @@ TEST(AgentBrain, ABodyJumpsUpALedgeOfItsCrouchedJumpDuckingUntilItLandsAndWalksO
     nx::Vec3 feet{.x = 100, .y = 256};
     int jumps = 0;
     bool wasCrouchedAtTheJump = false;
-    nx::agents::Decision decision = brain.decide(feet, query);
+    nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
     for (int step = 0; step < 1000 && feet.z < box.high.z; ++step) {
         if (decision.intent.jumps) {
             ++jumps;
@@ -650,7 +656,7 @@ TEST(AgentBrain, ABodyJumpsUpALedgeOfItsCrouchedJumpDuckingUntilItLandsAndWalksO
             EXPECT_TRUE(decision.intent.crouches) << "in the air";
         }
         feet = box.stepped(feet, decision.intent.direction, jumps > 0);
-        decision = brain.decide(feet, query);
+        decision = brain.decide(feet, query, kRunSpeed);
     }
     EXPECT_EQ(jumps, 1);
     EXPECT_TRUE(wasCrouchedAtTheJump);
@@ -661,7 +667,7 @@ TEST(AgentBrain, ABodyJumpsUpALedgeOfItsCrouchedJumpDuckingUntilItLandsAndWalksO
     // Back down off it, none of that.
     brain.setGoal(nx::Vec3{.x = 100, .y = 256});
     for (int step = 0; step < 1000 && feet.z > 0.0F; ++step) {
-        decision = brain.decide(feet, query);
+        decision = brain.decide(feet, query, kRunSpeed);
         EXPECT_FALSE(decision.intent.jumps);
         EXPECT_FALSE(decision.intent.crouches);
         feet = box.stepped(feet, decision.intent.direction, false);
@@ -681,16 +687,17 @@ TEST(AgentBrain, ABodyComesUpToACrouchedJumpStandingThoughLowRoomLiesBeforeIt) {
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 512, .y = 256, .z = box.high.z});
     nx::Vec3 feet{.x = 100, .y = 256};
-    nx::agents::Decision decision = brain.decide(feet, query);
+    nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
     EXPECT_TRUE(decision.intent.crouches) << "under the ceiling, far from the jump";
-    while (feet.x < 300.0F) {
+    for (int step = 0; step < 1000 && feet.x < 300.0F; ++step) {
         feet = feet + (decision.intent.direction * 2.0F);
-        decision = brain.decide(feet, query);
+        decision = brain.decide(feet, query, kRunSpeed);
     }
+    ASSERT_GE(feet.x, 300.0F) << "on its way to the jump";
     EXPECT_FALSE(decision.intent.crouches) << "still under it, near the jump";
     for (int step = 0; step < 100 && !decision.intent.jumps; ++step) {
         feet = feet + (decision.intent.direction * 2.0F);
-        decision = brain.decide(feet, query);
+        decision = brain.decide(feet, query, kRunSpeed);
     }
     ASSERT_TRUE(decision.intent.jumps);
     EXPECT_TRUE(decision.intent.crouches) << "from the jump on";
@@ -714,7 +721,7 @@ TEST(AgentBrain, ABodyHoldsItsDuckKeyFromAheadOfLowRoomUntilItIsPastIt) {
     std::optional<float> lastDucked;
     nx::Vec3 feet{.x = 100, .y = 128};
     for (int step = 0; step < 1000 && feet.x < 1190.0F; ++step) {
-        const nx::agents::Decision decision = brain.decide(feet, query);
+        const nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
         if (decision.intent.crouches) {
             firstDucked = firstDucked.value_or(feet.x);
             lastDucked = feet.x;
@@ -742,7 +749,7 @@ TEST(AgentBrain, ACrouchingBodyAsksAllItsSpeedHoweverItSlowsForWhatItApproaches)
     // Its way ends 16 units on: standing, it would ask a crawl of that.
     brain.setGoal(nx::Vec3{.x = 316, .y = 128});
     const nx::Vec3 feet{.x = 300, .y = 128};
-    nx::agents::Decision decision = brain.decide(feet, query);
+    nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
     ASSERT_TRUE(decision.intent.crouches);
     brain.steer(decision.intent, {}, nx::UnitsPerSecond{kFullSpeed}, {}, query);
     EXPECT_FLOAT_EQ(decision.intent.speedShare, 1.0F);
@@ -760,15 +767,17 @@ TEST(AgentBrain, ABodyHoldsItsDuckKeyNearALinksEndOnLowRoom) {
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 800, .y = 256, .z = 256});
     nx::Vec3 feet{.x = 300, .y = 256};
-    nx::agents::Decision decision = brain.decide(feet, query);
+    nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
     for (int step = 0; step < 1000 && !decision.intent.climb; ++step) {
         EXPECT_FALSE(decision.intent.crouches) << "on the floor at its foot";
         feet = feet + (decision.intent.direction * 2.0F);
-        decision = brain.decide(feet, query);
+        decision = brain.decide(feet, query, kRunSpeed);
     }
     ASSERT_TRUE(decision.intent.climb.has_value());
-    EXPECT_FALSE(brain.decide({.x = 490, .y = 256, .z = 100}, query).intent.crouches) << "far below its end";
-    EXPECT_TRUE(brain.decide({.x = 490, .y = 256, .z = 220}, query).intent.crouches) << "near its end";
+    EXPECT_FALSE(brain.decide({.x = 490, .y = 256, .z = 100}, query, kRunSpeed).intent.crouches)
+        << "far below its end";
+    EXPECT_TRUE(brain.decide({.x = 490, .y = 256, .z = 220}, query, kRunSpeed).intent.crouches)
+        << "near its end";
 }
 
 TEST(AgentBrain, ABodyHoldsItsDuckKeyAtTheFootOfALadderIntoLowRoomNotAtItsTop) {
@@ -783,16 +792,18 @@ TEST(AgentBrain, ABodyHoldsItsDuckKeyAtTheFootOfALadderIntoLowRoomNotAtItsTop) {
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 200, .y = 256});
     nx::Vec3 feet{.x = 800, .y = 256, .z = 256};
-    nx::agents::Decision decision = brain.decide(feet, query);
+    nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
     for (int step = 0; step < 1000 && !decision.intent.climb; ++step) {
         EXPECT_FALSE(decision.intent.crouches) << "on the roof";
         feet = feet + (decision.intent.direction * 2.0F);
-        decision = brain.decide(feet, query);
+        decision = brain.decide(feet, query, kRunSpeed);
     }
     ASSERT_TRUE(decision.intent.climb.has_value());
     EXPECT_FALSE(decision.intent.crouches) << "at its top";
-    EXPECT_FALSE(brain.decide({.x = 490, .y = 256, .z = 100}, query).intent.crouches) << "on its way down";
-    EXPECT_TRUE(brain.decide({.x = 490, .y = 256, .z = 10}, query).intent.crouches) << "at its foot";
+    EXPECT_FALSE(brain.decide({.x = 490, .y = 256, .z = 100}, query, kRunSpeed).intent.crouches)
+        << "on its way down";
+    EXPECT_TRUE(brain.decide({.x = 490, .y = 256, .z = 10}, query, kRunSpeed).intent.crouches)
+        << "at its foot";
 }
 
 /// A floor and a building on it, 256 tall, with a ladder up its wall at y = 256.
@@ -811,11 +822,11 @@ TEST(AgentBrain, ABodyClimbsALadderFacingItLevelAndStepsOffAtTheTop) {
     brain.setGoal(nx::Vec3{.x = 800, .y = 256, .z = 256});
     // To the ladder's foot along its way.
     nx::Vec3 feet{.x = 300, .y = 256};
-    nx::agents::Decision decision = brain.decide(feet, query);
+    nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
     EXPECT_FALSE(decision.intent.climb.has_value()) << "far from it";
     for (int step = 0; step < 1000 && !decision.intent.climb; ++step) {
         feet = feet + (decision.intent.direction * 2.0F);
-        decision = brain.decide(feet, query);
+        decision = brain.decide(feet, query, kRunSpeed);
     }
     ASSERT_TRUE(decision.intent.climb.has_value()) << "at its foot";
     EXPECT_LT(feet.x, 500.0F);
@@ -824,17 +835,17 @@ TEST(AgentBrain, ABodyClimbsALadderFacingItLevelAndStepsOffAtTheTop) {
     EXPECT_FALSE(decision.intent.jumps) << "a jump would push it off";
     // Up it, facing it.
     feet = {.x = 490, .y = 256, .z = 150};
-    decision = brain.decide(feet, query);
+    decision = brain.decide(feet, query, kRunSpeed);
     ASSERT_TRUE(decision.intent.climb.has_value());
     EXPECT_GT(decision.intent.direction.x, 0.9F);
     // At the top, on to where its way goes on, its key still held for as long as the ladder holds it.
     feet = {.x = 490, .y = 256, .z = 250};
-    decision = brain.decide(feet, query);
+    decision = brain.decide(feet, query, kRunSpeed);
     ASSERT_TRUE(decision.intent.climb.has_value());
     EXPECT_GT(decision.intent.direction.x, 0.9F);
     // Off it, on the roof, it walks on.
     feet = {.x = 560, .y = 256, .z = 256};
-    decision = brain.decide(feet, query);
+    decision = brain.decide(feet, query, kRunSpeed);
     EXPECT_FALSE(decision.intent.climb.has_value());
     EXPECT_GT(nx::length(decision.intent.direction), 0.0F);
 }
@@ -845,10 +856,10 @@ TEST(AgentBrain, ABodyComesDownALadderWalkingOverToItLookingBelowLevel) {
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 200, .y = 256});
     nx::Vec3 feet{.x = 800, .y = 256, .z = 256};
-    nx::agents::Decision decision = brain.decide(feet, query);
+    nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
     for (int step = 0; step < 1000 && !decision.intent.climb; ++step) {
         feet = feet + (decision.intent.direction * 2.0F);
-        decision = brain.decide(feet, query);
+        decision = brain.decide(feet, query, kRunSpeed);
     }
     ASSERT_TRUE(decision.intent.climb.has_value()) << "at the roof's edge";
     EXPECT_GT(feet.x, 512.0F);
@@ -857,12 +868,12 @@ TEST(AgentBrain, ABodyComesDownALadderWalkingOverToItLookingBelowLevel) {
     EXPECT_LT(decision.intent.climb->x, 0.0F);
     // Past its face, still coming down the same way.
     feet = {.x = 490, .y = 256, .z = 120};
-    decision = brain.decide(feet, query);
+    decision = brain.decide(feet, query, kRunSpeed);
     ASSERT_TRUE(decision.intent.climb.has_value());
     EXPECT_LT(decision.intent.direction.x, -0.9F);
     // On the floor, past where the link lands, it walks on.
     feet = {.x = 450, .y = 256};
-    decision = brain.decide(feet, query);
+    decision = brain.decide(feet, query, kRunSpeed);
     EXPECT_FALSE(decision.intent.climb.has_value());
 }
 
@@ -873,12 +884,12 @@ TEST(AgentBrain, ABodyOffTheMeshJumpsAndSearchesAnewAsSoonAsItIsBackOnIt) {
     const nx::Vec3 goal{.x = 200, .y = 0};
     brain.setGoal(goal);
     const nx::Vec3 inTheAir{.x = 0, .y = 0, .z = 400};
-    const nx::agents::Decision off = brain.decide(inTheAir, query);
+    const nx::agents::Decision off = brain.decide(inTheAir, query, kRunSpeed);
     EXPECT_EQ(off.behavior, nx::agents::Behavior::Blocked);
     EXPECT_EQ(off.navigationError, nx::navigation::NavigationError::OutsideMesh);
     EXPECT_TRUE(off.intent.jumps) << "a jump lets go of a ladder";
     // Within the replan distance across of where it failed: nothing but its being there changed.
-    const nx::agents::Decision back = brain.decide({.x = 0, .y = 0, .z = 0}, query);
+    const nx::agents::Decision back = brain.decide({.x = 0, .y = 0, .z = 0}, query, kRunSpeed);
     EXPECT_EQ(back.behavior, nx::agents::Behavior::MoveTo);
     EXPECT_GT(nx::length(back.intent.direction), 0.0F);
     EXPECT_FALSE(back.intent.jumps);
@@ -927,24 +938,26 @@ private:
 
 TEST(AgentBrain, ABodyHasCrossedALinkOnlyOnTheGround) {
     JumpUp up;
-    ASSERT_TRUE(up.brain.decide(up.atStart(), up.query, true).intent.jumps);
+    ASSERT_TRUE(up.brain.decide(up.atStart(), up.query, kRunSpeed).intent.jumps);
     // Along the box's face, as high as its top and as far from the link's start as its end.
     const float span = nx::test::distanceAcross(up.link.start, up.link.end);
     const nx::Vec3 alongTheFace = up.link.start + nx::Vec3{.y = span, .z = up.link.end.z - up.link.start.z};
-    const nx::agents::Decision flying = up.brain.decide(alongTheFace, up.query, false);
+    const nx::agents::Decision flying = up.brain.decide(alongTheFace, up.query, kRunSpeed, false);
     EXPECT_GT(flying.intent.direction.x, 0.0F);
     EXPECT_LT(flying.intent.direction.y, 0.0F) << "still for the link's end, not on along its way";
     const nx::Vec3 over = up.link.end + nx::Vec3{.x = 10};
-    EXPECT_LT(up.brain.decide(over, up.query, false).intent.direction.x, 0.0F) << "still for the link's end";
-    EXPECT_GT(up.brain.decide(over, up.query, true).intent.direction.y, 0.0F) << "landed, on to its goal";
+    EXPECT_LT(up.brain.decide(over, up.query, kRunSpeed, false).intent.direction.x, 0.0F)
+        << "still for the link's end";
+    EXPECT_GT(up.brain.decide(over, up.query, kRunSpeed).intent.direction.y, 0.0F)
+        << "landed, on to its goal";
 }
 
 TEST(AgentBrain, ABodyBackOnTheGroundBelowALinksEndSearchesItsWayAnewAndJumpsAgain) {
     JumpUp up;
-    ASSERT_TRUE(up.brain.decide(up.atStart(), up.query, true).intent.jumps);
-    EXPECT_FALSE(up.brain.decide(up.atStart(), up.query, true).intent.jumps) << "jumping still";
-    EXPECT_FALSE(up.brain.decide(up.atStart() + nx::Vec3{.z = 30}, up.query, false).intent.jumps);
-    EXPECT_TRUE(up.brain.decide(up.atStart(), up.query, true).intent.jumps) << "fallen short, once more";
+    ASSERT_TRUE(up.brain.decide(up.atStart(), up.query, kRunSpeed).intent.jumps);
+    EXPECT_FALSE(up.brain.decide(up.atStart(), up.query, kRunSpeed).intent.jumps) << "jumping still";
+    EXPECT_FALSE(up.brain.decide(up.atStart() + nx::Vec3{.z = 30}, up.query, kRunSpeed, false).intent.jumps);
+    EXPECT_TRUE(up.brain.decide(up.atStart(), up.query, kRunSpeed).intent.jumps) << "fallen short, once more";
 }
 
 TEST(AgentBrain, ABodyBackOnTheGroundAtTheHeightOfALinksEndShortOfItWalksOnToItUpright) {
@@ -961,12 +974,12 @@ TEST(AgentBrain, ABodyBackOnTheGroundAtTheHeightOfALinksEndShortOfItWalksOnToItU
     const auto link = corridor->nextLink(query);
     ASSERT_TRUE(link.has_value());
     ASSERT_EQ(link->kind, nx::navigation::AreaKind::CrouchedJump);
-    const nx::agents::Decision jump = brain.decide(link->start - nx::Vec3{.x = 1}, query, true);
+    const nx::agents::Decision jump = brain.decide(link->start - nx::Vec3{.x = 1}, query, kRunSpeed);
     ASSERT_TRUE(jump.intent.jumps);
     EXPECT_TRUE(jump.intent.crouches);
     const nx::Vec3 over{.x = link->start.x, .y = link->start.y, .z = link->end.z};
-    EXPECT_TRUE(brain.decide(over, query, false).intent.crouches) << "in the air";
-    const nx::agents::Decision landed = brain.decide(over, query, true);
+    EXPECT_TRUE(brain.decide(over, query, kRunSpeed, false).intent.crouches) << "in the air";
+    const nx::agents::Decision landed = brain.decide(over, query, kRunSpeed);
     EXPECT_FALSE(landed.intent.jumps) << "up there already";
     EXPECT_FALSE(landed.intent.crouches);
     EXPECT_GT(landed.intent.direction.x, 0.99F) << "on to the link's end, no way searched from the edge";
@@ -993,7 +1006,7 @@ TEST(AgentBrain, ABodyBackPastACornerItReachedHeadsForTheCornersItSeesAgain) {
     nx::Vec3 feet{.x = 100, .y = 128};
     std::vector<nx::Vec3> walked{feet};
     for (int step = 0; step < 5000 && feet.x < (kWallEvery * kWalls) + kPastTheLastWall; ++step) {
-        const nx::agents::Decision decision = brain.decide(feet, query);
+        const nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
         ASSERT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
         feet = feet + (decision.intent.direction * kStep);
         walked.push_back(feet);
@@ -1002,7 +1015,7 @@ TEST(AgentBrain, ABodyBackPastACornerItReachedHeadsForTheCornersItSeesAgain) {
     // Back the way it came, as what gets a stuck body out may take it: it never stands with nothing to head
     // for.
     for (const nx::Vec3 back : walked | std::views::reverse) {
-        const nx::agents::Decision decision = brain.decide(back, query);
+        const nx::agents::Decision decision = brain.decide(back, query, kRunSpeed);
         ASSERT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
         EXPECT_GT(nx::length(decision.intent.direction), 0.0F) << std::format("{}", back);
     }
@@ -1031,7 +1044,7 @@ TEST(AgentBrain, GivingUpItSearchesAnotherWayAroundWhereItGotStuckThenGivesUpIts
     const nx::Vec3 from{.x = 128, .y = 128};
     const nx::Vec3 goal{.x = 896, .y = 128};
     const auto wayFrom = [&](nx::Vec3 feet) {
-        std::ignore = brain.decide(feet, query);
+        std::ignore = brain.decide(feet, query, kRunSpeed);
         std::vector<nx::Vec3> way;
         brain.appendWay(query, way);
         return way;
@@ -1051,7 +1064,7 @@ TEST(AgentBrain, GivingUpItSearchesAnotherWayAroundWhereItGotStuckThenGivesUpIts
     // Stuck again: it gives its goal up, and pursues nothing for its owner to give it another.
     brain.giveUp(stuckAt({.x = 128, .y = 600}), 1);
     EXPECT_FALSE(brain.goal().has_value());
-    EXPECT_EQ(brain.decide(from, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_EQ(brain.decide(from, query, kRunSpeed).behavior, nx::agents::Behavior::Idle);
     // A goal given anew is pursued anew, by the near way again.
     brain.setGoal(goal);
     EXPECT_TRUE(std::ranges::all_of(wayFrom(from), [](nx::Vec3 point) { return point.y < 256; }));
@@ -1063,11 +1076,11 @@ TEST(AgentBrain, ABodyAwayFromItsCorridorSearchesItsWayAnewFromWhereItIs) {
     nx::agents::Brain brain{rules()};
     const nx::Vec3 goal{.x = 896, .y = 128};
     brain.setGoal(goal);
-    ASSERT_EQ(brain.decide({.x = 512, .y = 128}, query).behavior, nx::agents::Behavior::MoveTo);
+    ASSERT_EQ(brain.decide({.x = 512, .y = 128}, query, kRunSpeed).behavior, nx::agents::Behavior::MoveTo);
     // Spawned again across the hole from where its corridor is, alive all along: its corridor cannot
     // follow it there along the mesh.
     const nx::Vec3 elsewhere{.x = 512, .y = 640};
-    const nx::agents::Decision decision = brain.decide(elsewhere, query);
+    const nx::agents::Decision decision = brain.decide(elsewhere, query, kRunSpeed);
     EXPECT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
@@ -1085,13 +1098,13 @@ TEST(AgentBrain, GivingUpWithNoWayAroundItKeepsTheOnlyWayAndThenTheTargetItInves
     nx::agents::Brain brain{rules()};
     brain.perceive(std::array{nx::agents::Observation{lost, {.x = 200}}}, {}, nx::kDefaultTickRate);
     brain.perceive({}, {}, nx::kDefaultTickRate);
-    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Investigate);
+    ASSERT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Investigate);
     brain.giveUp(stuckAt({.x = 100}), 1);
     EXPECT_EQ(brain.memories().size(), 1U) << "investigated still, by another way";
-    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Investigate);
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Investigate);
     brain.giveUp(stuckAt({.x = 100}), 1);
     EXPECT_TRUE(brain.memories().empty());
-    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Idle);
 }
 
 TEST(AgentBrain, GivingUpItNeverGivesUpATargetItSeesAndSearchesItsWayAnew) {
@@ -1101,7 +1114,7 @@ TEST(AgentBrain, GivingUpItNeverGivesUpATargetItSeesAndSearchesItsWayAnew) {
     const auto chased = world.spawn();
     nx::agents::Brain brain{rules()};
     brain.perceive(std::array{nx::agents::Observation{chased, {.x = 200}}}, {}, nx::kDefaultTickRate);
-    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Chase);
+    ASSERT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Chase);
     for (int stuck = 0; stuck < 3; ++stuck) {
         brain.giveUp(stuckAt({.x = 100}), 1);
         EXPECT_EQ(brain.memories().size(), 1U) << "it still sees it";
@@ -1110,7 +1123,7 @@ TEST(AgentBrain, GivingUpItNeverGivesUpATargetItSeesAndSearchesItsWayAnew) {
     brain.appendWay(query, way);
     EXPECT_TRUE(way.empty()) << "its corridor dropped";
     const nx::Vec3 elsewhere{.y = 100};
-    const auto chase = brain.decide(elsewhere, query);
+    const auto chase = brain.decide(elsewhere, query, kRunSpeed);
     EXPECT_EQ(chase.behavior, nx::agents::Behavior::Chase);
     brain.appendWay(query, way);
     ASSERT_FALSE(way.empty());
@@ -1129,7 +1142,7 @@ TEST(AgentBrain, ItsWayGoesFromWhereItIsToItsGoal) {
     const nx::Vec3 feet{.x = 10};
     const nx::Vec3 goal{.y = 200};
     brain.setGoal(goal);
-    ASSERT_EQ(brain.decide(feet, query).behavior, nx::agents::Behavior::MoveTo);
+    ASSERT_EQ(brain.decide(feet, query, kRunSpeed).behavior, nx::agents::Behavior::MoveTo);
     brain.appendWay(query, way);
     ASSERT_GE(way.size(), 2U);
     EXPECT_LT(nx::test::distanceAcross(way.front(), feet), kOnTheMesh);
@@ -1147,11 +1160,11 @@ TEST(AgentBrain, AnAgentHasAWayOnlyWhileItsLastDecisionFollowsTheCorridor) {
         follower.appendWay(query, points);
         return points;
     };
-    agent.behavior = agent.brain.decide({}, query).behavior;
+    agent.behavior = agent.brain.decide({}, query, kRunSpeed).behavior;
     ASSERT_TRUE(nx::agents::followsCorridor(agent.behavior));
     EXPECT_FALSE(wayOf(agent).empty());
     EXPECT_EQ(wayOf(agent), wayOf(agent.brain));
-    agent.behavior = agent.brain.decide(goal, query).behavior;
+    agent.behavior = agent.brain.decide(goal, query, kRunSpeed).behavior;
     ASSERT_EQ(agent.behavior, nx::agents::Behavior::Idle);
     EXPECT_FALSE(wayOf(agent.brain).empty()) << "the corridor it arrived by is kept";
     EXPECT_TRUE(wayOf(agent).empty());
@@ -1164,9 +1177,9 @@ TEST(AgentBrain, ATargetItSeesComesBeforeItsGoal) {
     const auto target = world.spawn();
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.y = 200});
-    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::MoveTo);
+    ASSERT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::MoveTo);
     brain.perceive(std::array{nx::agents::Observation{target, {.x = -200}}}, {}, nx::kDefaultTickRate);
-    const auto chase = brain.decide({}, query);
+    const auto chase = brain.decide({}, query, kRunSpeed);
     EXPECT_EQ(chase.behavior, nx::agents::Behavior::Chase);
     EXPECT_LT(chase.intent.direction.x, 0.0F);
     EXPECT_TRUE(brain.goal().has_value()) << "kept for when it has no target";
@@ -1181,16 +1194,16 @@ TEST(AgentBrain, FollowsAnObservationThatMovesLessThanTheReplanDistance) {
     const nx::Vec3 originalGoal{.x = 200};
     brain.perceive(std::array{nx::agents::Observation{.entity = target, .position = originalGoal}}, {},
                    nx::kDefaultTickRate);
-    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Chase);
+    ASSERT_EQ(brain.decide({}, query, kRunSpeed).behavior, nx::agents::Behavior::Chase);
     const nx::Vec3 shiftedGoal{.x = originalGoal.x + rules().replanDistance.value() / 2.0F};
     brain.perceive(std::array{nx::agents::Observation{.entity = target, .position = shiftedGoal}}, {},
                    nx::kDefaultTickRate);
     brain.perceive({}, {}, nx::kDefaultTickRate);
-    const auto investigation = brain.decide(originalGoal, query);
+    const auto investigation = brain.decide(originalGoal, query, kRunSpeed);
     EXPECT_EQ(investigation.behavior, nx::agents::Behavior::Investigate);
     EXPECT_GT(investigation.intent.direction.x, 0.0F);
     EXPECT_FALSE(brain.memories().empty());
-    EXPECT_EQ(brain.decide(shiftedGoal, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_EQ(brain.decide(shiftedGoal, query, kRunSpeed).behavior, nx::agents::Behavior::Idle);
     EXPECT_TRUE(brain.memories().empty());
 }
 
@@ -1206,7 +1219,7 @@ TEST(AgentBrain, FinishesInvestigationAtTheWalkablePointBelowItsLastObservation)
     brain.perceive(std::array{nx::agents::Observation{.entity = target, .position = observedFeet}}, {},
                    nx::kDefaultTickRate);
     brain.perceive({}, {}, nx::kDefaultTickRate);
-    const auto decision = brain.decide(feet, query);
+    const auto decision = brain.decide(feet, query, kRunSpeed);
     EXPECT_EQ(decision.behavior, nx::agents::Behavior::Idle);
     EXPECT_EQ(decision.intent.direction, nx::Vec3{});
     EXPECT_TRUE(brain.memories().empty());
@@ -1257,7 +1270,8 @@ auto walkInertially(nx::agents::Brain& brain, nx::navigation::NavigationQuery& q
     InertialWalk walked;
     std::optional<float> heading;
     for (int tick = 0; tick < kTicks; ++tick) {
-        nx::agents::Decision decision = brain.decide(body.feet, query);
+        nx::agents::Decision decision =
+            brain.decide(body.feet, query, nx::UnitsPerSecond{kMaxSpeed}, true, body.velocity);
         if (decision.behavior == nx::agents::Behavior::Idle) {
             walked.isArrived = true;
             break;
@@ -1289,12 +1303,20 @@ auto brakingRules() -> nx::agents::Rules {
     return braking;
 }
 
-TEST(AgentBrain, ABodyTooSlowForAGapBacksOffForARunAtItAndJumpsItAtSpeed) {
-    // Two floors a gap of 100 apart, nothing under it.
+/// A gap of 100 between two floors from x = 512 on: a player's box spans 32 of it, and a leap 41.8 high is
+/// 0.646 seconds in the air, so it takes 105 units a second across.
+constexpr float kGap = 100.0F;
+
+/// Two floors kGap apart, nothing under it.
+auto gapMesh() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 512, .y = 512}, 0);
-    nx::test::addFloor(geometry, {.x = 612, .y = 0}, {.x = 1124, .y = 512}, 0);
-    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::test::addFloor(geometry, {.x = 512.0F + kGap, .y = 0}, {.x = 1024.0F + kGap, .y = 512}, 0);
+    return nx::test::playerMesh(geometry, 0);
+}
+
+TEST(AgentBrain, ABodyTooSlowForAGapBacksOffForARunAtItAndJumpsItAtSpeed) {
+    const auto mesh = gapMesh();
     nx::navigation::NavigationQuery query{mesh};
     const nx::Vec3 goal{.x = 900, .y = 256};
     auto planned = nx::navigation::Corridor::plan(query, {.from = {.x = 400, .y = 256}, .to = goal});
@@ -1307,7 +1329,7 @@ TEST(AgentBrain, ABodyTooSlowForAGapBacksOffForARunAtItAndJumpsItAtSpeed) {
     const nx::Vec3 atTheEdge = link->start - nx::Vec3{.x = 2.0F};
     nx::agents::Brain slow{brakingRules()};
     slow.setGoal(goal);
-    const nx::agents::Decision backing = slow.decide(atTheEdge, query);
+    const nx::agents::Decision backing = slow.decide(atTheEdge, query, kRunSpeed);
     EXPECT_FALSE(backing.intent.jumps);
     EXPECT_TRUE(slow.isRunningUp());
     EXPECT_LT(backing.intent.direction.x, 0.0F) << "back from the edge";
@@ -1321,17 +1343,50 @@ TEST(AgentBrain, ABodyTooSlowForAGapBacksOffForARunAtItAndJumpsItAtSpeed) {
         if (!slow.isRunningUp()) {
             feet = atTheEdge; // on to the edge again, at last
         }
-        jumpedAtLast = slow.decide(feet, query, true, kStopped).intent.jumps;
+        jumpedAtLast = slow.decide(feet, query, kRunSpeed, true, kStopped).intent.jumps;
     }
     EXPECT_TRUE(jumpedAtLast);
 
     nx::agents::Brain fast{brakingRules()};
     fast.setGoal(goal);
-    constexpr nx::Vec3 kAtSpeed{.x = 230.0F};
-    const nx::agents::Decision leaping = fast.decide(atTheEdge, query, true, kAtSpeed);
+    constexpr nx::Vec3 kAtSpeed{.x = kRunSpeed.value()};
+    const nx::agents::Decision leaping = fast.decide(atTheEdge, query, kRunSpeed, true, kAtSpeed);
     EXPECT_TRUE(leaping.intent.jumps);
     EXPECT_FALSE(fast.isRunningUp());
     EXPECT_GT(leaping.intent.direction.x, 0.0F) << "on across";
+}
+
+TEST(AgentBrain, ABodyThatRunsTooSlowlyForAGapSearchesNoWayOverItAndOneFastEnoughDoes) {
+    const auto mesh = gapMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    constexpr nx::UnitsPerSecond kTooSlow{100.0F};
+    const nx::Vec3 here{.x = 400, .y = 256};
+    const nx::Vec3 goal{.x = 512.0F + kGap + 256.0F, .y = 256};
+    nx::agents::Brain slow{brakingRules()};
+    slow.setGoal(goal);
+    const nx::agents::Decision blocked = slow.decide(here, query, kTooSlow);
+    EXPECT_EQ(blocked.behavior, nx::agents::Behavior::Blocked);
+    EXPECT_EQ(blocked.navigationError, nx::navigation::NavigationError::Unreachable);
+    nx::agents::Brain fast{brakingRules()};
+    fast.setGoal(goal);
+    EXPECT_EQ(fast.decide(here, query, kRunSpeed).behavior, nx::agents::Behavior::MoveTo);
+}
+
+TEST(AgentBrain, ABodyHeldAtARoundsStartSearchesItsWayAnewOnceItRuns) {
+    // A frozen round's start holds a player to 1 unit a second (cs::kFreezeSpeed): no gap it leaps.
+    const auto mesh = gapMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    constexpr nx::UnitsPerSecond kFrozen{1.0F};
+    const nx::Vec3 here{.x = 400, .y = 256};
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(nx::Vec3{.x = 900, .y = 256});
+    EXPECT_EQ(brain.decide(here, query, kFrozen).behavior, nx::agents::Behavior::Blocked);
+    // Where it stood, its goal where it was: only how fast it runs tells it to search again.
+    EXPECT_EQ(brain.decide(here, query, kRunSpeed).behavior, nx::agents::Behavior::MoveTo);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    ASSERT_FALSE(way.empty());
+    EXPECT_GT(way.back().x, 512.0F + kGap) << "over the gap";
 }
 
 void expectApproachToLink(const nx::agents::Decision& decision, nx::Vec3 start,
@@ -1356,7 +1411,7 @@ void checkBrakingCrossing(const Platform& platform, nx::Vec3 start, nx::Vec3 goa
 
     nx::agents::Brain brain{brakingRules()};
     brain.setGoal(goal);
-    expectApproachToLink(brain.decide(start, query), start, *next);
+    expectApproachToLink(brain.decide(start, query, kRunSpeed), start, *next);
     const Walked walked = walkAbout(platform, brain, query, start, kMostDecisions);
     EXPECT_TRUE(walked.isArrived);
     EXPECT_EQ(walked.jumps, jumps);
@@ -1382,7 +1437,7 @@ TEST(AgentBrain, ABrakingBodyComesToALinkItJumpsUpWithLittleSpeedAcrossIt) {
     ASSERT_TRUE(corridor.has_value());
     const auto next = corridor->nextLink(query);
     ASSERT_TRUE(next.has_value());
-    const nx::agents::Decision decision = brain.decide(from, query);
+    const nx::agents::Decision decision = brain.decide(from, query, kRunSpeed);
     ASSERT_FALSE(decision.intent.approached().empty());
     const nx::Vec3 into = next->start - from;
     const nx::Vec3 beyond = next->end - next->start;
@@ -1462,7 +1517,7 @@ TEST(AgentBrain, ItsIntentTellsTheCornerItTurnsAtAndTheStopItsWayEndsAtButNotATa
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain moving{brakingRules()};
     moving.setGoal(nx::Vec3{.x = 900, .y = 150});
-    const nx::agents::Intent intent = moving.decide({.x = 150, .y = 900}, query).intent;
+    const nx::agents::Intent intent = moving.decide({.x = 150, .y = 900}, query, kRunSpeed).intent;
     const std::span<const nx::agents::Approach> approached = intent.approached();
     ASSERT_GE(approached.size(), 2U) << "the corners it sees ahead";
     // Its way turns round the block's corner, the turn measured over the way on past each corner of the mesh,
@@ -1476,7 +1531,7 @@ TEST(AgentBrain, ItsIntentTellsTheCornerItTurnsAtAndTheStopItsWayEndsAtButNotATa
     EXPECT_TRUE(std::ranges::is_sorted(approached, {}, &nx::agents::Approach::distance))
         << "the nearest first";
     // Past the corner, its end among the corners it sees ahead: a stop.
-    const nx::agents::Intent past = moving.decide({.x = 450, .y = 150}, query).intent;
+    const nx::agents::Intent past = moving.decide({.x = 450, .y = 150}, query, kRunSpeed).intent;
     ASSERT_FALSE(past.approached().empty());
     EXPECT_EQ(past.approached().back().passShare, 0.0F);
     // Chasing a target it sees, it runs at it: the attack ends the chase, no stop.
@@ -1485,7 +1540,7 @@ TEST(AgentBrain, ItsIntentTellsTheCornerItTurnsAtAndTheStopItsWayEndsAtButNotATa
     nx::agents::Brain chasing{brakingRules()};
     chasing.perceive(std::array{nx::agents::Observation{.entity = target, .position = {.x = 150, .y = 600}}},
                      {}, nx::kDefaultTickRate);
-    const nx::agents::Decision chase = chasing.decide({.x = 150, .y = 900}, query);
+    const nx::agents::Decision chase = chasing.decide({.x = 150, .y = 900}, query, kRunSpeed);
     ASSERT_EQ(chase.behavior, nx::agents::Behavior::Chase);
     EXPECT_TRUE(std::ranges::none_of(chase.intent.approached(), [](const nx::agents::Approach& point) {
         return point.passShare == 0.0F;
@@ -1493,7 +1548,7 @@ TEST(AgentBrain, ItsIntentTellsTheCornerItTurnsAtAndTheStopItsWayEndsAtButNotATa
     // A brain that does not brake approaches nothing.
     nx::agents::Brain kinematic{rules()};
     kinematic.setGoal(nx::Vec3{.x = 900, .y = 150});
-    EXPECT_TRUE(kinematic.decide({.x = 150, .y = 900}, query).intent.approached().empty());
+    EXPECT_TRUE(kinematic.decide({.x = 150, .y = 900}, query, kRunSpeed).intent.approached().empty());
 }
 
 TEST(AgentBrain, ABodyThatRoundsACornerWideHeadsOnFromItRatherThanBackToIt) {
@@ -1502,16 +1557,16 @@ TEST(AgentBrain, ABodyThatRoundsACornerWideHeadsOnFromItRatherThanBackToIt) {
     nx::agents::Brain brain{brakingRules()};
     const nx::Vec3 goal{.x = 900, .y = 150};
     brain.setGoal(goal);
-    std::ignore = brain.decide({.x = 150, .y = 900}, query);
+    std::ignore = brain.decide({.x = 150, .y = 900}, query, kRunSpeed);
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
     ASSERT_GE(way.size(), 3U) << "round the block's corner";
     const nx::Vec3 corner = way[1];
     // It reaches the corner, then drifts on past it, wide, where its funnel lists the corner still: measured
     // anew, the corner was behind it, and it turned back to it.
-    std::ignore = brain.decide(corner + nx::Vec3{.x = -4, .y = 5}, query);
+    std::ignore = brain.decide(corner + nx::Vec3{.x = -4, .y = 5}, query, kRunSpeed);
     const nx::Vec3 drifted = corner + nx::Vec3{.x = -24, .y = -16};
-    const nx::agents::Decision decision = brain.decide(drifted, query);
+    const nx::agents::Decision decision = brain.decide(drifted, query, kRunSpeed);
     ASSERT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
     EXPECT_GT(nx::length(decision.intent.direction), 0.0F);
     const nx::Vec3 toCorner = corner - drifted;
@@ -1524,7 +1579,7 @@ TEST(AgentBrain, ABodyDrawnBackFromACornerItReachedAsItGotStuckReturnsToIt) {
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{brakingRules()};
     brain.setGoal(nx::Vec3{.x = 900, .y = 150});
-    std::ignore = brain.decide({.x = 150, .y = 900}, query);
+    std::ignore = brain.decide({.x = 150, .y = 900}, query, kRunSpeed);
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
     // Down the block's side, round its corner, and on: the turn round it is the way's corner nearest it.
@@ -1533,13 +1588,13 @@ TEST(AgentBrain, ABodyDrawnBackFromACornerItReachedAsItGotStuckReturnsToIt) {
     ASSERT_TRUE(turn != way.begin() && std::ranges::next(turn) != way.end());
     const nx::Vec3 corner = *turn;
     // It reaches that turn, stopping just short of it as its funnel lists it only until then.
-    std::ignore = brain.decide(*std::ranges::prev(turn), query);
-    std::ignore = brain.decide(corner + nx::Vec3{.x = -2, .y = 2}, query);
+    std::ignore = brain.decide(*std::ranges::prev(turn), query, kRunSpeed);
+    std::ignore = brain.decide(corner + nx::Vec3{.x = -2, .y = 2}, query, kRunSpeed);
     // It gets stuck there, and is drawn back up the block's side.
     constexpr nx::Vec3 kDrawnBack{.y = 60.0F};
     const nx::Vec3 drawnBack = corner + kDrawnBack;
     brain.noteStuck();
-    const nx::Vec3 direction = brain.decide(drawnBack, query).intent.direction;
+    const nx::Vec3 direction = brain.decide(drawnBack, query, kRunSpeed).intent.direction;
     const nx::Vec3 toCorner = corner - drawnBack;
     EXPECT_GT(nx::dot(direction, toCorner / nx::length(toCorner)), 0.7F) << "back to the corner";
     EXPECT_LT(direction.x, 0.2F) << "along the block's side, not on to the next corner through the block";
@@ -1554,7 +1609,7 @@ TEST(AgentBrain, InACrowdABodyWaitsForThoseAheadNearerItsEndAndTheyGoOn) {
     const auto steered = [&](nx::Vec3 feet, std::span<const nx::Vec3> others) {
         nx::agents::Brain brain{brakingRules()};
         brain.setGoal(end);
-        nx::agents::Decision decision = brain.decide(feet, query);
+        nx::agents::Decision decision = brain.decide(feet, query, kRunSpeed);
         std::vector<nx::navigation::SteeringBody> nearby;
         for (const nx::Vec3 other : others) {
             nearby.push_back({.feet = other, .radius = nx::HammerUnits{kRadius}});
@@ -1588,7 +1643,7 @@ TEST(AgentBrain, TheFirstOfAQueueAtRestWhereItsPassageTurnsGoesOn) {
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{brakingRules()};
     brain.setGoal(nx::Vec3{.x = 608, .y = 900});
-    nx::agents::Decision decision = brain.decide({.x = 520, .y = 512}, query);
+    nx::agents::Decision decision = brain.decide({.x = 520, .y = 512}, query, kRunSpeed);
     const std::array behind{
         nx::navigation::SteeringBody{.feet = {.x = 484, .y = 512}, .radius = nx::HammerUnits{16}}};
     brain.steer(decision.intent, {}, nx::UnitsPerSecond{250}, behind, query);
@@ -1613,7 +1668,7 @@ TEST(AgentBrain, SteeringNeverGoesFasterThanItCanStillSlowDownForWhatItApproache
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{brakingRules()};
     brain.setGoal(nx::Vec3{.x = 20});
-    nx::agents::Decision decision = brain.decide({}, query);
+    nx::agents::Decision decision = brain.decide({}, query, kRunSpeed);
     ASSERT_EQ(decision.intent.approached().size(), 1U) << "its stop alone";
     brain.steer(decision.intent, {}, nx::UnitsPerSecond{160}, {}, query);
     // Twenty units short of its stop, braking four times its speed a second and below 75 as at 75: 75 and
@@ -1625,7 +1680,7 @@ TEST(AgentBrain, SteeringNeverGoesFasterThanItCanStillSlowDownForWhatItApproache
     // What a GoldSrc body gains going by what it asks (PM_Accelerate), it asks all it has short of that
     // speed, and only that speed once it goes so fast.
     EXPECT_EQ(decision.intent.speedShare, 1.0F);
-    nx::agents::Decision atThatSpeed = brain.decide({}, query);
+    nx::agents::Decision atThatSpeed = brain.decide({}, query, kRunSpeed);
     brain.steer(atThatSpeed.intent, {.x = kMostSpeed + 3.0F}, nx::UnitsPerSecond{160}, {}, query);
     EXPECT_NEAR(atThatSpeed.intent.speedShare, kMostSpeed / 160.0F, 0.02F);
 }
@@ -1648,24 +1703,24 @@ TEST(AgentBrain, ItIsAskedForNoWalkSlowerThanItGainsSpeedAtButToStopWhereItsWayE
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{brakingRules()};
     brain.setGoal(nx::Vec3{.x = 400});
-    constexpr float kRunSpeed = 250.0F;
     constexpr float kFirstWaveSpeed = 100.0F;
     // Twice the walk whose gain its friction takes, 75 times 4 over 5.
     constexpr float kLeastWalk = 120.0F;
     // How fast it is asked to walk at `maxSpeed` as it comes a unit short of a point it passes at `passShare`
     // of it, none a stop: the share alone, and how fast it can still stop there from, 24.5 units a second.
     const auto walkAt = [&](float passShare, float maxSpeed) {
-        nx::agents::Decision decision = brain.decide({}, query);
+        nx::agents::Decision decision = brain.decide({}, query, kRunSpeed);
         decision.intent.approaches[0] = {.distance = nx::HammerUnits{1.0F}, .passShare = passShare};
         decision.intent.approachCount = 1;
         brain.steer(decision.intent, {.x = maxSpeed}, nx::UnitsPerSecond{maxSpeed}, {}, query);
         return decision.intent.speedShare * maxSpeed;
     };
-    EXPECT_NEAR(walkAt(0.1F, kRunSpeed), kLeastWalk, 0.5F) << "a sharp turn, as slow as it gains speed at";
+    EXPECT_NEAR(walkAt(0.1F, kRunSpeed.value()), kLeastWalk, 0.5F)
+        << "a sharp turn, as slow as it gains speed at";
     EXPECT_NEAR(walkAt(0.1F, kFirstWaveSpeed), kFirstWaveSpeed, 0.5F) << "its whole speed, when slower";
-    EXPECT_NEAR(walkAt(0.6F, kRunSpeed), (0.6F * kRunSpeed) + 24.5F, 0.5F)
+    EXPECT_NEAR(walkAt(0.6F, kRunSpeed.value()), (0.6F * kRunSpeed.value()) + 24.5F, 0.5F)
         << "faster than it, as braking says";
-    EXPECT_NEAR(walkAt(0.0F, kRunSpeed), 24.5F, 0.5F) << "its stop, as slow as it stops there from";
+    EXPECT_NEAR(walkAt(0.0F, kRunSpeed.value()), 24.5F, 0.5F) << "its stop, as slow as it stops there from";
 }
 
 TEST(AgentBrain, ItArrivesAcrossOnItsFloorAndNotUnderAGoalAboveIt) {
@@ -1676,10 +1731,10 @@ TEST(AgentBrain, ItArrivesAcrossOnItsFloorAndNotUnderAGoalAboveIt) {
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain onTheFloor{rules()};
     onTheFloor.setGoal(nx::Vec3{.x = 200, .y = 250});
-    EXPECT_EQ(onTheFloor.decide({.x = 197, .y = 250}, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_EQ(onTheFloor.decide({.x = 197, .y = 250}, query, kRunSpeed).behavior, nx::agents::Behavior::Idle);
     nx::agents::Brain upThere{rules()};
     upThere.setGoal(nx::Vec3{.x = 550, .y = 250, .z = 60});
-    EXPECT_NE(upThere.decide({.x = 550, .y = 250}, query).behavior, nx::agents::Behavior::Idle)
+    EXPECT_NE(upThere.decide({.x = 550, .y = 250}, query, kRunSpeed).behavior, nx::agents::Behavior::Idle)
         << "below it, on the floor, it has not arrived";
 }
 
@@ -1693,7 +1748,7 @@ TEST(AgentBrain, PreservesTheObservedAimPointSeparatelyFromTheGroundGoal) {
     brain.perceive(
         std::array{nx::agents::Observation{.entity = target, .position = {.x = 30}, .aimAt = crouchedEye}},
         {}, nx::kDefaultTickRate);
-    const auto decision = brain.decide({}, query);
+    const auto decision = brain.decide({}, query, kRunSpeed);
     EXPECT_TRUE(decision.intent.attacks);
     ASSERT_TRUE(decision.intent.lookAt.has_value());
     EXPECT_EQ(*decision.intent.lookAt, crouchedEye);

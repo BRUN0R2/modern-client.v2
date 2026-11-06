@@ -42,6 +42,11 @@ struct Agents {
 };
 
 constexpr float kDecisionStep = 32.0F;
+/// How fast the bodies of requestsOf's requests run: they stand, so that Deciders steers none of them and
+/// its decisions are those of each brain alone.
+constexpr nx::UnitsPerSecond kStanding{};
+/// How fast a body runs that crosses links: a player's with a knife or a pistol.
+constexpr nx::UnitsPerSecond kRunSpeed{250.0F};
 
 [[nodiscard]] auto agentsOf(std::size_t count, const nx::agents::Rules& settings = rules()) -> Agents {
     Agents agents;
@@ -58,7 +63,8 @@ constexpr float kDecisionStep = 32.0F;
 [[nodiscard]] auto requestsOf(Agents& agents) -> std::vector<nx::agents::DecisionRequest> {
     std::vector<nx::agents::DecisionRequest> requests;
     for (std::size_t index = 0; index < agents.brains.size(); ++index) {
-        requests.push_back({.brain = &agents.brains[index], .feet = agents.feet[index]});
+        requests.push_back(
+            {.brain = &agents.brains[index], .feet = agents.feet[index], .maxSpeed = kStanding});
     }
     return requests;
 }
@@ -95,7 +101,7 @@ constexpr float kDecisionStep = 32.0F;
         std::vector<nx::agents::Decision> decisions;
         for (std::size_t index = 0; index < count; ++index) {
             nx::Vec3& feet = alone.feet.at(index);
-            decisions.push_back(alone.brains.at(index).decide(feet, query));
+            decisions.push_back(alone.brains.at(index).decide(feet, query, kStanding));
             feet += decisions.back().intent.direction * kDecisionStep;
         }
         made.push_back(std::move(decisions));
@@ -357,8 +363,11 @@ TEST(AgentDeciders, ALinkItsBodyIsKnockedOffIsNoneItFailed) {
     brain.setGoal(goal);
     std::array<nx::agents::Decision, 1> decisions{};
     const auto decided = [&](nx::Vec3 feet, bool isOnGround, bool isKnockedBack) {
-        const std::array requests{nx::agents::DecisionRequest{
-            .brain = &brain, .feet = feet, .isOnGround = isOnGround, .isKnockedBack = isKnockedBack}};
+        const std::array requests{nx::agents::DecisionRequest{.brain = &brain,
+                                                              .feet = feet,
+                                                              .isOnGround = isOnGround,
+                                                              .maxSpeed = kRunSpeed,
+                                                              .isKnockedBack = isKnockedBack}};
         deciders.decide(*jobs, requests, decisions);
         return decisions.front();
     };
@@ -436,8 +445,8 @@ TEST(AgentDeciders, ABodyInTheAirHasNotLandedAcrossALink) {
     brain.setGoal(goal);
     std::array<nx::agents::Decision, 1> decisions{};
     const auto decided = [&](nx::Vec3 feet, bool isOnGround) {
-        const std::array requests{
-            nx::agents::DecisionRequest{.brain = &brain, .feet = feet, .isOnGround = isOnGround}};
+        const std::array requests{nx::agents::DecisionRequest{
+            .brain = &brain, .feet = feet, .isOnGround = isOnGround, .maxSpeed = kRunSpeed}};
         deciders.decide(**jobs, requests, decisions);
         return decisions.front();
     };
@@ -528,7 +537,7 @@ TEST(AgentDeciders, AWayKeepsOffAClosedDoorWhileItHasAnother) {
                                                  .openers = {nx::Vec3{.x = -400, .y = 100}}}};
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 200});
-    const nx::agents::Decision decision = brain.decide({.x = -60}, query, true, {}, gates);
+    const nx::agents::Decision decision = brain.decide({.x = -60}, query, kRunSpeed, true, {}, gates);
     EXPECT_FALSE(decision.closedGate.has_value());
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);

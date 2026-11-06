@@ -27,8 +27,10 @@ struct AvoidedPlace {
 /// What a way is asked for: from where, to where, what each kind of area costs it, the mesh's profile's
 /// costs when none are given, the places it keeps away from, a polygon several of them reach costing
 /// the most any of them makes it, the doors as they stand, through none of which it goes closed, but what
-/// opens it when `opensGates`: one no gate names it goes through as through one open; and the links it goes
-/// over none of, either way.
+/// opens it when `opensGates`: one no gate names it goes through as through one open; the links it goes
+/// over none of, either way; and how fast across the body it is for leaves a ledge at most, which takes it
+/// over no link whose gap takes more (leastLeapSpeedOf; of a link both ways, the way up): none, over any the
+/// mesh has.
 struct PathRequest {
     Vec3 from{};
     Vec3 to{};
@@ -37,6 +39,7 @@ struct PathRequest {
     std::span<const Gate> gates{};
     bool opensGates = false;
     std::span<const MeshLink> shunned{};
+    std::optional<UnitsPerSecond> leapSpeed{};
 };
 
 /// A way on a mesh: the points an agent walks straight between, the first on the mesh nearest the

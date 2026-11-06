@@ -55,11 +55,15 @@ constexpr std::size_t kCoordinates = 3;
     });
 }
 
-/// Whether a way may be searched for `request`. Errors: InvalidQuery (a cost or an avoided place out of
-/// bounds).
+/// Whether a way may be searched for `request`. Errors: InvalidQuery (a cost, an avoided place or a leap's
+/// speed out of bounds).
 [[nodiscard]] auto checkRequest(const PathRequest& request) -> Result<void, NavigationError> {
     if (request.costs && !validCosts(*request.costs)) {
         return fail(NavigationError::InvalidQuery, "area costs must be finite and at least one");
+    }
+    if (request.leapSpeed &&
+        !(std::isfinite(request.leapSpeed->value()) && *request.leapSpeed >= UnitsPerSecond{})) {
+        return fail(NavigationError::InvalidQuery, "a leap's speed must be finite, of none or more");
     }
     if (!validAvoided(request.avoided)) {
         return fail(
@@ -138,14 +142,15 @@ struct AvoidedPolygon {
 
 /// Detour's filter of a way: `base`'s, each polygon of `avoided` (sorted by polygon, each once, outliving
 /// the filter) costing its share times its own, no link through a door closed among `request`'s gates, that
-/// it does not open, and none it shuns. Detour is built with its filter virtual for it
-/// (DT_VIRTUAL_QUERYFILTER, cmake/ports/recastnavigation).
+/// it does not open, none it shuns, and none whose leap takes more than its body leaves a ledge at, as a body
+/// of `profile` (leastLeapSpeedOf). Detour is built with its filter virtual for it (DT_VIRTUAL_QUERYFILTER,
+/// cmake/ports/recastnavigation).
 class WayFilter final : public dtQueryFilter {
 public:
-    WayFilter(const dtQueryFilter& base, std::span<const AvoidedPolygon> avoided,
-              const PathRequest& request) noexcept
+    WayFilter(const dtQueryFilter& base, std::span<const AvoidedPolygon> avoided, const PathRequest& request,
+              const AgentProfile& profile) noexcept
         : dtQueryFilter{base}, avoidedPolygons{avoided}, doors{request.gates}, opensDoors{request.opensGates},
-          shunnedLinks{request.shunned} {}
+          shunnedLinks{request.shunned}, leapSpeed{request.leapSpeed}, agentProfile{&profile} {}
 
     [[nodiscard]] auto passFilter(dtPolyRef polygonRef, const dtMeshTile* tile, const dtPoly* polygon) const
         -> bool override {
@@ -155,7 +160,8 @@ public:
         if (polygon->getType() != DT_POLYTYPE_OFFMESH_CONNECTION) {
             return true;
         }
-        return !isThroughClosedDoor(*tile, *polygon) && !isShunned(*tile, *polygon);
+        return !isThroughClosedDoor(*tile, *polygon) && !isShunned(*tile, *polygon) &&
+               !isFlownTooFast(*tile, *polygon);
     }
 
     [[nodiscard]] auto getCost(const float* from, const float* to, dtPolyRef previous,
@@ -170,31 +176,54 @@ public:
     }
 
 private:
+    /// The connection of `polygon`, a link's, of `tile`.
+    [[nodiscard]] static auto connectionOf(const dtMeshTile& tile, const dtPoly& polygon)
+        -> const dtOffMeshConnection& {
+        const std::span polygons{tile.polys, narrow<std::size_t>(tile.header->polyCount)};
+        const auto index = narrow<int>(&polygon - polygons.data());
+        const std::span connections{tile.offMeshCons, narrow<std::size_t>(tile.header->offMeshConCount)};
+        return connections[narrow<std::size_t>(index - tile.header->offMeshBase)];
+    }
+
     [[nodiscard]] auto isThroughClosedDoor(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
         if (doors.empty() || detail::kindOfArea(polygon.getArea()) != AreaKind::Door) {
             return false;
         }
-        const std::span polygons{tile.polys, narrow<std::size_t>(tile.header->polyCount)};
-        const auto index = narrow<int>(&polygon - polygons.data());
-        const std::span connections{tile.offMeshCons, narrow<std::size_t>(tile.header->offMeshConCount)};
-        const Vec3 through = detail::throughOfId(
-            connections[narrow<std::size_t>(index - tile.header->offMeshBase)].userId, 0.0F);
+        const Vec3 through = detail::throughOfId(connectionOf(tile, polygon).userId, 0.0F);
         return std::ranges::any_of(doors, [this, through](const Gate& gate) {
             return !gate.isOpen && (!opensDoors || gate.openers.empty()) && isSameDoor(gate.middle, through);
         });
+    }
+
+    /// The link of `polygon`, of `tile`, from its start to its end, of the kind of its area.
+    [[nodiscard]] static auto linkAt(const dtMeshTile& tile, const dtPoly& polygon) -> MeshLink {
+        const std::span vertices{tile.verts, narrow<std::size_t>(tile.header->vertCount) * kCoordinates};
+        const auto endOf = [&](std::size_t end) {
+            return detail::positionOf(
+                vertices.subspan(std::size_t{polygon.verts[end]} * kCoordinates).first<kCoordinates>());
+        };
+        return MeshLink{.start = endOf(0), .end = endOf(1), .kind = detail::kindOfArea(polygon.getArea())};
+    }
+
+    /// Of a link both ways, the way up, which takes no less than the way down.
+    [[nodiscard]] auto isFlownTooFast(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
+        if (!leapSpeed) {
+            return false;
+        }
+        MeshLink link = linkAt(tile, polygon);
+        if ((connectionOf(tile, polygon).flags & DT_OFFMESH_CON_BIDIR) != 0 && link.start.z > link.end.z) {
+            std::swap(link.start, link.end);
+        }
+        return leastLeapSpeedOf(link, *agentProfile, HammerUnits{}) > *leapSpeed;
     }
 
     [[nodiscard]] auto isShunned(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
         if (shunnedLinks.empty()) {
             return false;
         }
-        const std::span vertices{tile.verts, narrow<std::size_t>(tile.header->vertCount) * kCoordinates};
-        const auto endOf = [&](std::size_t end) {
-            return detail::positionOf(
-                vertices.subspan(std::size_t{polygon.verts[end]} * kCoordinates).first<kCoordinates>());
-        };
-        const Vec3 one = endOf(0);
-        const Vec3 other = endOf(1);
+        const MeshLink at = linkAt(tile, polygon);
+        const Vec3 one = at.start;
+        const Vec3 other = at.end;
         constexpr float kSameEnd = 0.5F;
         const auto isAt = [](Vec3 first, Vec3 second) {
             return length(first - second) <= kSameEnd;
@@ -209,6 +238,8 @@ private:
     std::span<const Gate> doors;
     bool opensDoors = false;
     std::span<const MeshLink> shunnedLinks;
+    std::optional<UnitsPerSecond> leapSpeed;
+    const AgentProfile* agentProfile;
 };
 
 /// The bits that number `count` things, at least one.
@@ -501,6 +532,25 @@ private:
 }
 
 } // namespace
+
+auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerUnits shortOfStart) noexcept
+    -> UnitsPerSecond {
+    const float gap =
+        std::hypot(link.end.x - link.start.x, link.end.y - link.start.y) - (2.0F * profile.radius.value());
+    if (link.kind == AreaKind::Ladder || link.kind == AreaKind::Door || gap <= 0.0F) {
+        return UnitsPerSecond{};
+    }
+    const float gravity = profile.gravity.value();
+    const float jump = link.kind == AreaKind::CrouchedJump && profile.crouchedJumpHeight
+                           ? profile.crouchedJumpHeight->value()
+                           : profile.jumpHeight.value();
+    const float rising = std::sqrt(2.0F * gravity * jump);
+    // Down from as high as it rises to the end's height; none when the end is as high as it rises or higher.
+    const float falling =
+        std::sqrt(std::max((rising * rising) - (2.0F * gravity * (link.end.z - link.start.z)), 0.0F));
+    const float inTheAir = (rising + falling) / gravity;
+    return UnitsPerSecond{(gap + shortOfStart.value()) / inTheAir};
+}
 
 struct NavigationMesh::Detour {
     /// The tiles' data, which Detour keeps pointers into: declared before its mesh, which goes first.
@@ -899,7 +949,8 @@ auto NavigationQuery::findPath(const PathRequest& request) -> Result<Path, Navig
         return std::unexpected{to.error()};
     }
     const WayFilter filter{request.costs ? filterOf(*request.costs) : detourState->filter,
-                           detourState->avoidedPolygonsOf(request.avoided), request};
+                           detourState->avoidedPolygonsOf(request.avoided), request,
+                           navigationMesh->profile()};
     const auto polygons = detourState->polygonPath(*from, *to, filter);
     if (!polygons) {
         return std::unexpected{polygons.error()};
@@ -1062,7 +1113,7 @@ auto Corridor::plan(NavigationQuery& query, const PathRequest& request) -> Resul
         return std::unexpected{to.error()};
     }
     const WayFilter filter{request.costs ? filterOf(*request.costs) : search.filter,
-                           search.avoidedPolygonsOf(request.avoided), request};
+                           search.avoidedPolygonsOf(request.avoided), request, query.mesh().profile()};
     const auto polygons = search.polygonPath(*from, *to, filter);
     if (!polygons) {
         return std::unexpected{polygons.error()};
