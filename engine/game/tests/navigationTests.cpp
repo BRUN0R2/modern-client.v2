@@ -83,7 +83,7 @@ TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     EXPECT_EQ(costs[AreaKind::Jump], 2.0F);
     EXPECT_EQ(costs[AreaKind::CrouchedJump], 2.0F);
     EXPECT_EQ(costs[AreaKind::Drop], 1.0F);
-    EXPECT_EQ(costs[AreaKind::Door], 4.0F);
+    EXPECT_EQ(costs[AreaKind::Door], 1.0F);
     EXPECT_EQ(player.wallClearance, nx::HammerUnits{16.0F});
     EXPECT_EQ(read->build.cellSize, nx::HammerUnits{4.0F});
     EXPECT_EQ(read->build.tileCells, 64U);
@@ -215,11 +215,25 @@ TEST(NavigationGatesTest, ADoorIsOpenWalkedIntoAndClosedWithWhatOpensItWhenOther
         return !gate.openers.empty() && gate.openers.front().box.center() == gate.middle;
     }));
 
+    // As long to open as its travel takes at its speed, from where it stands: 100 units up at 50 a second.
+    constexpr nx::UnitsPerSecond kSpeed{50.0F};
+    constexpr float kTravel = 100.0F;
+    nx::ecs::Query<nx::game::Door&>{world}.forEach([&](nx::game::Door& door) {
+        auto& slide = std::get<nx::game::DoorSlide>(door.motion);
+        slide.open = slide.closed + Vec3{.z = kTravel};
+        slide.speed = kSpeed;
+    });
+    for (const nx::navigation::Gate& gate : nx::game::gatesOf(*map, world, nx::game::AgentBodies::Players)) {
+        EXPECT_NEAR(gate.opensIn.count(), kTravel / kSpeed.value(), 1.0e-4F);
+    }
+
     nx::ecs::Query<nx::game::Door&>{world}.forEach(
         [](nx::game::Door& door) { door.state = nx::game::DoorState::Open; });
-    EXPECT_TRUE(std::ranges::all_of(nx::game::gatesOf(*map, world, nx::game::AgentBodies::Players),
-                                    &nx::navigation::Gate::isOpen))
-        << "open, however it opens";
+    const std::vector<nx::navigation::Gate> open =
+        nx::game::gatesOf(*map, world, nx::game::AgentBodies::Players);
+    EXPECT_TRUE(std::ranges::all_of(open, &nx::navigation::Gate::isOpen)) << "open, however it opens";
+    EXPECT_TRUE(std::ranges::all_of(
+        open, [](const nx::navigation::Gate& gate) { return gate.opensIn == nx::Seconds{}; }));
 
     const Geometry geometry = nx::game::navigationGeometryOf(*map, world);
     EXPECT_EQ(geometry.doors.size(), 3U);

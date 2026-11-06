@@ -282,7 +282,8 @@ struct AvoidedPolygon {
 
 /// Detour's filter of a way: `base`'s, each polygon of `avoided` (sorted by polygon, each once, outliving
 /// the filter) costing its share times its own, no link through a door closed among `request`'s gates, that
-/// it does not open, none it shuns, and none whose leap takes more than its body leaves the start at, as a
+/// it does not open, and one through a door that is not open costing what its body loses at it (waitAt),
+/// none it shuns, and none whose leap takes more than its body leaves the start at, as a
 /// body of `profile` (leastLeapSpeedOf, fastestTakeoffOf), from the ground `links` tells of it. Detour is
 /// built with its filter virtual for it (DT_VIRTUAL_QUERYFILTER, cmake/ports/recastnavigation).
 class WayFilter final : public dtQueryFilter {
@@ -312,10 +313,39 @@ public:
         const float cost = dtQueryFilter::getCost(from, to, previous, previousTile, previousPolygon, current,
                                                   currentTile, currentPolygon, next, nextTile, nextPolygon);
         const auto avoided = std::ranges::lower_bound(avoidedPolygons, current, {}, &AvoidedPolygon::polygon);
-        return avoided != avoidedPolygons.end() && avoided->polygon == current ? cost * avoided->cost : cost;
+        const float costed =
+            avoided != avoidedPolygons.end() && avoided->polygon == current ? cost * avoided->cost : cost;
+        return costed + waitAt(*currentTile, *currentPolygon);
     }
 
 private:
+    /// What a body loses at the door the link of `polygon`, of `tile`, goes through, in units it would have
+    /// run meanwhile: the walk to the nearest of what opens it and back, as the crow flies, when it is not
+    /// open, and the time it takes to open, at its body's run, the fastest body's for a way asked for none
+    /// (AgentProfile::leapSpeed). None for a door open, or for another link's polygon or a floor's.
+    [[nodiscard]] auto waitAt(const dtMeshTile& tile, const dtPoly& polygon) const -> float {
+        if (doors.empty() || polygon.getType() != DT_POLYTYPE_OFFMESH_CONNECTION ||
+            detail::kindOfArea(polygon.getArea()) != AreaKind::Door) {
+            return 0.0F;
+        }
+        const Vec3 through = detail::throughOfId(tile.offMeshCons[linkNumberOf(tile, polygon)].userId, 0.0F);
+        const auto gate = std::ranges::find_if(
+            doors, [through](const Gate& door) { return isSameDoor(door.middle, through); });
+        if (gate == doors.end()) {
+            return 0.0F;
+        }
+        const float run = (body ? body->runSpeed : agentProfile->leapSpeed).value();
+        float walk = 0.0F;
+        if (!gate->isOpen && !gate->openers.empty()) {
+            const auto there =
+                std::ranges::min(gate->openers | std::views::transform([&](const GateOpener& opener) {
+                                     return length(opener.box.closestPoint(gate->middle) - gate->middle);
+                                 }));
+            walk = 2.0F * there;
+        }
+        return walk + (gate->opensIn.count() * run);
+    }
+
     [[nodiscard]] auto isThroughClosedDoor(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
         if (doors.empty() || detail::kindOfArea(polygon.getArea()) != AreaKind::Door) {
             return false;

@@ -768,6 +768,55 @@ TEST(NavigationMeshTest, ADoorJoinsTheFloorsOnItsTwoSidesBothWaysAndNamesItself)
     EXPECT_TRUE(query.findPath({.from = here, .to = there}).has_value()) << "none told of";
 }
 
+TEST(NavigationMeshTest, AWayThroughClosedDoorsGoesThroughTheOneABodyLosesLeastAt) {
+    // A wall across two rooms with two doors in it, standing closed: one on the straight way, one far aside.
+    constexpr nx::Aabb kNear{.min = {.x = 496.0F, .y = 64.0F, .z = 0.0F},
+                             .max = {.x = 528.0F, .y = 128.0F, .z = 96.0F}};
+    constexpr nx::Aabb kAside{.min = {.x = 496.0F, .y = 384.0F, .z = 0.0F},
+                              .max = {.x = 528.0F, .y = 448.0F, .z = 96.0F}};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    for (const auto& [low, high] : {std::pair{-32.0F, kNear.min.y}, std::pair{kNear.max.y, kAside.min.y},
+                                    std::pair{kAside.max.y, 544.0F}}) {
+        nx::test::addBox(geometry, {.x = 496.0F, .y = low, .z = 0.0F}, {.x = 528.0F, .y = high, .z = 128.0F});
+    }
+    for (const nx::Aabb& door : {kNear, kAside}) {
+        nx::test::addBox(geometry, door.min, door.max);
+        geometry.doors.push_back(door);
+    }
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    nx::navigation::NavigationQuery query{mesh};
+    const auto usedItself = [](const nx::Aabb& door, nx::Seconds opensIn) {
+        return nx::navigation::Gate{.middle = door.center(),
+                                    .opensIn = opensIn,
+                                    .openers = {{.box = door, .kind = nx::navigation::OpenerKind::Used}}};
+    };
+    const auto goesAside = [&](std::span<const nx::navigation::Gate> gates) {
+        const auto way = query.findPath({.from = {.x = 128.0F, .y = 96.0F},
+                                         .to = {.x = 896.0F, .y = 96.0F},
+                                         .gates = gates,
+                                         .opensGates = true,
+                                         .body = nx::test::bodyLeavingAt(nx::UnitsPerSecond{250.0F})});
+        EXPECT_TRUE(way.has_value());
+        return way && std::ranges::any_of(way->points, [&](Vec3 point) { return point.y > kAside.min.y; });
+    };
+    const nx::Seconds kQuick{0.5F};
+    EXPECT_FALSE(goesAside(std::array{usedItself(kNear, kQuick), usedItself(kAside, kQuick)}))
+        << "the straight way";
+    EXPECT_TRUE(goesAside(std::array{usedItself(kNear, nx::Seconds{10.0F}), usedItself(kAside, kQuick)}))
+        << "the way round, shorter than the wait for the slow door";
+    // The near door opened by a button in the far corner of the room: the walk there and back.
+    nx::navigation::Gate farButton = usedItself(kNear, kQuick);
+    farButton.openers = {
+        {.box = nx::Aabb::around({.x = 16.0F, .y = 496.0F, .z = 48.0F}, {.x = 8.0F, .y = 8.0F, .z = 8.0F}),
+         .kind = nx::navigation::OpenerKind::Used}};
+    EXPECT_TRUE(goesAside(std::array{farButton, usedItself(kAside, kQuick)}));
+    // Standing open, a door costs the way through it its length alone.
+    nx::navigation::Gate open = usedItself(kNear, {});
+    open.isOpen = true;
+    EXPECT_FALSE(goesAside(std::array{open, usedItself(kAside, {})}));
+}
+
 TEST(NavigationMeshTest, ALedgeOnlyACrouchedJumpReachesIsLinkedBothWaysOfItsOwnKind) {
     // On a floor at 0, a box 50 tall: higher than a jump and within one ducking in the air.
     constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};
