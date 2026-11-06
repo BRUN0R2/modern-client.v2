@@ -232,7 +232,8 @@ public:
     /// across, and a step of its height, as it measures how near a corner is; a corner it reached it heads
     /// on from, however far it drifts from it before its corridor drops it, unless it gets stuck
     /// (noteStuck). Its feet within arrivalDistance of the start of
-    /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up, and heads
+    /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up or over a
+    /// gap, from the ground, as one in the air, flying down stairs, cannot jump and waits to land, and heads
     /// for the link's end, which its corridor goes on from, until it stands on the ground, `isOnGround`,
     /// within a step of the end's height as far from the start as the end is; back on it below that height,
     /// as it fell off a ledge it jumped at, it searches its way anew from there; at that height, it walks on
@@ -348,13 +349,14 @@ private:
     void approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
                   const navigation::AgentProfile& profile, const std::optional<navigation::MeshLink>& next,
                   UnitsPerSecond maxSpeed);
-    /// Finds `next` and crosses it when `feet` are within arrivalDistance of its start, a body going at
-    /// `velocity` too slowly for a gap there backing off for a run at it once (runUpFrom), as far as running
-    /// at `maxSpeed` it gains what it takes (navigation::runUpOf), and no farther than the floor behind the
-    /// start goes (navigation::Takeoff::room). If crossing fails, finds `next` again because the corridor may
-    /// have changed. Returns whether it crosses one.
-    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPerSecond maxSpeed,
-                                     navigation::NavigationQuery& query,
+    /// Finds `next` and crosses it when `feet` are within arrivalDistance of its start, on the ground,
+    /// `isOnGround`, for a link it jumps, a body going at `velocity` too slowly for a gap there backing off
+    /// for a run at it once (runUpFrom), as far as running at `maxSpeed` it gains what it takes
+    /// (navigation::runUpOf), and no farther than the floor behind the start goes
+    /// (navigation::Takeoff::room). If crossing fails, finds `next` again because the corridor may have
+    /// changed. Returns whether it crosses one.
+    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, bool isOnGround, Vec3 velocity,
+                                     UnitsPerSecond maxSpeed, navigation::NavigationQuery& query,
                                      std::span<const navigation::Gate> gates,
                                      std::optional<navigation::MeshLink>& next) -> bool;
     /// Forgets the corridor it follows, and the link it crosses on it: another is searched.
