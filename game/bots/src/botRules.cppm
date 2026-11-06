@@ -194,6 +194,8 @@ struct BotRules {
     float braking = 0.0F;
     nx::UnitsPerSecond stopSpeed{};
     float acceleration = 0.0F;
+    float crouchedShare = 0.0F;
+    nx::UnitsPerSecond airSpeed{};
     nx::Seconds shortTermMemory{};
     nx::Seconds threatRecency{};
     nx::HammerUnits threatMargin{};
@@ -392,6 +394,9 @@ struct nx::meta::Description<cs::BotRules> {
         nx::meta::field<&cs::BotRules::braking>("braking", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::stopSpeed>("stopSpeed", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::acceleration>("acceleration", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotRules::crouchedShare>("crouchedShare",
+                                                      nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotRules::airSpeed>("airSpeed", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::shortTermMemory>("shortTermMemory", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::threatRecency>("threatRecency", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::threatMargin>("threatMargin", nx::data::Range{.minimum = 0.0}),

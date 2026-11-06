@@ -277,7 +277,7 @@ void Deciders::assignGates(std::span<const DecisionRequest> requests, std::span<
                 .findPath({.from = candidate.request->feet,
                            .to = candidate.opener.box.center(),
                            .gates = gates,
-                           .leapSpeed = leapSpeedOf(candidate.request->maxSpeed)})
+                           .body = candidate.request->brain->bodyMotion(candidate.request->maxSpeed)})
                 .has_value();
         });
         if (chosen != candidates.end()) {

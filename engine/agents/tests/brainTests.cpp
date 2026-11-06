@@ -960,6 +960,37 @@ TEST(AgentBrain, ABodyBackOnTheGroundBelowALinksEndSearchesItsWayAnewAndJumpsAga
     EXPECT_TRUE(up.brain.decide(up.atStart(), up.query, kRunSpeed).intent.jumps) << "fallen short, once more";
 }
 
+TEST(AgentBrain, ABodyDucksDownACrouchedJumpOverAGapAsUpIt) {
+    // A floor 50 units over another past a gap, higher than it jumps standing: up it jumps ducking in the
+    // air, and down too, the flight a ducked body's, each way a link of its own.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 500, .y = 512}, 0);
+    nx::test::addFloor(geometry, {.x = 580, .y = 0}, {.x = 1024, .y = 512}, 50);
+    nx::navigation::AgentProfile jumping = nx::test::playerProfile();
+    jumping.crouchedJumpHeight = nx::HammerUnits{62.5F};
+    const auto mesh = nx::test::playerMesh(geometry, 0, jumping);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    const nx::Vec3 goal{.x = 256, .y = 256};
+    brain.setGoal(goal);
+    auto corridor =
+        nx::navigation::Corridor::plan(query, {.from = {.x = 800, .y = 256, .z = 50}, .to = goal});
+    ASSERT_TRUE(corridor.has_value());
+    const auto link = corridor->nextLink(query);
+    ASSERT_TRUE(link.has_value());
+    ASSERT_EQ(link->kind, nx::navigation::AreaKind::CrouchedJump);
+    ASSERT_LT(link->end.z, link->start.z);
+    ASSERT_TRUE(link->takeoff.has_value()) << "over a gap";
+    // Running at it, as fast as it runs: no run up to take.
+    const nx::agents::Decision jump = brain.decide(link->start + nx::Vec3{.x = 1}, query, kRunSpeed, true,
+                                                   nx::Vec3{.x = -kRunSpeed.value()});
+    ASSERT_TRUE(jump.intent.jumps);
+    EXPECT_TRUE(jump.intent.crouches);
+    const nx::Vec3 over{.x = (link->start.x + link->end.x) * 0.5F, .y = link->start.y, .z = link->start.z};
+    EXPECT_TRUE(brain.decide(over, query, kRunSpeed, false).intent.crouches) << "in the air";
+    EXPECT_FALSE(brain.decide(link->end, query, kRunSpeed).intent.crouches) << "landed";
+}
+
 TEST(AgentBrain, ABodyBackOnTheGroundAtTheHeightOfALinksEndShortOfItWalksOnToItUpright) {
     const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 50}};
     nx::navigation::AgentProfile jumping = nx::test::playerProfile();

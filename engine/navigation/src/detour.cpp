@@ -55,15 +55,15 @@ constexpr std::size_t kCoordinates = 3;
     });
 }
 
-/// Whether a way may be searched for `request`. Errors: InvalidQuery (a cost, an avoided place or a leap's
-/// speed out of bounds).
+/// Whether a way may be searched for `request`. Errors: InvalidQuery (a cost, an avoided place or the body's
+/// motion out of bounds).
 [[nodiscard]] auto checkRequest(const PathRequest& request) -> Result<void, NavigationError> {
     if (request.costs && !validCosts(*request.costs)) {
         return fail(NavigationError::InvalidQuery, "area costs must be finite and at least one");
     }
-    if (request.leapSpeed &&
-        !(std::isfinite(request.leapSpeed->value()) && *request.leapSpeed >= UnitsPerSecond{})) {
-        return fail(NavigationError::InvalidQuery, "a leap's speed must be finite, of none or more");
+    if (request.body && !isValidMotion(*request.body)) {
+        return fail(NavigationError::InvalidQuery,
+                    "a body's speeds and rates must be finite, of none or more");
     }
     if (!validAvoided(request.avoided)) {
         return fail(
@@ -134,6 +134,146 @@ void endUnlessAllocated(bool isAllocated, std::string_view what) noexcept {
     return filter;
 }
 
+/// Point `index` of `points`, Detour's coordinates one after another.
+[[nodiscard]] auto pointAt(std::span<const float> points, std::size_t index) -> std::span<const float, 3> {
+    return points.subspan(index * kCoordinates).first<kCoordinates>();
+}
+
+/// The edges Detour gives the joins of a link's polygon to the floor at its start and at its end
+/// (dtNavMesh::baseOffMeshLinks, connectExtOffMeshLinks).
+constexpr unsigned char kLinkStartEdge = 0;
+constexpr unsigned char kLinkEndEdge = 1;
+
+/// The polygon Detour joined the link of `polygon`, of `tile`, to at its start; none when it found no floor
+/// there.
+[[nodiscard]] auto startPolygonOf(const dtMeshTile& tile, const dtPoly& polygon) noexcept -> dtPolyRef {
+    for (unsigned int link = polygon.firstLink; link != DT_NULL_LINK; link = tile.links[link].next) {
+        if (tile.links[link].edge == kLinkStartEdge) {
+            return tile.links[link].ref;
+        }
+    }
+    return 0;
+}
+
+/// The number of the link of `polygon`, of `tile`, among the tile's links (dtMeshHeader::offMeshBase).
+[[nodiscard]] auto linkNumberOf(const dtMeshTile& tile, const dtPoly& polygon) -> std::size_t {
+    const std::span polygons{tile.polys, narrow<std::size_t>(tile.header->polyCount)};
+    return narrow<std::size_t>(&polygon - polygons.data()) - narrow<std::size_t>(tile.header->offMeshBase);
+}
+
+/// Whether a link of the kind `kind` is a flight, which a body leaves its start of by a leap over a gap.
+[[nodiscard]] auto isFlight(AreaKind kind) noexcept -> bool {
+    return kind == AreaKind::Jump || kind == AreaKind::CrouchedJump || kind == AreaKind::Drop;
+}
+
+/// The link from `start` to `end` of the polygon `polygon` of `connection`: a ladder's or a door's knows what
+/// it goes through, and one over a gap the ground its start is, the floor behind it going on `room`.
+[[nodiscard]] auto linkOf(Vec3 start, Vec3 end, const dtPoly& polygon, const dtOffMeshConnection& connection,
+                          HammerUnits room) -> MeshLink {
+    const AreaKind kind = detail::kindOfArea(polygon.getArea());
+    const bool goesThrough = kind == AreaKind::Ladder || kind == AreaKind::Door;
+    return MeshLink{.start = start,
+                    .end = end,
+                    .kind = kind,
+                    .through = goesThrough ? detail::throughOfId(connection.userId, start.z) : Vec3{},
+                    .takeoff = isFlight(kind) ? detail::takeoffOfId(connection.userId, room) : std::nullopt};
+}
+
+/// How many nodes a query that only walks a mesh straight is made with: Detour's raycast takes none of its
+/// search's, which dtNavMeshQuery::init asks some of, as few as its own small search has.
+constexpr int kWalkNodes = 64;
+
+/// The floor behind the start of each link over a gap of a mesh (Takeoff::room): how far a body's middle goes
+/// on the mesh from the start, straight away from the end, as far as the mesh reaches across, which Detour's
+/// raycast tells, by tile and link as Detour numbers them. A query's filter reads it as Detour searches, when
+/// no walk of its own may be made, and a brain's run at a gap goes as far as it.
+class LinkRooms {
+public:
+    /// The rooms of the links of `navigationMesh`, which must outlive them, once it has its tiles.
+    explicit LinkRooms(const dtNavMesh& navigationMesh) : mesh{&navigationMesh} {
+        std::unique_ptr<dtNavMeshQuery, NavMeshQueryFree> query{dtAllocNavMeshQuery()};
+        endUnlessAllocated(query != nullptr && dtStatusSucceed(query->init(mesh, kWalkNodes)),
+                           "a walk behind the links");
+        std::array<float, kCoordinates> low{};
+        std::array<float, kCoordinates> high{};
+        bool hasTile = false;
+        for (int index = 0; index < mesh->getMaxTiles(); ++index) {
+            const dtMeshTile* const tile = mesh->getTile(index);
+            if (tile == nullptr || tile->header == nullptr) {
+                continue;
+            }
+            for (std::size_t axis = 0; axis < kCoordinates; ++axis) {
+                low[axis] =
+                    hasTile ? std::min(low[axis], tile->header->bmin[axis]) : tile->header->bmin[axis];
+                high[axis] =
+                    hasTile ? std::max(high[axis], tile->header->bmax[axis]) : tile->header->bmax[axis];
+            }
+            hasTile = true;
+        }
+        const float farthest = std::hypot(high[0] - low[0], high[2] - low[2]);
+        const dtQueryFilter filter;
+        rooms.resize(narrow<std::size_t>(mesh->getMaxTiles()));
+        for (int index = 0; index < mesh->getMaxTiles(); ++index) {
+            const dtMeshTile* const tile = mesh->getTile(index);
+            if (tile == nullptr || tile->header == nullptr) {
+                continue;
+            }
+            const std::span connections{tile->offMeshCons,
+                                        narrow<std::size_t>(tile->header->offMeshConCount)};
+            const std::span vertices{tile->verts,
+                                     narrow<std::size_t>(tile->header->vertCount) * kCoordinates};
+            std::vector<HammerUnits>& ofTile = rooms[narrow<std::size_t>(index)];
+            ofTile.resize(connections.size());
+            for (std::size_t number = 0; number < connections.size(); ++number) {
+                const dtOffMeshConnection& connection = connections[number];
+                const dtPoly& polygon = tile->polys[connection.poly];
+                const dtPolyRef from = startPolygonOf(*tile, polygon);
+                if (!isFlight(detail::kindOfArea(polygon.getArea())) ||
+                    !detail::takeoffOfId(connection.userId, {}) || from == 0) {
+                    continue;
+                }
+                // From where Detour put its start, on the polygon it joined it to.
+                const std::span<const float, 3> start = pointAt(vertices, polygon.verts[0]);
+                const std::span<const float, 3> end = pointAt(vertices, polygon.verts[1]);
+                const float awayX = start[0] - end[0];
+                const float awayZ = start[2] - end[2];
+                const float away = std::hypot(awayX, awayZ);
+                if (away <= 0.0F) {
+                    continue;
+                }
+                const std::array<float, kCoordinates> back{start[0] + (awayX / away * farthest), start[1],
+                                                           start[2] + (awayZ / away * farthest)};
+                dtRaycastHit hit{};
+                const dtStatus walked = query->raycast(from, start.data(), back.data(), &filter, 0, &hit);
+                invariant(dtStatusSucceed(walked), "LinkRooms: Detour walks from a polygon of its mesh");
+                // Detour gives the most a float holds when nothing stops the walk.
+                ofTile[number] = HammerUnits{std::min(hit.t, 1.0F) * farthest};
+            }
+        }
+    }
+
+    /// The floor behind the start of the link of `polygon`, of `tile` of its mesh: none for a link that spans
+    /// no gap, or that Detour joined to no floor at its start.
+    [[nodiscard]] auto roomOf(const dtMeshTile& tile, const dtPoly& polygon) const -> HammerUnits {
+        const auto index = narrow<std::size_t>(mesh->decodePolyIdTile(mesh->getTileRef(&tile)));
+        return rooms[index][linkNumberOf(tile, polygon)];
+    }
+
+    /// The link of `polygon`, of `tile` of its mesh, from its start to its end, as Detour holds it (linkOf).
+    [[nodiscard]] auto linkAt(const dtMeshTile& tile, const dtPoly& polygon) const -> MeshLink {
+        const std::span vertices{tile.verts, narrow<std::size_t>(tile.header->vertCount) * kCoordinates};
+        const auto endOf = [&](std::size_t end) {
+            return detail::positionOf(pointAt(vertices, polygon.verts[end]));
+        };
+        return linkOf(endOf(0), endOf(1), polygon, tile.offMeshCons[linkNumberOf(tile, polygon)],
+                      roomOf(tile, polygon));
+    }
+
+private:
+    const dtNavMesh* mesh;
+    std::vector<std::vector<HammerUnits>> rooms; ///< By tile, as Detour numbers them, and by link of each.
+};
+
 /// A polygon an avoided place reaches, and how many times its own cost it costs (PathRequest::avoided).
 struct AvoidedPolygon {
     dtPolyRef polygon = 0;
@@ -142,15 +282,15 @@ struct AvoidedPolygon {
 
 /// Detour's filter of a way: `base`'s, each polygon of `avoided` (sorted by polygon, each once, outliving
 /// the filter) costing its share times its own, no link through a door closed among `request`'s gates, that
-/// it does not open, none it shuns, and none whose leap takes more than its body leaves a ledge at, as a body
-/// of `profile` (leastLeapSpeedOf). Detour is built with its filter virtual for it (DT_VIRTUAL_QUERYFILTER,
-/// cmake/ports/recastnavigation).
+/// it does not open, none it shuns, and none whose leap takes more than its body leaves the start at, as a
+/// body of `profile` (leastLeapSpeedOf, fastestTakeoffOf), from the ground `links` tells of it. Detour is
+/// built with its filter virtual for it (DT_VIRTUAL_QUERYFILTER, cmake/ports/recastnavigation).
 class WayFilter final : public dtQueryFilter {
 public:
     WayFilter(const dtQueryFilter& base, std::span<const AvoidedPolygon> avoided, const PathRequest& request,
-              const AgentProfile& profile) noexcept
+              const AgentProfile& profile, const LinkRooms& links) noexcept
         : dtQueryFilter{base}, avoidedPolygons{avoided}, doors{request.gates}, opensDoors{request.opensGates},
-          shunnedLinks{request.shunned}, leapSpeed{request.leapSpeed}, agentProfile{&profile} {}
+          shunnedLinks{request.shunned}, body{request.body}, agentProfile{&profile}, meshLinks{&links} {}
 
     [[nodiscard]] auto passFilter(dtPolyRef polygonRef, const dtMeshTile* tile, const dtPoly* polygon) const
         -> bool override {
@@ -176,46 +316,31 @@ public:
     }
 
 private:
-    /// The connection of `polygon`, a link's, of `tile`.
-    [[nodiscard]] static auto connectionOf(const dtMeshTile& tile, const dtPoly& polygon)
-        -> const dtOffMeshConnection& {
-        const std::span polygons{tile.polys, narrow<std::size_t>(tile.header->polyCount)};
-        const auto index = narrow<int>(&polygon - polygons.data());
-        const std::span connections{tile.offMeshCons, narrow<std::size_t>(tile.header->offMeshConCount)};
-        return connections[narrow<std::size_t>(index - tile.header->offMeshBase)];
-    }
-
     [[nodiscard]] auto isThroughClosedDoor(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
         if (doors.empty() || detail::kindOfArea(polygon.getArea()) != AreaKind::Door) {
             return false;
         }
-        const Vec3 through = detail::throughOfId(connectionOf(tile, polygon).userId, 0.0F);
+        const Vec3 through = detail::throughOfId(tile.offMeshCons[linkNumberOf(tile, polygon)].userId, 0.0F);
         return std::ranges::any_of(doors, [this, through](const Gate& gate) {
             return !gate.isOpen && (!opensDoors || gate.openers.empty()) && isSameDoor(gate.middle, through);
         });
     }
 
-    /// The link of `polygon`, of `tile`, from its start to its end, of the kind of its area.
-    [[nodiscard]] static auto linkAt(const dtMeshTile& tile, const dtPoly& polygon) -> MeshLink {
-        const std::span vertices{tile.verts, narrow<std::size_t>(tile.header->vertCount) * kCoordinates};
-        const auto endOf = [&](std::size_t end) {
-            return detail::positionOf(
-                vertices.subspan(std::size_t{polygon.verts[end]} * kCoordinates).first<kCoordinates>());
-        };
-        return MeshLink{.start = endOf(0), .end = endOf(1), .kind = detail::kindOfArea(polygon.getArea())};
-    }
-
     /// A link both ways spans no gap, and takes no leap either way: over one, each way is a link of its own.
     [[nodiscard]] auto isFlownTooFast(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
-        return leapSpeed &&
-               leastLeapSpeedOf(linkAt(tile, polygon), *agentProfile, HammerUnits{}) > *leapSpeed;
+        if (!body) {
+            return false;
+        }
+        const MeshLink link = meshLinks->linkAt(tile, polygon);
+        return leastLeapSpeedOf(link, *agentProfile, HammerUnits{}) >
+               fastestTakeoffOf(link, *agentProfile, *body);
     }
 
     [[nodiscard]] auto isShunned(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
         if (shunnedLinks.empty()) {
             return false;
         }
-        const MeshLink at = linkAt(tile, polygon);
+        const MeshLink at = meshLinks->linkAt(tile, polygon);
         const Vec3 one = at.start;
         const Vec3 other = at.end;
         constexpr float kSameEnd = 0.5F;
@@ -232,24 +357,15 @@ private:
     std::span<const Gate> doors;
     bool opensDoors = false;
     std::span<const MeshLink> shunnedLinks;
-    std::optional<UnitsPerSecond> leapSpeed;
+    std::optional<BodyMotion> body;
     const AgentProfile* agentProfile;
+    const LinkRooms* meshLinks;
 };
 
 /// The bits that number `count` things, at least one.
 [[nodiscard]] auto bitsToNumber(std::size_t count) noexcept -> std::uint32_t {
     return narrow<std::uint32_t>(std::bit_width(std::bit_ceil(std::max(count, std::size_t{1}))) - 1);
 }
-
-/// Point `index` of `points`, Detour's coordinates one after another.
-[[nodiscard]] auto pointAt(std::span<const float> points, std::size_t index) -> std::span<const float, 3> {
-    return points.subspan(index * kCoordinates).first<kCoordinates>();
-}
-
-/// The edges Detour gives the joins of a link's polygon to the floor at its start and at its end
-/// (dtNavMesh::baseOffMeshLinks, connectExtOffMeshLinks).
-constexpr unsigned char kLinkStartEdge = 0;
-constexpr unsigned char kLinkEndEdge = 1;
 
 /// Whether Detour joined the link of `polygon`, of `tile`, to the floor at both its ends: one a body
 /// crosses. One it found no floor for at an end is no way.
@@ -261,18 +377,6 @@ constexpr unsigned char kLinkEndEdge = 1;
         isEndJoined = isEndJoined || tile.links[link].edge == kLinkEndEdge;
     }
     return isStartJoined && isEndJoined;
-}
-
-/// The link from `start` to `end` of the polygon `polygon` of `connection`: a ladder's knows the ladder.
-[[nodiscard]] auto linkOf(Vec3 start, Vec3 end, const dtPoly& polygon, const dtOffMeshConnection& connection)
-    -> MeshLink {
-    const AreaKind kind = detail::kindOfArea(polygon.getArea());
-    return MeshLink{.start = start,
-                    .end = end,
-                    .kind = kind,
-                    .through = kind == AreaKind::Ladder || kind == AreaKind::Door
-                                   ? detail::throughOfId(connection.userId, start.z)
-                                   : Vec3{}};
 }
 
 /// The corners of `polygon` of `tile`, in Detour's space, one point after another.
@@ -527,30 +631,13 @@ private:
 
 } // namespace
 
-auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerUnits shortOfStart) noexcept
-    -> UnitsPerSecond {
-    const float gap = detail::gapAcross(link.start, link.end, profile.radius);
-    if (link.kind == AreaKind::Ladder || link.kind == AreaKind::Door || gap <= 0.0F) {
-        return UnitsPerSecond{};
-    }
-    const float gravity = profile.gravity.value();
-    const float jump = link.kind == AreaKind::CrouchedJump && profile.crouchedJumpHeight
-                           ? profile.crouchedJumpHeight->value()
-                           : profile.jumpHeight.value();
-    const float rising = std::sqrt(2.0F * gravity * jump);
-    // Down from as high as it rises to the end's height; none when the end is as high as it rises or higher.
-    const float falling =
-        std::sqrt(std::max((rising * rising) - (2.0F * gravity * (link.end.z - link.start.z)), 0.0F));
-    const float inTheAir = (rising + falling) / gravity;
-    return UnitsPerSecond{(gap + shortOfStart.value()) / inTheAir};
-}
-
 struct NavigationMesh::Detour {
     /// The tiles' data, which Detour keeps pointers into: declared before its mesh, which goes first.
     std::vector<std::vector<std::byte>> tiles;
     std::unique_ptr<dtNavMesh, NavMeshFree> mesh;
     std::size_t polygonCount = 0;
-    std::optional<PolygonReach> reach{}; ///< Once it has its tiles.
+    std::optional<PolygonReach> reach{};  ///< Once it has its tiles.
+    std::optional<LinkRooms> linkRooms{}; ///< Once it has its tiles.
 };
 
 NavigationMesh::NavigationMesh(std::unique_ptr<Detour> detour, AgentProfile profile) noexcept
@@ -653,6 +740,7 @@ auto NavigationMesh::assemble(detail::BuiltTiles built, const AgentProfile& prof
         }
     }
     detour->reach.emplace(*detour->mesh);
+    detour->linkRooms.emplace(*detour->mesh);
     return NavigationMesh{std::move(detour), profile};
 }
 
@@ -680,11 +768,10 @@ auto NavigationMesh::outline() const -> MeshOutline {
             if (polygon.getType() == DT_POLYTYPE_OFFMESH_CONNECTION) {
                 // Its ends where Detour put them, on the polygons it joins.
                 if (isJoined(*tile, polygon)) {
-                    const dtOffMeshConnection& connection =
-                        tile->offMeshCons[number - narrow<std::size_t>(tile->header->offMeshBase)];
                     outline.links.push_back(linkOf(detail::positionOf(pointAt(corners, 0)),
                                                    detail::positionOf(pointAt(corners, 1)), polygon,
-                                                   connection));
+                                                   tile->offMeshCons[linkNumberOf(*tile, polygon)],
+                                                   detourState->linkRooms->roomOf(*tile, polygon)));
                 }
                 continue;
             }
@@ -804,6 +891,7 @@ struct NavigationQuery::Detour {
     /// The profile's edge reach, looked within next, none being within reach (NavigationQuery).
     Reach edgeReach{};
     const PolygonReach* polygonReach = nullptr; ///< Of its mesh.
+    const LinkRooms* linkRooms = nullptr;       ///< Of its mesh.
     std::vector<dtPolyRef> polygons;            ///< Room for a way's polygons, or those a circle reaches.
     std::vector<float> points;                  ///< Room for a way's corners.
     std::vector<AvoidedPolygon> avoided;        ///< Room for the polygons a way's avoided places reach.
@@ -910,6 +998,7 @@ NavigationQuery::NavigationQuery(const NavigationMesh& mesh)
     const AgentProfile& profile = mesh.profile();
     detourState->filter = filterOf(areaCostsOf(profile));
     detourState->polygonReach = &*mesh.detourState->reach;
+    detourState->linkRooms = &*mesh.detourState->linkRooms;
     detourState->reach = {
         .extents = {profile.radius.value(), profile.standingHeight.value(), profile.radius.value()}};
     // The radius the mesh keeps from the floor's end, and the body's width: the half of it past the floor's
@@ -943,7 +1032,7 @@ auto NavigationQuery::findPath(const PathRequest& request) -> Result<Path, Navig
     }
     const WayFilter filter{request.costs ? filterOf(*request.costs) : detourState->filter,
                            detourState->avoidedPolygonsOf(request.avoided), request,
-                           navigationMesh->profile()};
+                           navigationMesh->profile(), *detourState->linkRooms};
     const auto polygons = detourState->polygonPath(*from, *to, filter);
     if (!polygons) {
         return std::unexpected{polygons.error()};
@@ -1106,7 +1195,8 @@ auto Corridor::plan(NavigationQuery& query, const PathRequest& request) -> Resul
         return std::unexpected{to.error()};
     }
     const WayFilter filter{request.costs ? filterOf(*request.costs) : search.filter,
-                           search.avoidedPolygonsOf(request.avoided), request, query.mesh().profile()};
+                           search.avoidedPolygonsOf(request.avoided), request, query.mesh().profile(),
+                           *search.linkRooms};
     const auto polygons = search.polygonPath(*from, *to, filter);
     if (!polygons) {
         return std::unexpected{polygons.error()};
@@ -1203,9 +1293,11 @@ struct NextLink {
 };
 
 /// The link `corridor` crosses next on `mesh`, its next corner the link's start, found by `query` and
-/// `filter`: the way it crosses it, from the polygon before it in the corridor; none.
+/// `filter`: the way it crosses it, from the polygon before it in the corridor, the floor behind its start as
+/// `rooms` tells it; none.
 [[nodiscard]] auto nextLinkOf(dtPathCorridor& corridor, const dtNavMesh& mesh, dtNavMeshQuery& query,
-                              const dtQueryFilter& filter) -> std::optional<NextLink> {
+                              const dtQueryFilter& filter, const LinkRooms& rooms)
+    -> std::optional<NextLink> {
     // Room for the agent's own point, which Detour finds first and leaves out, and the next corner: a
     // link's start, the last it finds.
     constexpr int kNextCorner = 2;
@@ -1236,8 +1328,8 @@ struct NextLink {
         return std::nullopt;
     }
     return NextLink{.polygon = *link,
-                    .link =
-                        linkOf(detail::positionOf(start), detail::positionOf(end), *polygon, *connection)};
+                    .link = linkOf(detail::positionOf(start), detail::positionOf(end), *polygon, *connection,
+                                   rooms.roomOf(*tile, *polygon))};
 }
 
 } // namespace
@@ -1248,7 +1340,7 @@ auto Corridor::nextLink(NavigationQuery& query) -> std::optional<MeshLink> {
         return std::nullopt;
     }
     return nextLinkOf(detourState->corridor, *query.detourState->query->getAttachedNavMesh(),
-                      *query.detourState->query, query.detourState->filter)
+                      *query.detourState->query, query.detourState->filter, *query.detourState->linkRooms)
         .transform([](const NextLink& next) { return next.link; });
 }
 
@@ -1295,7 +1387,7 @@ auto Corridor::crossLink(NavigationQuery& query) -> std::optional<MeshLink> {
     }
     const std::optional<NextLink> next =
         nextLinkOf(detourState->corridor, *query.detourState->query->getAttachedNavMesh(),
-                   *query.detourState->query, query.detourState->filter);
+                   *query.detourState->query, query.detourState->filter, *query.detourState->linkRooms);
     if (!next) {
         return std::nullopt;
     }
@@ -1369,7 +1461,8 @@ auto Corridor::steer(NavigationQuery& query, const SteeringRequest& request) -> 
     // on it, or just inside it where it is the side of a tile.
     constexpr float kOnLedge = detail::kLinkInsetFromTileSide + kTouching;
     const std::optional<std::array<float, 3>> linkStart =
-        nextLinkOf(detourState->corridor, *search.query->getAttachedNavMesh(), *search.query, search.filter)
+        nextLinkOf(detourState->corridor, *search.query->getAttachedNavMesh(), *search.query, search.filter,
+                   *search.linkRooms)
             .transform([](const NextLink& next) { return detail::detourOf(next.link.start); });
     for (int wall = 0; wall < walls.getSegmentCount(); ++wall) {
         const float* const segment = walls.getSegment(wall);

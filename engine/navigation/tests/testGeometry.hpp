@@ -34,6 +34,12 @@ namespace nx::test {
     return profile;
 }
 
+/// A body that leaves a ledge at `speed` from wherever it stands: at its full speed at once, as fast
+/// crouched, with nothing from the air.
+[[nodiscard]] inline auto bodyLeavingAt(nx::UnitsPerSecond speed) -> nx::navigation::BodyMotion {
+    return nx::navigation::BodyMotion{.runSpeed = speed, .crouchedSpeed = speed};
+}
+
 /// Cells of 4 units by 2 in tiles of 32 cells: 128 units.
 [[nodiscard]] inline auto testSettings() -> nx::navigation::BuildSettings {
     return nx::navigation::BuildSettings{.cellSize = nx::HammerUnits{4.0F},

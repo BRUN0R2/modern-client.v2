@@ -456,12 +456,14 @@ TEST(NavigationMeshTest, NoWayGoesOverAGapThatTakesALeapFasterThanItsBodyLeavesA
     const Vec3 here{.x = 256.0F, .y = 256.0F};
     const Vec3 there{.x = 512.0F + kGap + 256.0F, .y = 256.0F};
     EXPECT_TRUE(query.findPath({.from = here, .to = there}).has_value()) << "any body's";
-    EXPECT_TRUE(query.findPath({.from = here, .to = there, .leapSpeed = least}).has_value());
-    const auto tooSlow =
-        query.findPath({.from = here, .to = there, .leapSpeed = least - nx::UnitsPerSecond{1.0F}});
+    EXPECT_TRUE(
+        query.findPath({.from = here, .to = there, .body = nx::test::bodyLeavingAt(least)}).has_value());
+    const auto tooSlow = query.findPath(
+        {.from = here, .to = there, .body = nx::test::bodyLeavingAt(least - nx::UnitsPerSecond{1.0F})});
     ASSERT_FALSE(tooSlow.has_value());
     EXPECT_EQ(tooSlow.error().code, nx::navigation::NavigationError::Unreachable);
-    const auto unknown = query.findPath({.from = here, .to = there, .leapSpeed = nx::UnitsPerSecond{-1.0F}});
+    const auto unknown = query.findPath(
+        {.from = here, .to = there, .body = nx::test::bodyLeavingAt(nx::UnitsPerSecond{-1.0F})});
     ASSERT_FALSE(unknown.has_value());
     EXPECT_EQ(unknown.error().code, nx::navigation::NavigationError::InvalidQuery);
 }
@@ -500,10 +502,10 @@ TEST(NavigationMeshTest, EachWayOverAGapIsALinkOfItsOwnJudgedByItsOwnFlight) {
     nx::navigation::NavigationQuery query{mesh};
     const Vec3 low{.x = 256.0F, .y = 256.0F};
     const Vec3 high{.x = kEdge + kGap + 256.0F, .y = 256.0F, .z = kRise};
-    EXPECT_TRUE(query.findPath({.from = low, .to = high, .leapSpeed = up}).has_value());
-    EXPECT_TRUE(query.findPath({.from = high, .to = low, .leapSpeed = down}).has_value())
+    EXPECT_TRUE(query.findPath({.from = low, .to = high, .body = nx::test::bodyLeavingAt(up)}).has_value());
+    EXPECT_TRUE(query.findPath({.from = high, .to = low, .body = nx::test::bodyLeavingAt(down)}).has_value())
         << "down, by its own flight";
-    const auto tooSlowUp = query.findPath({.from = low, .to = high, .leapSpeed = down});
+    const auto tooSlowUp = query.findPath({.from = low, .to = high, .body = nx::test::bodyLeavingAt(down)});
     ASSERT_FALSE(tooSlowUp.has_value());
     EXPECT_EQ(tooSlowUp.error().code, NavigationError::Unreachable);
 }
@@ -524,6 +526,124 @@ TEST(NavigationMeshTest, ALinkWithNoGapTakesNoLeapAndALadderNone) {
     EXPECT_GT(nx::navigation::leastLeapSpeedOf(up, profile, nx::HammerUnits{8.0F}),
               nx::navigation::leastLeapSpeedOf(up, profile, {}))
         << "jumping short of the start, it has farther to go";
+}
+
+TEST(NavigationMeshTest, ABodyLeavesAGapsStartAsFastAsItsGroundLetsIt) {
+    const nx::navigation::AgentProfile profile = nx::test::playerProfile();
+    const float radius = profile.radius.value();
+    const nx::navigation::BodyMotion body{.runSpeed = nx::UnitsPerSecond{250.0F},
+                                          .crouchedSpeed = nx::UnitsPerSecond{83.0F},
+                                          .airSpeed = nx::UnitsPerSecond{30.0F},
+                                          .acceleration = 5.0F,
+                                          .braking = 4.0F};
+    const MeshLink open{.start = {}, .end = {.x = 6.0F * radius, .z = -40.0F}, .kind = AreaKind::Jump};
+    EXPECT_EQ(nx::navigation::fastestTakeoffOf(open, profile, body), body.runSpeed) << "from open ground";
+    // No floor behind it but what its radius keeps: what the air gives it.
+    MeshLink sill = open;
+    sill.takeoff = nx::navigation::Takeoff{.room = profile.radius, .rise = profile.jumpHeight};
+    EXPECT_EQ(nx::navigation::fastestTakeoffOf(sill, profile, body), body.airSpeed);
+    // As fast as it gets over the floor it runs at the gap from, which is as far as that speed takes.
+    MeshLink floor = open;
+    floor.takeoff = nx::navigation::Takeoff{.room = nx::HammerUnits{60.0F}, .rise = profile.jumpHeight};
+    const nx::UnitsPerSecond reached = nx::navigation::fastestTakeoffOf(floor, profile, body);
+    EXPECT_GT(reached, body.airSpeed);
+    EXPECT_LT(reached, body.runSpeed);
+    const std::optional<nx::HammerUnits> runUp = nx::navigation::runUpOf(floor, profile, body, reached);
+    ASSERT_TRUE(runUp.has_value());
+    EXPECT_NEAR(runUp->value(), floor.takeoff->room.value(), 0.01F);
+    EXPECT_FALSE(nx::navigation::runUpOf(floor, profile, body, body.runSpeed + nx::UnitsPerSecond{1.0F}))
+        << "no run gets it faster than it runs";
+    // Where only a crouched body stands, no faster than it walks crouched, however far.
+    MeshLink low = open;
+    low.takeoff = nx::navigation::Takeoff{.room = nx::HammerUnits{1000.0F}, .rise = {}, .isCrouched = true};
+    EXPECT_EQ(nx::navigation::fastestTakeoffOf(low, profile, body), body.crouchedSpeed);
+    // Its head on what is above it, it flies for less time, and takes more.
+    MeshLink underCeiling = floor;
+    underCeiling.takeoff->rise = {};
+    EXPECT_GT(nx::navigation::leastLeapSpeedOf(underCeiling, profile, {}),
+              nx::navigation::leastLeapSpeedOf(floor, profile, {}));
+    EXPECT_EQ(nx::navigation::leastLeapSpeedOf(floor, profile, {}),
+              nx::navigation::leastLeapSpeedOf(open, profile, {}))
+        << "as from open ground where nothing stops it rising";
+}
+
+TEST(NavigationMeshTest, NoWayGoesOverAGapFromASillItHasNoRoomToRunAtItOn) {
+    // A sill along a wall, a body's width deep, 40 units over a floor past a gap of 100: up onto it from the
+    // floor, with all the floor behind it, but no run down from it, its middle kept a radius off the wall.
+    constexpr float kWall = 448.0F;
+    constexpr float kSill = 480.0F;
+    constexpr float kGap = 100.0F;
+    constexpr float kHeight = 40.0F;
+    Geometry geometry;
+    nx::test::addBox(geometry, {.x = 0.0F, .y = 0.0F, .z = 0.0F}, {.x = kWall, .y = 512.0F, .z = 200.0F});
+    nx::test::addBox(geometry, {.x = kWall, .y = 0.0F, .z = 0.0F}, {.x = kSill, .y = 512.0F, .z = kHeight});
+    nx::test::addFloor(geometry, {.x = kSill + kGap, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    const auto down =
+        std::ranges::find_if(outline.links, [](const MeshLink& link) { return link.start.z > link.end.z; });
+    ASSERT_NE(down, outline.links.end());
+    ASSERT_TRUE(down->takeoff.has_value());
+    EXPECT_LE(down->takeoff->room.value(), mesh.profile().radius.value() + kCell) << "the sill's floor";
+    const nx::navigation::BodyMotion body{.runSpeed = nx::UnitsPerSecond{250.0F},
+                                          .crouchedSpeed = nx::UnitsPerSecond{83.0F},
+                                          .airSpeed = nx::UnitsPerSecond{30.0F},
+                                          .acceleration = 5.0F,
+                                          .braking = 4.0F};
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 sill{.x = (kWall + kSill) * 0.5F, .y = 256.0F, .z = kHeight};
+    const Vec3 floor{.x = kSill + kGap + 256.0F, .y = 256.0F};
+    EXPECT_TRUE(query.findPath({.from = floor, .to = sill, .body = body}).has_value());
+    const auto off = query.findPath({.from = sill, .to = floor, .body = body});
+    ASSERT_FALSE(off.has_value());
+    EXPECT_EQ(off.error().code, NavigationError::Unreachable);
+    EXPECT_TRUE(query.findPath({.from = sill, .to = floor, .body = nx::test::bodyLeavingAt(body.runSpeed)}))
+        << "a body at its full speed at once needs no run";
+}
+
+TEST(NavigationMeshTest, NoWayGoesOverAGapFromWhereItCrouchesFasterThanItWalksCrouched) {
+    // A floor under a ceiling 50 units up, too low to stand, 100 over another past a gap of 100.
+    constexpr float kEdge = 500.0F;
+    constexpr float kGap = 100.0F;
+    constexpr float kHeight = 100.0F;
+    constexpr float kRoom = 50.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = 512.0F}, kHeight);
+    nx::test::addCeiling(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = 512.0F}, kHeight + kRoom);
+    nx::test::addFloor(geometry, {.x = kEdge + kGap, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    // The ceiling grown by a body's box, as the game's hulls have it: half a body's height under it, its
+    // middle is in the solid, its radius past its edge.
+    const nx::navigation::AgentProfile& profile = nx::test::playerProfile();
+    const auto hullUnderCeiling = [&](nx::HammerUnits height) {
+        const float radius = profile.radius.value();
+        return nx::test::bodyHullOfBox(
+            {.min = {.x = -radius, .y = -radius, .z = kHeight + kRoom - (height.value() * 0.5F)},
+             .max = {.x = kEdge + radius, .y = 512.0F + radius, .z = kHeight + kRoom + 256.0F}});
+    };
+    geometry.bodyHull = hullUnderCeiling(profile.standingHeight);
+    geometry.crouchedBodyHull = hullUnderCeiling(profile.crouchedHeight);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    ASSERT_FALSE(outline.links.empty());
+    nx::UnitsPerSecond takes{};
+    for (const MeshLink& link : outline.links) {
+        ASSERT_TRUE(link.takeoff.has_value());
+        EXPECT_TRUE(link.takeoff->isCrouched);
+        EXPECT_LT(link.takeoff->rise.value(), kRoom - profile.crouchedHeight.value())
+            << "its head on the ceiling";
+        takes = std::max(takes, nx::navigation::leastLeapSpeedOf(link, profile, {}));
+    }
+    const nx::navigation::BodyMotion walksCrouched{.runSpeed = profile.leapSpeed,
+                                                   .crouchedSpeed = takes - nx::UnitsPerSecond{1.0F}};
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 high{.x = 256.0F, .y = 256.0F, .z = kHeight};
+    const Vec3 low{.x = kEdge + kGap + 256.0F, .y = 256.0F};
+    const auto tooSlow = query.findPath({.from = high, .to = low, .body = walksCrouched});
+    ASSERT_FALSE(tooSlow.has_value());
+    EXPECT_EQ(tooSlow.error().code, NavigationError::Unreachable);
+    nx::navigation::BodyMotion fastEnough = walksCrouched;
+    fastEnough.crouchedSpeed = takes;
+    EXPECT_TRUE(query.findPath({.from = high, .to = low, .body = fastEnough}).has_value());
 }
 
 TEST(NavigationMeshTest, AWayGoesOverNoLinkItShunsWhileItHasAnother) {

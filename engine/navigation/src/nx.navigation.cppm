@@ -19,5 +19,6 @@ export module nx.navigation;
 export import :profile;
 export import :geometry;
 export import :mesh;
+export import :flight;
 export import :query;
 export import :corridor;

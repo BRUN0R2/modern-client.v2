@@ -70,7 +70,7 @@ struct AgentProfile {
     HammerUnits dropHeight{};
     /// How fast the fastest of those that walk its mesh leaves a ledge to jump across a gap: its links span
     /// no gap such a flight falls short of, and a slower body's ways go over none whose gap takes more than
-    /// it leaves a ledge at (leastLeapSpeedOf, PathRequest::leapSpeed).
+    /// it leaves a ledge at (leastLeapSpeedOf, PathRequest::body).
     UnitsPerSecond leapSpeed{};
     /// What pulls it down in the air.
     UnitsPerSecondSquared gravity{};
