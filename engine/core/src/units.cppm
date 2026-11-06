@@ -126,6 +126,9 @@ using Milliseconds = std::chrono::duration<float, std::milli>;
 /// A half turn: the definition that relates degrees to radians.
 inline constexpr Degrees kHalfTurnDegrees{180.0F};
 inline constexpr Radians kHalfTurnRadians{std::numbers::pi_v<float>};
+/// A quarter turn, straight up or down from level, and a whole turn, all around.
+inline constexpr Degrees kQuarterTurnDegrees = kHalfTurnDegrees / 2.0F;
+inline constexpr Degrees kFullTurnDegrees = kHalfTurnDegrees * 2.0F;
 
 // Arithmetic across units: only the combinations with a physical meaning compile.
 

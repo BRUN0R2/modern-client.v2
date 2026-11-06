@@ -493,7 +493,7 @@ TEST_F(BotsTest, ABotHearsAnEnemyShootBehindItAndTurnsToLookAtIt) {
     // The enemy behind the bot, along the way it looks.
     standAt(bot, kMapSide * 0.5F);
     const nx::Degrees yaw = game->ownStateOf(bot).view.yaw;
-    const float radians = yaw.value() * std::numbers::pi_v<float> / 180.0F;
+    const float radians = nx::toRadians(yaw).value();
     standAt(enemy, (kMapSide * 0.5F) - (std::cos(radians) * kApart), -std::sin(radians) * kApart);
     const std::vector<cs::PerceptionTarget> targets = game->perceptionTargets();
     const auto enemyBody = std::ranges::find(targets, enemy, &cs::PerceptionTarget::player);
@@ -536,7 +536,7 @@ TEST_F(BotsTest, ABotHurtByAnEnemyItDoesNotSeeLooksAboutOnTheSideTheAttackCameFr
     // The enemy right behind the bot, along the way it looks, its pistol at the bot's head.
     standAt(bot, kMapSide * 0.5F);
     const nx::Degrees yaw = game->ownStateOf(bot).view.yaw;
-    const float radians = yaw.value() * std::numbers::pi_v<float> / 180.0F;
+    const float radians = nx::toRadians(yaw).value();
     constexpr float kBehind = 100.0F;
     standAt(enemy, (kMapSide * 0.5F) - (std::cos(radians) * kBehind), -std::sin(radians) * kBehind);
     ASSERT_FALSE(driver->panicSpot.has_value());

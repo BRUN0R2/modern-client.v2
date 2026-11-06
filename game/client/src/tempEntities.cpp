@@ -18,7 +18,7 @@ namespace {
 /// The stream of random numbers the temporary entities draw from.
 constexpr std::string_view kTempEntityStream = "temporary entities";
 /// The widest roll a temporary entity is drawn at: a whole turn.
-constexpr float kWholeTurnDegrees = 360.0F;
+constexpr nx::Degrees kWidestRoll = nx::kFullTurnDegrees;
 
 [[nodiscard]] auto colorOf(const nx::assets::Palette& palette, std::uint32_t entry)
     -> nx::render::RenderColor {
@@ -64,7 +64,7 @@ void TempEntities::sprayBlood(const BloodSpray& spray, const BloodSprayLook& loo
             random.between(size * look.leastSprayScale.value(), size * look.mostSprayScale.value());
         entities.push_back(TempEntity{.sprite = TempSprite::BloodSpray,
                                       .origin = spray.position + nx::Vec3{.z = lift},
-                                      .roll = nx::Degrees{random.between(0.0F, kWholeTurnDegrees)},
+                                      .roll = nx::Degrees{random.between(0.0F, kWidestRoll.value())},
                                       // Its frames once in sprayTime.
                                       .framerate = nx::PerSecond{lastFrame / look.sprayTime.count()},
                                       .lastFrame = lastFrame,
@@ -100,7 +100,7 @@ void TempEntities::sprayBlood(const BloodSpray& spray, const BloodSprayLook& loo
                                       .velocity = nx::Vec3{.x = across, .y = along, .z = rise},
                                       .gravity = look.dropGravity,
                                       .isStoppedByWorld = true,
-                                      .roll = nx::Degrees{random.between(0.0F, kWholeTurnDegrees)},
+                                      .roll = nx::Degrees{random.between(0.0F, kWidestRoll.value())},
                                       .spin = nx::DegreesPerSecond{spin},
                                       .frame = static_cast<float>(frame),
                                       .lastFrame = static_cast<float>(lastDropFrame),
