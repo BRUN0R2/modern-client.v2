@@ -13,7 +13,7 @@ namespace {
 
 /// The `angle` that aims up, and the pitch of an aim straight up or down.
 constexpr int kAngleUp = -1;
-constexpr float kStraightPitch = 90.0F;
+constexpr float kStraightPitch = kQuarterTurnDegrees.value();
 
 } // namespace
 

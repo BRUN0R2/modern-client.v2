@@ -22,7 +22,6 @@ constexpr std::uint64_t kTicksALightHolds = 10;
 constexpr std::size_t kSmallestBodyBatch = 1024;
 /// The fewest corpses it is worth handing to a worker to find whether a frame may show them.
 constexpr std::size_t kSmallestFoundBatch = 256;
-constexpr float kRadiansPerDegree = std::numbers::pi_v<float> / 180.0F;
 
 /// Makes `drawn`, of `file`, one a crowd of `renderer` may be of. Errors: the renderer's.
 [[nodiscard]] auto loadCrowdOf(const AnimatedModel& file, const nx::render::StudioModel& drawn,
@@ -216,7 +215,7 @@ void EntityModels::writeBodies(const EntityCatalog& catalog, const ShownCrowd& c
             const float sharePerTick = 1.0F / static_cast<float>(state.ticksPerMove);
             room.bodies[place++] = {
                 .previousOrigin = state.movedFrom + offset,
-                .yaw = state.angles.yaw.value() * kRadiansPerDegree,
+                .yaw = nx::toRadians(state.angles.yaw).value(),
                 .origin = origin,
                 .model = type.model.value,
                 .sequence = state.animation.sequence.value,
