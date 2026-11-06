@@ -466,6 +466,48 @@ TEST(NavigationMeshTest, NoWayGoesOverAGapThatTakesALeapFasterThanItsBodyLeavesA
     EXPECT_EQ(unknown.error().code, nx::navigation::NavigationError::InvalidQuery);
 }
 
+TEST(NavigationMeshTest, EachWayOverAGapIsALinkOfItsOwnJudgedByItsOwnFlight) {
+    // A floor higher than the other past a gap, up which a leap takes more than down: the gap crosses a side
+    // of the tiles, 128 units apart, so that the links back start in other tiles than those they were found
+    // from, the higher floor's.
+    constexpr float kEdge = 500.0F;
+    constexpr float kGap = 100.0F;
+    constexpr float kRise = 30.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = 512.0F}, 0.0F);
+    nx::test::addFloor(geometry, {.x = kEdge + kGap, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, kRise);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const nx::navigation::AgentProfile& profile = mesh.profile();
+    const MeshOutline outline = mesh.outline();
+    nx::UnitsPerSecond down = profile.leapSpeed;
+    nx::UnitsPerSecond up = profile.leapSpeed;
+    std::size_t ups = 0;
+    std::size_t downs = 0;
+    for (const MeshLink& link : outline.links) {
+        ASSERT_EQ(link.kind, AreaKind::Jump);
+        const nx::UnitsPerSecond takes = nx::navigation::leastLeapSpeedOf(link, profile, {});
+        if (link.end.z > link.start.z) {
+            up = std::min(up, takes);
+            ++ups;
+        } else {
+            down = std::min(down, takes);
+            ++downs;
+        }
+    }
+    EXPECT_GT(ups, 0U);
+    EXPECT_EQ(ups, downs) << "each way over the gap, along all of it";
+    ASSERT_LT(down, up);
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 low{.x = 256.0F, .y = 256.0F};
+    const Vec3 high{.x = kEdge + kGap + 256.0F, .y = 256.0F, .z = kRise};
+    EXPECT_TRUE(query.findPath({.from = low, .to = high, .leapSpeed = up}).has_value());
+    EXPECT_TRUE(query.findPath({.from = high, .to = low, .leapSpeed = down}).has_value())
+        << "down, by its own flight";
+    const auto tooSlowUp = query.findPath({.from = low, .to = high, .leapSpeed = down});
+    ASSERT_FALSE(tooSlowUp.has_value());
+    EXPECT_EQ(tooSlowUp.error().code, NavigationError::Unreachable);
+}
+
 TEST(NavigationMeshTest, ALinkWithNoGapTakesNoLeapAndALadderNone) {
     const nx::navigation::AgentProfile profile = nx::test::playerProfile();
     const float radius = profile.radius.value();

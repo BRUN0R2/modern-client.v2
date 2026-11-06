@@ -654,37 +654,78 @@ struct NearTriangle {
     return (u * a.z) + (v * b.z) + (w * c.z);
 }
 
-/// The links of a tile, as Detour's off-mesh connections take them: each one's start and end one after
-/// another, in Detour's space, its radius, flags, area and way.
-struct TileLinks {
-    std::vector<float> points{};
-    std::vector<float> radii{};
-    std::vector<std::uint16_t> flags{};
-    std::vector<std::uint8_t> areas{};
-    std::vector<std::uint8_t> ways{};
-    std::vector<std::uint32_t> ids{};
+/// A link of a tile, as Detour's off-mesh connections take it: where a body leaves and where it lands, the
+/// radius about each end Detour joins it to a polygon within, its kind, whether it goes both ways, and its
+/// id.
+struct TileLink {
+    Vec3 start{};
+    Vec3 end{};
+    float radius = 0.0F;
+    AreaKind kind = AreaKind::Drop;
+    bool goesBothWays = false;
+    std::uint32_t id = 0;
+};
 
-    void add(Vec3 start, Vec3 end, float radius, AreaKind kind) {
-        addWay(start, end, radius, kind, narrow<std::uint32_t>(ids.size()));
+/// The bounds across of a tile's polygons (rcPolyMesh's bmin and bmax), in Detour's space: Detour keeps a
+/// link in the tile its start is within, their low sides in and their high ones out, and in no other
+/// (dtCreateNavMeshData's classifyOffMeshPoint).
+struct TileExtent {
+    std::array<float, 3> low{};
+    std::array<float, 3> high{};
+
+    [[nodiscard]] auto holds(Vec3 point) const noexcept -> bool {
+        const std::array<float, 3> at = detourOf(point);
+        return at[0] >= low[0] && at[0] < high[0] && at[2] >= low[2] && at[2] < high[2];
+    }
+};
+
+[[nodiscard]] auto extentOf(const rcPolyMesh& polygons) noexcept -> TileExtent {
+    TileExtent extent;
+    std::ranges::copy(polygons.bmin, extent.low.begin());
+    std::ranges::copy(polygons.bmax, extent.high.begin());
+    return extent;
+}
+
+/// The links found about a tile: its own, which Detour keeps of those that start in it, and those that start
+/// in another tile, which go on to that one before Detour takes either (routed).
+class TileLinks {
+public:
+    explicit TileLinks(TileExtent extent) noexcept : tile{extent} {}
+
+    /// A flight from `start`, in the tile, to `end`, of the kind `kind`: one a body jumps back up goes both
+    /// ways, but over a gap, where each way is a link of its own, judged by its own flight
+    /// (leastLeapSpeedOf), the one back starting where this one ends, in whichever tile that is.
+    void addFlight(Vec3 start, Vec3 end, float radius, AreaKind kind) {
+        const bool goesBack = kind == AreaKind::Jump || kind == AreaKind::CrouchedJump;
+        const bool spansGap = gapAcross(start, end, HammerUnits{radius}) > 0.0F;
+        ownLinks.push_back({.start = start,
+                            .end = end,
+                            .radius = radius,
+                            .kind = kind,
+                            .goesBothWays = goesBack && !spansGap});
+        if (goesBack && spansGap) {
+            const TileLink back{.start = end, .end = start, .radius = radius, .kind = kind};
+            (tile.holds(end) ? ownLinks : routedLinks).push_back(back);
+        }
     }
 
-    /// A link of the kind `kind` through the ladder or door whose middle is `through`.
+    /// A link of the kind `kind`, both ways, through the ladder or door whose middle is `through`.
     void addThrough(Vec3 start, Vec3 end, float radius, AreaKind kind, Vec3 through) {
-        addWay(start, end, radius, kind, throughIdOf(through));
+        ownLinks.push_back({.start = start,
+                            .end = end,
+                            .radius = radius,
+                            .kind = kind,
+                            .goesBothWays = true,
+                            .id = throughIdOf(through)});
     }
+
+    [[nodiscard]] auto own() const noexcept -> std::span<const TileLink> { return ownLinks; }
+    [[nodiscard]] auto routed() const noexcept -> std::span<const TileLink> { return routedLinks; }
 
 private:
-    void addWay(Vec3 start, Vec3 end, float radius, AreaKind kind, std::uint32_t id) {
-        std::ranges::copy(detourOf(start), std::back_inserter(points));
-        std::ranges::copy(detourOf(end), std::back_inserter(points));
-        radii.push_back(radius);
-        flags.push_back(kWalkablePolygon);
-        areas.push_back(areaIdOf(kind));
-        const bool goesBothWays = kind == AreaKind::Jump || kind == AreaKind::CrouchedJump ||
-                                  kind == AreaKind::Ladder || kind == AreaKind::Door;
-        ways.push_back(goesBothWays ? std::uint8_t{DT_OFFMESH_CON_BIDIR} : std::uint8_t{0});
-        ids.push_back(id);
-    }
+    TileExtent tile;
+    std::vector<TileLink> ownLinks;
+    std::vector<TileLink> routedLinks;
 };
 
 /// The height of the highest triangle of `near` over `point` within `lowest` and `highest`, when it is a
@@ -791,7 +832,6 @@ constexpr float kLongestFlight = 3.0F;
                                 Vec3 low) -> std::optional<AreaKind> {
     const AgentProfile& profile = input.profile;
     const float height = high.z - low.z;
-    const float radius = profile.radius.value();
     const bool standsAbove = standingBodyFitsAt(input, high);
     const bool standsBelow = standingBodyFitsAt(input, low);
     const auto ducksAt = [&](Vec3 feet) {
@@ -817,10 +857,9 @@ constexpr float kLongestFlight = 3.0F;
     if (height > profile.dropHeight.value()) {
         return std::nullopt;
     }
-    const Vec3 span{.x = high.x - low.x, .y = high.y - low.y};
     // Off the edge of a ledge it walks; only across a gap does it jump.
     const float hop =
-        length(span) > radius + radius ? profile.jumpHeight.value() : profile.stepHeight.value();
+        gapAcross(high, low, profile.radius) > 0.0F ? profile.jumpHeight.value() : profile.stepHeight.value();
     if (standsAbove && standsBelow && bodyFlies(input, near, standing, high, low, hop)) {
         return AreaKind::Drop;
     }
@@ -1054,7 +1093,7 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
         return positionOf(point);
     };
     const auto sides = narrow<std::size_t>(polygons.nvp);
-    TileLinks links;
+    TileLinks links{extentOf(polygons)};
     for (std::size_t polygon = 0; polygon < narrow<std::size_t>(polygons.npolys); ++polygon) {
         const std::span<const std::uint16_t> record{polygons.polys + (polygon * sides * 2), sides * 2};
         const std::span<const std::uint16_t> corners = record.first(sides);
@@ -1090,7 +1129,7 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
                 const Vec3 start = (from + ((to - from) * share)) -
                                    (isTileSide ? outward * detail::kLinkInsetFromTileSide : Vec3{});
                 for (const FoundLink& link : linksFrom(start, outward, input, near)) {
-                    links.add(start, link.end, profile.radius.value(), link.kind);
+                    links.addFlight(start, link.end, profile.radius.value(), link.kind);
                 }
             }
         }
@@ -1100,21 +1139,37 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
     return links;
 }
 
-/// Detour's data of the polygons of `polygons` and `detail`, and of their links (linksOf), tile `tileX`,
-/// `tileY`. Errors: TileRefused.
+/// Detour's data of the polygons of `polygons` and `detail`, and of `links`, tile `tileX`, `tileY`. Errors:
+/// TileRefused.
 [[nodiscard]] auto tileDataOf(const TileInput& input, rcPolyMesh& polygons, const rcPolyMeshDetail& detail,
-                              std::int32_t tileX, std::int32_t tileY) -> Result<BuiltTile, MeshBuildError> {
+                              std::span<const TileLink> links, std::int32_t tileX, std::int32_t tileY)
+    -> Result<BuiltTile, MeshBuildError> {
     const auto polygonCount = narrow<std::size_t>(polygons.npolys);
     std::ranges::fill(std::span{polygons.flags, polygonCount}, kWalkablePolygon);
-    const TileLinks links = linksOf(input, polygons, tileX, tileY);
+    // Detour takes each of a link's numbers side by side with the others' (its two ends one after the other).
+    std::vector<float> points;
+    std::vector<float> radii;
+    std::vector<std::uint16_t> flags;
+    std::vector<std::uint8_t> areas;
+    std::vector<std::uint8_t> ways;
+    std::vector<std::uint32_t> ids;
+    for (const TileLink& link : links) {
+        std::ranges::copy(detourOf(link.start), std::back_inserter(points));
+        std::ranges::copy(detourOf(link.end), std::back_inserter(points));
+        radii.push_back(link.radius);
+        flags.push_back(kWalkablePolygon);
+        areas.push_back(areaIdOf(link.kind));
+        ways.push_back(link.goesBothWays ? std::uint8_t{DT_OFFMESH_CON_BIDIR} : std::uint8_t{0});
+        ids.push_back(link.id);
+    }
     dtNavMeshCreateParams params{};
-    params.offMeshConVerts = links.points.data();
-    params.offMeshConRad = links.radii.data();
-    params.offMeshConFlags = links.flags.data();
-    params.offMeshConAreas = links.areas.data();
-    params.offMeshConDir = links.ways.data();
-    params.offMeshConUserID = links.ids.data();
-    params.offMeshConCount = narrow<int>(links.radii.size());
+    params.offMeshConVerts = points.data();
+    params.offMeshConRad = radii.data();
+    params.offMeshConFlags = flags.data();
+    params.offMeshConAreas = areas.data();
+    params.offMeshConDir = ways.data();
+    params.offMeshConUserID = ids.data();
+    params.offMeshConCount = narrow<int>(radii.size());
     params.verts = polygons.verts;
     params.vertCount = polygons.nverts;
     params.polys = polygons.polys;
@@ -1155,19 +1210,31 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
     return tile;
 }
 
+/// A tile's polygons and their details as Recast built them, and the links found about it (linksOf): what the
+/// first pass of a build keeps of it for the second, which hands each tile the links that start in it from
+/// the tiles about it before Detour takes any (finishTile).
+struct TileDraft {
+    PolygonMesh polygons{};
+    DetailMesh detail{};
+    TileLinks links;
+};
+
+/// What the first pass of a build gives a tile: its draft, none when it holds no floor, or why Recast refused
+/// it.
+using DraftResult = Result<std::optional<TileDraft>, MeshBuildError>;
+
 /// Tile `tileX`, `tileY` of `input`, as Recast builds it: its voxels, the floor the profile's radius
 /// keeps away from walls and ledges, sorted by the bodies that fit on it (sortFloorByBodies), that floor
 /// along them within its wall clearance (markEdges), its regions, their outlines, the polygons of those and
-/// their details. None when it holds no floor. Errors: TileRefused.
-[[nodiscard]] auto buildTile(const TileInput& input, std::int32_t tileX, std::int32_t tileY)
-    -> Result<std::optional<BuiltTile>, MeshBuildError> {
+/// their details, and the links about it. None when it holds no floor. Errors: TileRefused.
+[[nodiscard]] auto draftTile(const TileInput& input, std::int32_t tileX, std::int32_t tileY) -> DraftResult {
     RecastLog log;
     auto rasterized = rasterize(log, input, tileX, tileY);
     if (!rasterized) {
         return std::unexpected{std::move(rasterized.error())};
     }
     if (!*rasterized) {
-        return std::optional<BuiltTile>{};
+        return std::optional<TileDraft>{};
     }
     Heightfield heightfield = std::move(**rasterized);
     const VoxelProfile& voxels = input.voxels;
@@ -1192,7 +1259,7 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
         return refused(log, tileX, tileY, "its outlines");
     }
     if (contours->nconts == 0) {
-        return std::optional<BuiltTile>{};
+        return std::optional<TileDraft>{};
     }
     PolygonMesh polygons{rcAllocPolyMesh()};
     if (!polygons || !rcBuildPolyMesh(&log, *contours, DT_VERTS_PER_POLYGON, *polygons)) {
@@ -1205,11 +1272,58 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
         return refused(log, tileX, tileY, "its polygons' details");
     }
     if (polygons->npolys == 0) {
+        return std::optional<TileDraft>{};
+    }
+    TileLinks links = linksOf(input, *polygons, tileX, tileY);
+    return std::optional<TileDraft>{
+        TileDraft{.polygons = std::move(polygons), .detail = std::move(detail), .links = std::move(links)}};
+}
+
+/// How many tiles about a tile's, across or down, the links that start in it may be found from: as many as a
+/// flight from a ledge reaches over (linksOf).
+[[nodiscard]] auto linkReachInTiles(const TileInput& input) noexcept -> std::int32_t {
+    const float reach =
+        farthestLeapOf(input.profile) + input.profile.radius.value() + input.settings.cellSize.value();
+    const float tileSide = static_cast<float>(input.settings.tileCells) * input.settings.cellSize.value();
+    return static_cast<std::int32_t>(std::ceil(reach / tileSide));
+}
+
+/// The tile whose draft is at `index` of `drafts`, row by row, `tilesAcross` to a row and `tilesDown` rows,
+/// as Detour takes it (tileDataOf): with its own links, then those found from the tiles about it, row by row,
+/// that start in it. Its polygons and their details go once Detour has them; its links stay for the tiles
+/// about it. None when it holds no floor. Errors: its draft's, TileRefused.
+[[nodiscard]] auto finishTile(const TileInput& input, std::span<DraftResult> drafts, std::int32_t tilesAcross,
+                              std::int32_t tilesDown, std::size_t index)
+    -> Result<std::optional<BuiltTile>, MeshBuildError> {
+    DraftResult& drafted = drafts[index];
+    if (!drafted) {
+        return std::unexpected{drafted.error()};
+    }
+    if (!*drafted) {
         return std::optional<BuiltTile>{};
     }
-    return tileDataOf(input, *polygons, *detail, tileX, tileY).transform([](BuiltTile tile) {
-        return std::optional{std::move(tile)};
-    });
+    TileDraft& draft = **drafted;
+    const auto tile = narrow<std::int32_t>(index);
+    const std::int32_t tileX = tile % tilesAcross;
+    const std::int32_t tileY = tile / tilesAcross;
+    const TileExtent extent = extentOf(*draft.polygons);
+    std::vector<TileLink> links{std::from_range, draft.links.own()};
+    const std::int32_t reach = linkReachInTiles(input);
+    for (std::int32_t y = std::max(tileY - reach, 0); y <= std::min(tileY + reach, tilesDown - 1); ++y) {
+        for (std::int32_t x = std::max(tileX - reach, 0); x <= std::min(tileX + reach, tilesAcross - 1);
+             ++x) {
+            const DraftResult& about = drafts[narrow<std::size_t>((y * tilesAcross) + x)];
+            if ((x == tileX && y == tileY) || !about || !*about) {
+                continue;
+            }
+            std::ranges::copy_if((**about).links.routed(), std::back_inserter(links),
+                                 [&extent](const TileLink& link) { return extent.holds(link.start); });
+        }
+    }
+    auto data = tileDataOf(input, *draft.polygons, *draft.detail, links, tileX, tileY);
+    draft.polygons.reset();
+    draft.detail.reset();
+    return data.transform([](BuiltTile built) { return std::optional{std::move(built)}; });
 }
 
 /// The grid of tiles over `input`, with none built yet: none for no triangle. Errors: TooLarge.
@@ -1247,8 +1361,9 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
 
 struct TileWork {
     TileInput input{};
-    BuiltTiles grid{}; ///< Its tiles left out: they are in results.
-    std::vector<Result<std::optional<BuiltTile>, MeshBuildError>> results{}; ///< Row by row.
+    BuiltTiles grid{};                 ///< Its tiles left out: they are in results.
+    std::vector<DraftResult> drafts{}; ///< Row by row, the first pass's.
+    std::vector<Result<std::optional<BuiltTile>, MeshBuildError>> results{}; ///< Row by row, the second's.
 };
 
 auto startTiles(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
@@ -1263,17 +1378,25 @@ auto startTiles(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProf
     }
     const auto tileCount = narrow<std::size_t>(grid->tilesAcross) * narrow<std::size_t>(grid->tilesDown);
     auto work = std::make_shared<TileWork>(
-        TileWork{.input = std::move(*input), .grid = std::move(*grid), .results = {}});
+        TileWork{.input = std::move(*input), .grid = std::move(*grid), .drafts = {}, .results = {}});
+    work->drafts.resize(tileCount);
     work->results.resize(tileCount);
-    // Each tile in its own job, its result at its own index: the same mesh with any number of workers. The
-    // work outlives the jobs: its holder waits for them before it lets it go (MeshBuild).
+    // Each tile in a job of its own in each pass, its result at its own index: the same mesh with any number
+    // of workers. The second pass starts once the first is done, as a tile's links may start in the tiles
+    // about it. The work outlives the jobs: its holder waits for them before it lets it go (MeshBuild).
     TileWork* const shared = work.get();
-    const jobs::JobHandle done = jobs.parallelFor(
+    const std::array drafted{jobs.parallelFor(
         {.label = "navigation.tile", .priority = priority}, std::views::iota(std::size_t{0}, tileCount),
         jobs::Grain::automatic(), [shared](std::size_t index) {
             const auto tile = narrow<std::int32_t>(index);
             const std::int32_t tilesAcross = shared->grid.tilesAcross;
-            shared->results[index] = buildTile(shared->input, tile % tilesAcross, tile / tilesAcross);
+            shared->drafts[index] = draftTile(shared->input, tile % tilesAcross, tile / tilesAcross);
+        })};
+    const jobs::JobHandle done = jobs.parallelFor(
+        {.label = "navigation.tileLinks", .priority = priority, .dependsOn = drafted},
+        std::views::iota(std::size_t{0}, tileCount), jobs::Grain::automatic(), [shared](std::size_t index) {
+            shared->results[index] = finishTile(shared->input, shared->drafts, shared->grid.tilesAcross,
+                                                shared->grid.tilesDown, index);
         });
     return TileJobs{.work = std::move(work), .done = done};
 }
@@ -1301,7 +1424,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 10;
+constexpr std::uint32_t kTilesVersion = 11;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.

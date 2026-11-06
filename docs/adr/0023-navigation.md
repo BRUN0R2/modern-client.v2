@@ -51,7 +51,10 @@ convex polygons, through Recast and Detour.
   `leapSpeed`, the fastest of those that walk the mesh: stopped by what stops a body, which its hulls and the
   surfaces at its knees and head tell, rising along a wall and falling from a ceiling, the kinds tried in turn:
   `jump` both ways within its jump height, `crouchedJump` both ways within its crouched one, or where only a
-  ducked body fits, and else `drop`, down only. A brain crosses one from its start, jumping once for a link up or
+  ducked body fits, and else `drop`, down only. Over a gap each way is a link of its own, a flight of its own: the
+  one back starts where the other lands, in whichever tile that is, so that a build hands each tile the links
+  that start in it from the tiles about it before Detour takes any, Detour keeping a link in the tile it starts
+  in alone. A brain crosses one from its start, jumping once for a link up or
   across a gap, having slowed down for what the link's way turns across its own, since in the air a body flies on,
   and heads for its end without steering, as DetourCrowd moves an agent over a link. It has crossed only on the
   ground, at the height of the end and as far from the start; back on the ground below that height it fell short,
@@ -60,7 +63,7 @@ convex polygons, through Recast and Detour.
   else tells it that a floor has no room for that. The ledge its next link leaves from is no wall to its steering,
   and within four radii of it, it heads straight for it, the walls of a floor no bigger than a block being all
   round it. What a gap takes is how fast across a body covers what its box does not span in the time it is in the
-  air (`leastLeapSpeedOf`; of a link both ways, the way up): a body's way goes over no link that takes more than
+  air (`leastLeapSpeedOf`), each way by its own flight: a body's way goes over no link that takes more than
   it leaves a ledge at, its run or what the air gives it (`PathRequest::leapSpeed`, `nx::agents::leapSpeedOf`),
   and is searched anew as that changes, so that a zombie slower than a gap takes goes round it, and a bot frozen
   at a round's start searches again once it may run. Over a gap it needs the speed the flight takes, and a margin:
