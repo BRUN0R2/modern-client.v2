@@ -63,19 +63,20 @@ constexpr float kCrouchLeadRadii = 6.0F;
     return lengths > 0.0F ? std::clamp(dot(toCorner, beyond) / lengths, 0.0F, 1.0F) : 1.0F;
 }
 /// How far from what it uses across a body goes no nearer, what is used being in a wall its radius off the
-/// floor: well within a player's reach of 64 units (nx::game::playerUse).
-constexpr float kUseReach = 48.0F;
+/// floor: well within a player's reach of 64 units (nx::game::playerUse); and as near a volume it walks into
+/// to open a door, it heads into the volume.
+constexpr HammerUnits kUseReach{48.0F};
 /// How far from the start of a door's link, in its body's radii, it stops to wait for the door.
 constexpr float kGateWaitRadii = 2.0F;
 /// How many links a brain keeps away from at a time, having failed them.
 constexpr std::size_t kMostShunnedLinks = 4;
 /// The speed across below which a body counts as stopped, and how many decisions in a row of that end its
 /// run-up: more than the one at each end of its way back, where it turns.
-constexpr float kStoppedSpeed = 1.0F;
+constexpr UnitsPerSecond kStoppedSpeed{1.0F};
 constexpr int kMostRunUpStops = 5;
 /// The gate of `gates` whose middle is `middle`, by what a link keeps of it, whole units across: none when
 /// there is none, which is taken as a way open, nothing being known to close it.
-[[nodiscard]] auto gateAt(std::span<const navigation::Gate> gates, Vec3 middle) noexcept
+[[nodiscard]] auto findGate(std::span<const navigation::Gate> gates, Vec3 middle) noexcept
     -> const navigation::Gate* {
     const auto found = std::ranges::find_if(gates, [middle](const navigation::Gate& gate) {
         return navigation::isSameDoor(gate.middle, middle);
@@ -183,12 +184,13 @@ void flyFor(Intent& intent, Vec3 feet, Vec3 end, Vec3 velocity, UnitsPerSecond a
 }
 /// How far across into a volume a body goes to be in it: the game finds it in by the volume's hull, which a
 /// box that only meets its side may stay out of, a body standing for good at a door it never opened.
-constexpr float kEntryDepth = 4.0F;
+constexpr HammerUnits kEntryDepth{4.0F};
 /// The part of `box` at least kEntryDepth inside it across, its middle where it is thinner than twice that.
 [[nodiscard]] auto innerOf(const Aabb& box) noexcept -> Aabb {
     const auto inner = [](float low, float high) {
-        return high - low > 2.0F * kEntryDepth ? std::pair{low + kEntryDepth, high - kEntryDepth}
-                                               : std::pair{(low + high) * 0.5F, (low + high) * 0.5F};
+        const float depth = kEntryDepth.value();
+        return high - low > 2.0F * depth ? std::pair{low + depth, high - depth}
+                                         : std::pair{(low + high) * 0.5F, (low + high) * 0.5F};
     };
     const auto [lowX, highX] = inner(box.min.x, box.max.x);
     const auto [lowY, highY] = inner(box.min.y, box.max.y);
@@ -197,9 +199,8 @@ constexpr float kEntryDepth = 4.0F;
 }
 /// The point of `box` nearest `feet` across, at the height of `feet`.
 [[nodiscard]] auto nearestAcross(const Aabb& box, Vec3 feet) noexcept -> Vec3 {
-    return Vec3{.x = std::clamp(feet.x, box.min.x, box.max.x),
-                .y = std::clamp(feet.y, box.min.y, box.max.y),
-                .z = feet.z};
+    const Vec3 nearest = box.closestPoint(feet);
+    return Vec3{.x = nearest.x, .y = nearest.y, .z = feet.z};
 }
 /// Whether the standing box of a body of `profile` with its feet at `feet` is in `volume`, kEntryDepth into
 /// it across, as the game finds a body in a volume it touches.
@@ -534,7 +535,7 @@ auto Brain::gateItOpens() const noexcept -> std::optional<Vec3> {
 auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond maxSpeed, bool isOnGround,
                    Vec3 velocity, std::span<const navigation::Gate> gates) -> Decision {
     if (opening) {
-        const navigation::Gate* const gate = gateAt(gates, opening->door);
+        const navigation::Gate* const gate = findGate(gates, opening->door);
         if (gate == nullptr || gate->isOpen) {
             // Open, by it or another: on with what it pursues.
             opening.reset();
@@ -588,7 +589,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
         const navigation::GateOpener& opener = opening->opener;
         const bool isThere = groundDistance(feet, corridor->target()) <= rules.arrivalDistance.value();
         if (opener.kind == navigation::OpenerKind::Used &&
-            (isThere || groundDistance(feet, opener.box.center()) <= kUseReach)) {
+            (isThere || groundDistance(feet, opener.box.center()) <= kUseReach.value())) {
             // Near what opens the door: it uses it, looking at it.
             decision.intent.lookAt = opener.box.center();
             decision.intent.uses = true;
@@ -651,7 +652,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
     headsForLink =
         nextLink && groundDistance(feet, nextLink->start) <= kLinkLeadRadii * profile.radius.value();
     if (nextLink && nextLink->kind == navigation::AreaKind::Door) {
-        const navigation::Gate* const gate = gateAt(gates, nextLink->through);
+        const navigation::Gate* const gate = findGate(gates, nextLink->through);
         if (gate != nullptr && !gate->isOpen) {
             decision.closedGate = gate->middle;
             // What opens it there, as a door used only is opened by itself, it goes on to and uses, facing
@@ -663,14 +664,14 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
             };
             const auto opener = std::ranges::find_if(gate->openers, [&](const navigation::GateOpener& opens) {
                 return opens.kind == navigation::OpenerKind::Used
-                           ? groundDistance(nextLink->start, opens.box.center()) <= kUseReach
+                           ? groundDistance(nextLink->start, opens.box.center()) <= kUseReach.value()
                            : isOnItsSide(opens) &&
                                  groundDistance(nextLink->start, nearestAcross(opens.box, nextLink->start)) <=
-                                     kUseReach;
+                                     kUseReach.value();
             });
             const bool hasOpener = opener != gate->openers.end();
             if (hasOpener && opener->kind == navigation::OpenerKind::Entered &&
-                groundDistance(feet, nearestAcross(opener->box, feet)) <= kUseReach) {
+                groundDistance(feet, nearestAcross(opener->box, feet)) <= kUseReach.value()) {
                 decision.intent.lookAt = gate->middle;
                 if (isIn(opener->box, feet, profile)) {
                     decision.intent.direction = {};
@@ -680,7 +681,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
                 return decision;
             }
             if (hasOpener && opener->kind == navigation::OpenerKind::Used &&
-                groundDistance(feet, opener->box.center()) <= kUseReach) {
+                groundDistance(feet, opener->box.center()) <= kUseReach.value()) {
                 decision.intent.ahead = wayAcross(opener->box.center() - feet, decision.intent.ahead);
                 decision.intent.lookAt = opener->box.center();
                 decision.intent.uses = true;
@@ -696,7 +697,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
     }
     if (runUpFrom) {
         // Stopped on its way back, by what the mesh does not tell of: that is all the run it has.
-        runUpStops = length(acrossOf(velocity)) < kStoppedSpeed ? runUpStops + 1 : 0;
+        runUpStops = length(acrossOf(velocity)) < kStoppedSpeed.value() ? runUpStops + 1 : 0;
         if (nextLink && groundDistance(feet, *runUpFrom) > rules.arrivalDistance.value() &&
             runUpStops < kMostRunUpStops) {
             headFor(decision.intent, feet, *runUpFrom);
@@ -813,7 +814,7 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPer
         return false;
     }
     if (next->kind == navigation::AreaKind::Door) {
-        const navigation::Gate* const gate = gateAt(gates, next->through);
+        const navigation::Gate* const gate = findGate(gates, next->through);
         if (gate != nullptr && !gate->isOpen) {
             return false;
         }

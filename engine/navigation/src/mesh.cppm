@@ -301,7 +301,8 @@ inline constexpr float kLinkInsetFromTileSide = 1.0F;
     return static_cast<AreaKind>(areaId - 1);
 }
 
-/// How many bits each of a ladder's coordinates across takes of the id of its link, the rest of the other.
+/// How many bits each coordinate across of the middle of a ladder or a door takes of the id of a link through
+/// it, the rest of the other.
 inline constexpr std::uint32_t kThroughIdCoordinateBits = 16;
 inline constexpr std::uint32_t kThroughIdCoordinateMask = (std::uint32_t{1} << kThroughIdCoordinateBits) - 1U;
 
@@ -348,7 +349,8 @@ inline constexpr std::uint32_t kTakeoffIdBit = kCrouchedIdBit << 1U;
                    .isCrouched = (id & kCrouchedIdBit) != 0};
 }
 
-/// The flag of the polygons agents may cross: every one today; a door will close its own (TODO.md).
+/// The flag of the polygons agents may cross: every one. A door closes no polygon of a mesh: a way's filter
+/// keeps off the links through it as it stands (PathRequest::gates).
 inline constexpr std::uint16_t kWalkablePolygon = 1;
 
 /// Detour's 32-bit references number a tile and a polygon of it in 22 bits, the rest the salt, at least
