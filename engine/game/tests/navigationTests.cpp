@@ -109,10 +109,10 @@ wallClearance = 0.0
 standingHeight = 72.0
 crouchedHeight = 36.0
 stepHeight = 18.0
-leapSpeed = 230.0
-gravity = 800.0
 jumpHeight = 41.8
 dropHeight = 156.25
+leapSpeed = 230.0
+gravity = 800.0
 minGroundNormalZ = 0.7
 areaCosts = []
 )";
@@ -124,10 +124,10 @@ wallClearance = 0.0
 standingHeight = 72.0
 crouchedHeight = 36.0
 stepHeight = 18.0
-leapSpeed = 230.0
-gravity = 800.0
 jumpHeight = 41.8
 dropHeight = 156.25
+leapSpeed = 230.0
+gravity = 800.0
 minGroundNormalZ = 0.7
 areaCosts = [{ area = "water", cost = 0.5 }]
 )";
