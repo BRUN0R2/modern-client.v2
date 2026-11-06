@@ -131,6 +131,17 @@ struct Approach {
 /// The most points ahead an agent slows down for: as many as the corners it sees ahead.
 inline constexpr std::size_t kMostApproaches = 4;
 
+/// What a body gains across in the air (PM_AirAccelerate's cap on the speed it wishes): a flight that takes
+/// no more than this takes no run at it.
+inline constexpr UnitsPerSecond kAirSpeed{30.0F};
+
+/// How fast across a body that runs at `maxSpeed` at most leaves a ledge: its run, or what it gains in the
+/// air standing. Its ways go over no gap that takes more (navigation::leastLeapSpeedOf,
+/// navigation::PathRequest::leapSpeed).
+[[nodiscard]] inline auto leapSpeedOf(UnitsPerSecond maxSpeed) noexcept -> UnitsPerSecond {
+    return std::max(maxSpeed, kAirSpeed);
+}
+
 /// What a decision asks of a body, as a player's command would: where to move, where to look, whether
 /// to attack or to jump; and what ahead on its way it slows down for, which steering heeds.
 struct Intent {
@@ -235,9 +246,13 @@ public:
     /// level until its feet come within a step of the end's height, then on to the end; down, walking off
     /// toward the end and looking well below level, or straight down where the floors lie on one side of it,
     /// as a body climbs down one no faster (PM_LadderMove). A body off the mesh is Blocked as it stays there,
-    /// each decision searching anew, and jumps, letting go of a ladder it holds.
-    [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround = true,
-                              Vec3 velocity = {}, std::span<const navigation::Gate> gates = {}) -> Decision;
+    /// each decision searching anew, and jumps, letting go of a ladder it holds. Its body runs at `maxSpeed`
+    /// at most: its ways go over no gap that takes more than it leaves a ledge at (leapSpeedOf), searched
+    /// anew as that changes, as a frozen round's start ends; and it leaves one no faster than it moves, at
+    /// `velocity`, lets it.
+    [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond maxSpeed,
+                              bool isOnGround = true, Vec3 velocity = {},
+                              std::span<const navigation::Gate> gates = {}) -> Decision;
     /// It goes to `opener`, what opens the closed door whose middle is `door`, and uses it, then goes on with
     /// what it pursues (Decision::closedGate; Deciders picks who).
     void openGate(Vec3 door, Vec3 opener) noexcept;
@@ -300,10 +315,12 @@ private:
     [[nodiscard]] auto movedFarEnough(Vec3 feet, Vec3 goal) const noexcept -> bool;
     /// The target it pursues from `feet`, as decide chooses it; none when it recognizes none.
     [[nodiscard]] auto choose(Vec3 feet) const -> const Memory*;
-    /// Keeps the corridor from `feet` toward `goal`, searching anew when the pursuit or position asks it, or
-    /// as its body comes back to the ground below the link it crossed.
+    /// Keeps the corridor from `feet` toward `goal`, searching anew when the pursuit or position asks it, as
+    /// its body comes back to the ground below the link it crossed, or as how fast it leaves a ledge,
+    /// `leapSpeed`, changes.
     void planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ecs::Entity> pursued,
-                      navigation::NavigationQuery& query, std::span<const navigation::Gate> gates);
+                      navigation::NavigationQuery& query, std::span<const navigation::Gate> gates,
+                      UnitsPerSecond leapSpeed);
     /// A crossing of `link` failed, its body back on the ground short of its end: twice in a row, and its
     /// ways keep off that link (PathRequest::shunned) for as long as they have another, while it goes on
     /// after the same thing: nothing else tells it what a link flown at a leap's speed takes from where it
@@ -315,13 +332,16 @@ private:
     /// steers to on (Intent::approaches), when it brakes (Rules::braking): the turn at each measured from the
     /// way into it to the way on kTurnSpanRadii of its body's radius past it, so that a corner the mesh
     /// rounds into short turns is slowed for as a whole; the start of a link it jumps up, for all the turn
-    /// takes across its way, since in the air it flies on.
+    /// takes across its way, since in the air it flies on; over a gap, as fast as the flight takes, a share
+    /// of `maxSpeed`, its body's.
     void approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
-                  const navigation::AgentProfile& profile, const std::optional<navigation::MeshLink>& next);
+                  const navigation::AgentProfile& profile, const std::optional<navigation::MeshLink>& next,
+                  UnitsPerSecond maxSpeed);
     /// Finds `next` and crosses it when `feet` are within arrivalDistance of its start, a body going at
-    /// `velocity` too slowly for a gap there backing off for a run at it once (runUpFrom). If crossing fails,
-    /// finds `next` again because the corridor may have changed. Returns whether it crosses one.
-    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity,
+    /// `velocity` too slowly for a gap there backing off for a run at it once (runUpFrom), as far as running
+    /// at `maxSpeed` it gains what it takes. If crossing fails, finds `next` again because the corridor may
+    /// have changed. Returns whether it crosses one.
+    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPerSecond maxSpeed,
                                      navigation::NavigationQuery& query,
                                      std::span<const navigation::Gate> gates,
                                      std::optional<navigation::MeshLink>& next) -> bool;
@@ -336,6 +356,8 @@ private:
     std::optional<Vec3> givenGoal{};
     std::optional<Vec3> plannedGoal{};
     std::optional<Vec3> plannedFrom{};
+    /// How fast across its body left a ledge as its corridor was searched (leapSpeedOf).
+    UnitsPerSecond plannedLeap{};
     std::optional<navigation::Corridor> corridor{};
     /// The link of its corridor its body crosses, the corridor gone on from the link's end; none while it
     /// walks along it.

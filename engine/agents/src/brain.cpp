@@ -86,9 +86,6 @@ constexpr int kMostRunUpStops = 5;
 /// onto one: on a floor no bigger than a block the walls of the mesh are all round it, and it steered away
 /// from them.
 constexpr float kLinkLeadRadii = 4.0F;
-/// What a body gains across in the air (PM_AirAccelerate's cap on the speed it wishes): a flight that takes
-/// no more than this takes no run at it.
-constexpr float kAirSpeed = 30.0F;
 /// How much faster than it just gets there a body leaves the edge of a gap, so that it is over the far side
 /// while well above it: at just the speed, it met the side of the block it jumped at a few units below the
 /// top.
@@ -98,23 +95,13 @@ constexpr float kTakeoffMargin = 1.6F;
 constexpr float kEnoughTakeoff = 0.9F;
 
 /// How fast across a body is to jump from the start of `link`, up to `early` short of it, for its box to come
-/// down over the floor at its end: over the gap between them, what its two sides do not span, by the time it
-/// is in the air to that height, as fast as its profile's leap at most. None for a ladder, or with no gap.
+/// down over the floor at its end well above it: kTakeoffMargin times what the gap takes
+/// (navigation::leastLeapSpeedOf), as fast as it leaves a ledge, `leapSpeed`, at most. None for a ladder, or
+/// with no gap.
 [[nodiscard]] auto takeoffSpeedOf(const navigation::MeshLink& link, const navigation::AgentProfile& profile,
-                                  HammerUnits early) noexcept -> float {
-    const float gap = groundDistance(link.start, link.end) - (2.0F * profile.radius.value());
-    if (link.kind == navigation::AreaKind::Ladder || link.kind == navigation::AreaKind::Door || gap <= 0.0F) {
-        return 0.0F;
-    }
-    const float gravity = profile.gravity.value();
-    const float jump = link.kind == navigation::AreaKind::CrouchedJump && profile.crouchedJumpHeight
-                           ? profile.crouchedJumpHeight->value()
-                           : profile.jumpHeight.value();
-    const float rising = std::sqrt(2.0F * gravity * jump);
-    const float falling =
-        std::sqrt(std::max((rising * rising) - (2.0F * gravity * (link.end.z - link.start.z)), 0.0F));
-    const float inTheAir = (rising + falling) / gravity;
-    return std::min((gap + early.value()) * kTakeoffMargin / inTheAir, profile.leapSpeed.value());
+                                  HammerUnits early, UnitsPerSecond leapSpeed) noexcept -> float {
+    return std::min(navigation::leastLeapSpeedOf(link, profile, early).value() * kTakeoffMargin,
+                    leapSpeed.value());
 }
 
 /// The speed a body can still stop from by friction alone within `distance`, as PM_Friction slows it by
@@ -380,7 +367,8 @@ auto Brain::choose(Vec3 feet) const -> const Memory* {
 }
 
 void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ecs::Entity> pursued,
-                         navigation::NavigationQuery& query, std::span<const navigation::Gate> gates) {
+                         navigation::NavigationQuery& query, std::span<const navigation::Gate> gates,
+                         UnitsPerSecond leapSpeed) {
     const navigation::AgentProfile& profile = query.mesh().profile();
     if (crossing) {
         leftGround = leftGround || !isOnGround;
@@ -426,7 +414,7 @@ void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ec
     const bool wasOffTheMesh = pathError == navigation::NavigationError::OutsideMesh;
     if (!crossing &&
         (target != pursued || !plannedGoal || isAwayFromCorridor || movedFarEnough(feet, goal) ||
-         wasOffTheMesh ||
+         wasOffTheMesh || leapSpeed != plannedLeap ||
          (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value()))) {
         if (target != pursued) {
             avoided.clear(); // another pursuit, which got stuck nowhere yet
@@ -435,10 +423,15 @@ void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ec
         target = pursued;
         plannedGoal = goal;
         plannedFrom = feet;
+        plannedLeap = leapSpeed;
         forgetCorridor();
         pathError.reset();
-        const navigation::PathRequest request{
-            .from = feet, .to = goal, .avoided = avoided, .gates = gates, .shunned = shunnedLinks};
+        const navigation::PathRequest request{.from = feet,
+                                              .to = goal,
+                                              .avoided = avoided,
+                                              .gates = gates,
+                                              .shunned = shunnedLinks,
+                                              .leapSpeed = leapSpeed};
         // By a way no door closes, however long: that is what it comes down to on its way to open one.
         // Failing that, through what opens to it, to wait there for one of them to open it.
         auto planned = navigation::Corridor::plan(query, request);
@@ -496,8 +489,8 @@ auto Brain::gateItOpens() const noexcept -> std::optional<Vec3> {
     return opening ? std::optional{opening->door} : std::nullopt;
 }
 
-auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround, Vec3 velocity,
-                   std::span<const navigation::Gate> gates) -> Decision {
+auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond maxSpeed, bool isOnGround,
+                   Vec3 velocity, std::span<const navigation::Gate> gates) -> Decision {
     if (opening) {
         const navigation::Gate* const gate = gateAt(gates, opening->door);
         if (gate == nullptr || gate->isOpen) {
@@ -539,7 +532,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
         }
     }
     const navigation::AgentProfile& profile = query.mesh().profile();
-    planIfNeeded(feet, isOnGround, goal, pursued, query, gates);
+    planIfNeeded(feet, isOnGround, goal, pursued, query, gates, leapSpeedOf(maxSpeed));
     if (pathError) {
         decision.behavior = Behavior::Blocked;
         decision.navigationError = pathError;
@@ -598,7 +591,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
         return decision;
     }
     std::optional<navigation::MeshLink> nextLink;
-    if (beginCrossing(decision, feet, velocity, query, gates, nextLink)) {
+    if (beginCrossing(decision, feet, velocity, maxSpeed, query, gates, nextLink)) {
         decision.intent.crouches = crouchesAcross();
         return decision;
     }
@@ -671,7 +664,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
     }
     if (next != corners.end()) {
         approach(decision, feet, std::span{corners}.subspan(static_cast<std::size_t>(next - corners.begin())),
-                 profile, nextLink);
+                 profile, nextLink, maxSpeed);
         const Vec3 toNext = acrossOf(*next - feet);
         const Vec3 toAfter = acrossOf(*std::ranges::next(next, 1, corners.end() - 1) - feet);
         const float afterLength = length(toAfter);
@@ -691,8 +684,8 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
 }
 
 void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
-                     const navigation::AgentProfile& profile,
-                     const std::optional<navigation::MeshLink>& next) {
+                     const navigation::AgentProfile& profile, const std::optional<navigation::MeshLink>& next,
+                     UnitsPerSecond maxSpeed) {
     if (rules.braking <= 0.0F || ahead.empty()) {
         return;
     }
@@ -723,21 +716,25 @@ void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
             const Vec3 beyond = acrossOf(pointAlong(way, corner, span) - way[corner]);
             const bool jumpsThere = corner == lastCorner && next &&
                                     next->kind != navigation::AreaKind::Ladder && next->end.z > next->start.z;
-            // Over a gap, as fast as the flight takes, and no faster: it lands past a small floor else.
+            // Over a gap, as fast as the flight takes, and no faster: it lands past a small floor else. A gap
+            // that takes a run is in its corridor only for a body that runs faster than the air gives it
+            // (leapSpeedOf), so that its share of that body's speed is one of a speed.
             const float takeoff =
-                corner == lastCorner && next ? takeoffSpeedOf(*next, profile, rules.arrivalDistance) : 0.0F;
-            const float passShare = takeoff > kAirSpeed ? takeoff / profile.leapSpeed.value()
-                                    : jumpsThere        ? jumpShareOf(into, beyond)
-                                                        : passShareOf(into, beyond);
+                corner == lastCorner && next
+                    ? takeoffSpeedOf(*next, profile, rules.arrivalDistance, leapSpeedOf(maxSpeed))
+                    : 0.0F;
+            const float passShare = takeoff > kAirSpeed.value() ? takeoff / maxSpeed.value()
+                                    : jumpsThere                ? jumpShareOf(into, beyond)
+                                                                : passShareOf(into, beyond);
             intent.approaches[intent.approachCount++] = {.distance = HammerUnits{along},
                                                          .passShare = passShare};
         }
     }
 }
 
-auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, navigation::NavigationQuery& query,
-                          std::span<const navigation::Gate> gates, std::optional<navigation::MeshLink>& next)
-    -> bool {
+auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPerSecond maxSpeed,
+                          navigation::NavigationQuery& query, std::span<const navigation::Gate> gates,
+                          std::optional<navigation::MeshLink>& next) -> bool {
     next = corridor->nextLink(query);
     if (!next || groundDistance(feet, next->start) > rules.arrivalDistance.value()) {
         return false;
@@ -749,13 +746,14 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, navigati
         }
     }
     const navigation::AgentProfile& linkProfile = query.mesh().profile();
-    const float takeoff = takeoffSpeedOf(*next, linkProfile, rules.arrivalDistance);
+    const UnitsPerSecond leapSpeed = leapSpeedOf(maxSpeed);
+    const float takeoff = takeoffSpeedOf(*next, linkProfile, rules.arrivalDistance, leapSpeed);
     const Vec3 across = wayAcross(next->end - next->start, Vec3{.x = 1.0F});
-    if (takeoff > kAirSpeed && !hasRunUp && dot(acrossOf(velocity), across) < takeoff * kEnoughTakeoff) {
+    if (takeoff > kAirSpeed.value() && !hasRunUp &&
+        dot(acrossOf(velocity), across) < takeoff * kEnoughTakeoff) {
         // Too slow for the gap, it backs off along the way across it, as far as the mesh goes, for a run at
-        // it.
-        const float gaining =
-            (rules.acceleration * linkProfile.leapSpeed.value()) - (rules.braking * takeoff);
+        // it: PM_Accelerate gains by its whole speed what friction takes by the speed it has.
+        const float gaining = (rules.acceleration * maxSpeed.value()) - (rules.braking * takeoff);
         const float run = linkProfile.radius.value() + (gaining > 0.0F ? takeoff * takeoff / (2.0F * gaining)
                                                                        : linkProfile.radius.value());
         const Vec3 back = next->start - (across * run);
@@ -778,8 +776,9 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, navigati
         return true;
     }
     // A link up it jumps once, from its start, and one over a gap; one down it walks off.
-    decision.intent.jumps = crossing->end.z > crossing->start.z ||
-                            takeoffSpeedOf(*crossing, linkProfile, rules.arrivalDistance) > kAirSpeed;
+    decision.intent.jumps =
+        crossing->end.z > crossing->start.z ||
+        takeoffSpeedOf(*crossing, linkProfile, rules.arrivalDistance, leapSpeed) > kAirSpeed.value();
     headFor(decision.intent, feet, crossing->end);
     return true;
 }

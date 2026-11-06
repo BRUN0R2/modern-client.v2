@@ -103,6 +103,14 @@ struct MeshLink {
     [[nodiscard]] inline auto operator==(const MeshLink&) const noexcept -> bool = default;
 };
 
+/// How fast across a body of `profile` leaves the start of `link`, up to `shortOfStart` short of it, for its
+/// box to come down over the floor at its end: over the gap between them, what its two sides do not span, by
+/// the time it is in the air jumping as high as the link's kind takes, to the end's height. None for a
+/// ladder, a door, or a link with no gap. A way goes over no link that takes more than its body leaves a
+/// ledge at (PathRequest::leapSpeed), and a brain leaves one faster than it takes, by a margin of its own.
+[[nodiscard]] auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile,
+                                    HammerUnits shortOfStart) noexcept -> UnitsPerSecond;
+
 /// A door of a map, as the agents whose ways go through it (AreaKind::Door) see it: the middle of its box as
 /// it stands closed, as its links name it (MeshLink::through); whether a body gets through, open or opened by
 /// walking into it; and where what opens it is, what a body uses from nearby.

@@ -30,6 +30,8 @@ using nx::render::OverlayVertex;
 
 constexpr nx::HammerUnits kLift{2.0F};
 constexpr std::uint8_t kSeeThrough = 32;
+/// How fast the agents' bodies run: a player's with a knife or a pistol.
+constexpr nx::UnitsPerSecond kRunSpeed{250.0F};
 
 [[nodiscard]] auto floorMesh() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;
@@ -51,7 +53,7 @@ constexpr std::uint8_t kSeeThrough = 32;
     -> nx::agents::Agent {
     nx::agents::Agent agent{.brain = nx::agents::Brain{brainRules()}, .stuck = nx::test::stuckWatch()};
     agent.brain.setGoal(goal);
-    agent.behavior = agent.brain.decide(feet, query).behavior;
+    agent.behavior = agent.brain.decide(feet, query, kRunSpeed).behavior;
     return agent;
 }
 
@@ -122,7 +124,7 @@ TEST(NavigationDrawingTest, ColorsTheShaftsByTeamAndTheHeadsByWhyTheAgentGoes) {
     chasing.brain.perceive(
         std::array{nx::agents::Observation{.entity = world.spawn(), .position = {.x = 200.0F, .y = -100.0F}}},
         {}, nx::kDefaultTickRate);
-    chasing.behavior = chasing.brain.decide({.y = -100.0F}, query).behavior;
+    chasing.behavior = chasing.brain.decide({.y = -100.0F}, query, kRunSpeed).behavior;
     ASSERT_EQ(chasing.behavior, nx::agents::Behavior::Chase);
     const nx::agents::Agent routing = movingAgent(query, {.y = -100.0F}, {.y = 300.0F});
     ASSERT_EQ(routing.behavior, nx::agents::Behavior::MoveTo);

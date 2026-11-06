@@ -399,7 +399,7 @@ TEST(NavigationMeshTest, ABlockABodysBoxStandsOnIsFloorItJumpsOntoAndDownFrom) {
 }
 
 TEST(NavigationMeshTest, AGapALeapSpansIsLinkedBothWaysAndOneWiderIsNot) {
-    // Two floors with nothing under what is between them. A leap at 230 units a second, 41.8 high, flies 148
+    // Two floors with nothing under what is between them. A leap at 260 units a second, 41.8 high, flies 168
     // units.
     const auto meshOver = [](float gap) {
         Geometry geometry;
@@ -428,6 +428,60 @@ TEST(NavigationMeshTest, AGapALeapSpansIsLinkedBothWaysAndOneWiderIsNot) {
     EXPECT_TRUE(mesh.outline().links.empty());
     nx::navigation::NavigationQuery query{mesh};
     EXPECT_FALSE(query.isReachable(here, {.x = 512.0F + kTooWide + 256.0F, .y = 256.0F}).value_or(true));
+}
+
+TEST(NavigationMeshTest, NoWayGoesOverAGapThatTakesALeapFasterThanItsBodyLeavesALedgeAt) {
+    constexpr float kGap = 100.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 512.0F, .y = 512.0F}, 0.0F);
+    nx::test::addFloor(geometry, {.x = 512.0F + kGap, .y = 0.0F}, {.x = 1024.0F + kGap, .y = 512.0F}, 0.0F);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    ASSERT_FALSE(outline.links.empty());
+    // Up as high as it jumps and down again, under its gravity, over what its box does not span.
+    const nx::navigation::AgentProfile& profile = mesh.profile();
+    const float inTheAir = 2.0F * std::sqrt(2.0F * profile.jumpHeight.value() / profile.gravity.value());
+    constexpr float kLevelTolerance = 1.0F; // a polygon's corners stand up to a cell above its floor
+    nx::UnitsPerSecond least = profile.leapSpeed;
+    for (const MeshLink& link : outline.links) {
+        const MeshLink back{.start = link.end, .end = link.start, .kind = link.kind};
+        const nx::UnitsPerSecond takes = std::max(nx::navigation::leastLeapSpeedOf(link, profile, {}),
+                                                  nx::navigation::leastLeapSpeedOf(back, profile, {}));
+        const float gap = nx::test::distanceAcross(link.start, link.end) - (2.0F * profile.radius.value());
+        EXPECT_NEAR(takes.value(), gap / inTheAir, kLevelTolerance)
+            << "what its box does not span, in the air";
+        least = std::min(least, takes);
+    }
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 here{.x = 256.0F, .y = 256.0F};
+    const Vec3 there{.x = 512.0F + kGap + 256.0F, .y = 256.0F};
+    EXPECT_TRUE(query.findPath({.from = here, .to = there}).has_value()) << "any body's";
+    EXPECT_TRUE(query.findPath({.from = here, .to = there, .leapSpeed = least}).has_value());
+    const auto tooSlow =
+        query.findPath({.from = here, .to = there, .leapSpeed = least - nx::UnitsPerSecond{1.0F}});
+    ASSERT_FALSE(tooSlow.has_value());
+    EXPECT_EQ(tooSlow.error().code, nx::navigation::NavigationError::Unreachable);
+    const auto unknown = query.findPath({.from = here, .to = there, .leapSpeed = nx::UnitsPerSecond{-1.0F}});
+    ASSERT_FALSE(unknown.has_value());
+    EXPECT_EQ(unknown.error().code, nx::navigation::NavigationError::InvalidQuery);
+}
+
+TEST(NavigationMeshTest, ALinkWithNoGapTakesNoLeapAndALadderNone) {
+    const nx::navigation::AgentProfile profile = nx::test::playerProfile();
+    const float radius = profile.radius.value();
+    // A ledge's link, its box over both floors at once: a step off, however high.
+    const MeshLink ledge{.start = {}, .end = {.x = 2.0F * radius, .z = -100.0F}, .kind = AreaKind::Drop};
+    EXPECT_EQ(nx::navigation::leastLeapSpeedOf(ledge, profile, {}), nx::UnitsPerSecond{});
+    const MeshLink ladder{.start = {}, .end = {.x = 200.0F, .z = 100.0F}, .kind = AreaKind::Ladder};
+    EXPECT_EQ(nx::navigation::leastLeapSpeedOf(ladder, profile, {}), nx::UnitsPerSecond{});
+    // Up a gap it takes more than down it, the air it has to come down to the far side being shorter.
+    const MeshLink up{.start = {}, .end = {.x = 4.0F * radius, .z = 30.0F}, .kind = AreaKind::Jump};
+    const MeshLink down{.start = up.end, .end = up.start, .kind = AreaKind::Jump};
+    EXPECT_GT(nx::navigation::leastLeapSpeedOf(up, profile, {}),
+              nx::navigation::leastLeapSpeedOf(down, profile, {}));
+    EXPECT_GT(nx::navigation::leastLeapSpeedOf(up, profile, nx::HammerUnits{8.0F}),
+              nx::navigation::leastLeapSpeedOf(up, profile, {}))
+        << "jumping short of the start, it has farther to go";
 }
 
 TEST(NavigationMeshTest, AWayGoesOverNoLinkItShunsWhileItHasAnother) {

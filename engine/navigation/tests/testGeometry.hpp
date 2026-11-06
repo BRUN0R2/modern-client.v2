@@ -20,7 +20,7 @@ namespace nx::test {
         .stepHeight = nx::HammerUnits{18.0F},
         .jumpHeight = nx::HammerUnits{41.8F},
         .dropHeight = nx::HammerUnits{156.25F},
-        .leapSpeed = nx::UnitsPerSecond{230.0F},
+        .leapSpeed = nx::UnitsPerSecond{260.0F},
         .gravity = nx::UnitsPerSecondSquared{800.0F},
         .minGroundNormalZ = 0.7F,
         .areaCosts = {{.area = nx::navigation::AreaKind::Crouch, .cost = 3.0F}}};

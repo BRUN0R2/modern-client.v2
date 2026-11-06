@@ -49,7 +49,7 @@ constexpr float kRoofHeight = 512.0F;
                         .stepHeight = nx::HammerUnits{18.0F},
                         .jumpHeight = nx::HammerUnits{41.8F},
                         .dropHeight = nx::HammerUnits{156.25F},
-                        .leapSpeed = nx::UnitsPerSecond{230.0F},
+                        .leapSpeed = nx::UnitsPerSecond{260.0F},
                         .gravity = nx::UnitsPerSecondSquared{800.0F},
                         .minGroundNormalZ = 0.7F,
                         .areaCosts = {}};
@@ -198,6 +198,8 @@ constexpr nx::Vec3 kStart{.x = 64, .y = 64};
 constexpr nx::Vec3 kGoal{.x = kFloorSide - kPillarSide, .y = kFloorSide - kPillarSide};
 constexpr float kGroundBraking = 4.0F;
 constexpr nx::UnitsPerSecond kGroundStopSpeed{75.0F};
+/// How fast their bodies run: a player's with a knife or a pistol.
+constexpr nx::UnitsPerSecond kRunSpeed{250.0F};
 constexpr float kGroundAcceleration = 5.0F;
 
 enum class Motion : std::uint8_t { Instant, Inertial };
@@ -223,7 +225,7 @@ enum class Motion : std::uint8_t { Instant, Inertial };
     for (std::size_t index = 0; index < count; ++index) {
         brains.emplace_back(rules);
         brains.back().perceive(seen, {}, nx::kDefaultTickRate);
-        if (brains.back().decide(kStart, query).behavior != nx::agents::Behavior::Chase) {
+        if (brains.back().decide(kStart, query, kRunSpeed).behavior != nx::agents::Behavior::Chase) {
             return {};
         }
     }
@@ -246,7 +248,7 @@ void measureAgentDecisions(benchmark::State& state, Motion motion) {
     for (auto iteration : state) {
         for (auto& brain : brains) {
             brain.perceive(seen, {}, nx::kDefaultTickRate);
-            auto decision = brain.decide(kStart, query);
+            auto decision = brain.decide(kStart, query, kRunSpeed);
             benchmark::DoNotOptimize(decision);
         }
     }
