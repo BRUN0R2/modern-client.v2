@@ -93,8 +93,9 @@ struct MeshPolygon {
 
 /// A link of a mesh between a ledge and the floor below (AreaKind::Jump, AreaKind::Drop), or two floors a
 /// ladder joins (AreaKind::Ladder) or a door between (AreaKind::Door): where a body leaves the one, where it
-/// lands on the other, and its kind, of which Jump, Ladder and Door go both ways; of a Ladder or a Door, the
-/// middle of what it goes through across, to whole units, at the height of the start.
+/// lands on the other, and its kind, of which Ladder and Door go both ways, and Jump and CrouchedJump too but
+/// over a gap, where each way is a link of its own, a flight of its own; of a Ladder or a Door, the middle of
+/// what it goes through across, to whole units, at the height of the start.
 struct MeshLink {
     Vec3 start{};
     Vec3 end{};
@@ -261,6 +262,13 @@ inline constexpr int borderPadCells = 3;
 
 /// How far inside its tile a link leaving from the tile's side starts: Detour keeps a link in one tile alone.
 inline constexpr float kLinkInsetFromTileSide = 1.0F;
+
+/// How far across a body of radius `radius` flies over nothing from `start` to `end`: what its two sides do
+/// not span, none or less for ends its box spans at once. A link over a gap goes one way
+/// (TileLinks::addFlight), and takes a leap's speed across (leastLeapSpeedOf).
+[[nodiscard]] inline auto gapAcross(Vec3 start, Vec3 end, HammerUnits radius) noexcept -> float {
+    return std::hypot(end.x - start.x, end.y - start.y) - (2.0F * radius.value());
+}
 
 /// A point of the game's space (z up) in Recast's and Detour's (y up), turned about x: the same
 /// handedness, so a polygon keeps its winding.

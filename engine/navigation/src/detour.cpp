@@ -205,16 +205,10 @@ private:
         return MeshLink{.start = endOf(0), .end = endOf(1), .kind = detail::kindOfArea(polygon.getArea())};
     }
 
-    /// Of a link both ways, the way up, which takes no less than the way down.
+    /// A link both ways spans no gap, and takes no leap either way: over one, each way is a link of its own.
     [[nodiscard]] auto isFlownTooFast(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
-        if (!leapSpeed) {
-            return false;
-        }
-        MeshLink link = linkAt(tile, polygon);
-        if ((connectionOf(tile, polygon).flags & DT_OFFMESH_CON_BIDIR) != 0 && link.start.z > link.end.z) {
-            std::swap(link.start, link.end);
-        }
-        return leastLeapSpeedOf(link, *agentProfile, HammerUnits{}) > *leapSpeed;
+        return leapSpeed &&
+               leastLeapSpeedOf(linkAt(tile, polygon), *agentProfile, HammerUnits{}) > *leapSpeed;
     }
 
     [[nodiscard]] auto isShunned(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
@@ -535,8 +529,7 @@ private:
 
 auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerUnits shortOfStart) noexcept
     -> UnitsPerSecond {
-    const float gap =
-        std::hypot(link.end.x - link.start.x, link.end.y - link.start.y) - (2.0F * profile.radius.value());
+    const float gap = detail::gapAcross(link.start, link.end, profile.radius);
     if (link.kind == AreaKind::Ladder || link.kind == AreaKind::Door || gap <= 0.0F) {
         return UnitsPerSecond{};
     }
