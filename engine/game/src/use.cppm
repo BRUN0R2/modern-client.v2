@@ -20,11 +20,12 @@ struct UseView {
     Vec3 forward{}; ///< Of length 1.
 };
 
-/// `user`, a player at the origin of its Transform looking as `view` says, uses what is in front of it
-/// (CBasePlayer::PlayerUse): of the brush entities a player's use reaches, a button that takes no
-/// damage or a door used only, whose linked box comes within 64 units of its origin, the one whose
-/// middle is most straight ahead from its eye, more than 0.7 of the way (about 45 degrees off); as the
-/// original, through walls. Returns what it used; none when nothing was in front.
+/// `user`, a player or the body of an entity that uses as a player does, at the origin of its Transform
+/// looking as `view` says, uses what is in front of it (CBasePlayer::PlayerUse): of the brush entities a
+/// player's use reaches, a button that takes no damage or a door used only, whose linked box comes within 64
+/// units of its origin, the one whose middle is most straight ahead from its eye, more than 0.7 of the way
+/// (about 45 degrees off); as the original, through walls. Returns what it used; none when nothing was in
+/// front.
 auto playerUse(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity user, const UseView& view)
     -> std::optional<ecs::Entity>;
 

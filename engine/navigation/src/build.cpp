@@ -1304,7 +1304,8 @@ struct TileDraft {
 using DraftResult = Result<std::optional<TileDraft>, MeshBuildError>;
 
 /// Tile `tileX`, `tileY` of `input`, as Recast builds it: its voxels, the floor the profile's radius
-/// keeps away from walls and ledges, sorted by the bodies that fit on it (sortFloorByBodies), that floor
+/// keeps away from walls, a ledge's to its very edge (keepFromWalls), sorted by the bodies that fit on it
+/// (sortFloorByBodies), that floor
 /// along them within its wall clearance (markEdges), its regions, their outlines, the polygons of those and
 /// their details, and the links about it. None when it holds no floor. Errors: TileRefused.
 [[nodiscard]] auto draftTile(const TileInput& input, std::int32_t tileX, std::int32_t tileY) -> DraftResult {
