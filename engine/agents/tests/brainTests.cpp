@@ -1402,10 +1402,13 @@ TEST(AgentBrain, ABrakingBodyAnticipatesAndCrossesADrop) {
 }
 
 /// A floor with a block in its far corner, which the way from the top left to the bottom right turns round.
+/// The corner of cornerMesh's block that a way from the floor's top left to its bottom right turns round.
+constexpr nx::Vec3 kBlockCorner{.x = 300, .y = 300};
+
 auto cornerMesh() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 1024}, 0);
-    nx::test::addBox(geometry, {.x = 300, .y = 300}, {.x = 1024, .y = 1024, .z = 300});
+    nx::test::addBox(geometry, kBlockCorner, {.x = 1024, .y = 1024, .z = 300});
     return nx::test::playerMesh(geometry, 0);
 }
 
@@ -1520,21 +1523,21 @@ TEST(AgentBrain, ABodyDrawnBackFromACornerItReachedAsItGotStuckReturnsToIt) {
     auto mesh = cornerMesh();
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{brakingRules()};
-    const nx::Vec3 start{.x = 150, .y = 900};
     brain.setGoal(nx::Vec3{.x = 900, .y = 150});
-    std::ignore = brain.decide(start, query);
+    std::ignore = brain.decide({.x = 150, .y = 900}, query);
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
-    ASSERT_GE(way.size(), 5U) << "down the block's side, round its corner in two short turns, and on";
-    // It reaches the last turn round the block's corner, stopping just short of it as its funnel lists it
-    // only until then.
-    const nx::Vec3 corner = way[3];
-    std::ignore = brain.decide(way[2], query);
+    // Down the block's side, round its corner, and on: the turn round it is the way's corner nearest it.
+    const auto turn =
+        std::ranges::min_element(way, {}, [](nx::Vec3 point) { return nx::length(point - kBlockCorner); });
+    ASSERT_TRUE(turn != way.begin() && std::ranges::next(turn) != way.end());
+    const nx::Vec3 corner = *turn;
+    // It reaches that turn, stopping just short of it as its funnel lists it only until then.
+    std::ignore = brain.decide(*std::ranges::prev(turn), query);
     std::ignore = brain.decide(corner + nx::Vec3{.x = -2, .y = 2}, query);
-    // It gets stuck there, and is drawn back along the block's side.
-    constexpr float kDrawnBack = 60.0F;
-    const nx::Vec3 cameFrom = start - corner;
-    const nx::Vec3 drawnBack = corner + (cameFrom / nx::length(cameFrom) * kDrawnBack);
+    // It gets stuck there, and is drawn back up the block's side.
+    constexpr nx::Vec3 kDrawnBack{.y = 60.0F};
+    const nx::Vec3 drawnBack = corner + kDrawnBack;
     brain.noteStuck();
     const nx::Vec3 direction = brain.decide(drawnBack, query).intent.direction;
     const nx::Vec3 toCorner = corner - drawnBack;

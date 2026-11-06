@@ -372,15 +372,15 @@ TEST(AgentDeciders, ALinkItsBodyIsKnockedOffIsNoneItFailed) {
 
 TEST(AgentDeciders, ABodyDrawnBackFromACornerItReachedAsItGotStuckHeadsBackToIt) {
     // A floor with a block in its far corner, which the way from top left to bottom right turns round.
+    constexpr nx::Vec3 kBlockCorner{.x = 300, .y = 300};
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 1024}, 0);
-    nx::test::addBox(geometry, {.x = 300, .y = 300}, {.x = 1024, .y = 1024, .z = 300});
+    nx::test::addBox(geometry, kBlockCorner, {.x = 1024, .y = 1024, .z = 300});
     const auto mesh = nx::test::playerMesh(geometry, 0);
     nx::navigation::NavigationQuery query{mesh};
     auto jobs = nx::test::jobSystem(0);
     nx::agents::Deciders deciders{mesh};
     nx::agents::Agent agent{.brain = nx::agents::Brain{rules()}, .stuck = nx::test::stuckWatch()};
-    const nx::Vec3 start{.x = 150, .y = 900};
     agent.brain.setGoal(nx::Vec3{.x = 900, .y = 150});
     std::array<nx::agents::Decision, 1> decisions{};
     const auto decided = [&](nx::Vec3 feet) {
@@ -392,24 +392,26 @@ TEST(AgentDeciders, ABodyDrawnBackFromACornerItReachedAsItGotStuckHeadsBackToIt)
         deciders.decide(*jobs, requests, decisions);
         return decisions.front().intent;
     };
-    std::ignore = decided(start);
+    std::ignore = decided({.x = 150, .y = 900});
     std::vector<nx::Vec3> way;
     agent.brain.appendWay(query, way);
-    ASSERT_GE(way.size(), 5U) << "down the block's side, round its corner in two short turns, and on";
-    // It reaches the last turn round the block's corner, stopping just short of it as its funnel lists it
-    // only until then, and its feet stay there until its watch finds it stuck.
-    const nx::Vec3 corner = way[3];
-    std::ignore = decided(way[2]);
+    // Down the block's side, round its corner, and on: the turn round it is the way's corner nearest it.
+    const auto turn =
+        std::ranges::min_element(way, {}, [&](nx::Vec3 point) { return nx::length(point - kBlockCorner); });
+    ASSERT_TRUE(turn != way.begin() && std::ranges::next(turn) != way.end());
+    const nx::Vec3 corner = *turn;
+    // It reaches that turn, stopping just short of it as its funnel lists it only until then, and its feet
+    // stay there until its watch finds it stuck.
+    std::ignore = decided(*std::ranges::prev(turn));
     constexpr int kMostTicks = 100;
     for (int tick = 0; tick < kMostTicks && !agent.stuck.isStuck(); ++tick) {
         std::ignore = decided(corner + nx::Vec3{.x = -2, .y = 2});
     }
     ASSERT_TRUE(agent.stuck.isStuck());
-    // Its wiggle draws it back along the block's side, within its unstuck distance: however it wiggles, what
-    // it faces is the way on along its corridor.
-    constexpr float kDrawnBack = 60.0F;
-    const nx::Vec3 cameFrom = start - corner;
-    const nx::Vec3 drawnBack = corner + (cameFrom / nx::length(cameFrom) * kDrawnBack);
+    // Its wiggle draws it back up the block's side, within its unstuck distance: however it wiggles, what it
+    // faces is the way on along its corridor.
+    constexpr nx::Vec3 kDrawnBack{.y = 60.0F};
+    const nx::Vec3 drawnBack = corner + kDrawnBack;
     const nx::Vec3 ahead = decided(drawnBack).ahead;
     const nx::Vec3 toCorner = corner - drawnBack;
     EXPECT_GT(nx::dot(ahead, toCorner / nx::length(toCorner)), 0.7F) << "back to the corner";
