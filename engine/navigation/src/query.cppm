@@ -12,6 +12,7 @@ import nx.core;
 import nx.math;
 import :profile;
 import :mesh;
+import :flight;
 
 export namespace nx::navigation {
 
@@ -28,9 +29,9 @@ struct AvoidedPlace {
 /// costs when none are given, the places it keeps away from, a polygon several of them reach costing
 /// the most any of them makes it, the doors as they stand, through none of which it goes closed, but what
 /// opens it when `opensGates`: one no gate names it goes through as through one open; the links it goes
-/// over none of, either way; and how fast across the body it is for leaves a ledge at most, which takes it
-/// over no link whose gap takes more (leastLeapSpeedOf, each way over a gap being a link of its own): none,
-/// over any the mesh has.
+/// over none of, either way; and how the body it is for moves, which takes it over no link whose gap takes
+/// more than it leaves the start at (leastLeapSpeedOf, fastestTakeoffOf), each way over a gap being a link of
+/// its own: none, over any the mesh has.
 struct PathRequest {
     Vec3 from{};
     Vec3 to{};
@@ -39,7 +40,7 @@ struct PathRequest {
     std::span<const Gate> gates{};
     bool opensGates = false;
     std::span<const MeshLink> shunned{};
-    std::optional<UnitsPerSecond> leapSpeed{};
+    std::optional<BodyMotion> body{};
 };
 
 /// A way on a mesh: the points an agent walks straight between, the first on the mesh nearest the

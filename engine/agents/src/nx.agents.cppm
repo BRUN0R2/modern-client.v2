@@ -76,6 +76,12 @@ struct Rules {
     /// acceleration gains it nothing, and it walks no slower than twice that, the slowest walk it gains as
     /// fast as its friction would stop it from, but to stop where its way ends. None, at any walk.
     float acceleration = 0.0F;
+    /// The share of its run its body moves at crouched (PM_Duck's PLAYER_DUCKING_MULTIPLIER, 0.333): it
+    /// leaves a ledge it stands on only crouched no faster. 1, as fast as standing.
+    float crouchedShare = 1.0F;
+    /// What its body gains across in the air, wishing for no more speed there (PM_AirAccelerate's cap, 30): a
+    /// gap whose flight takes no more takes no run at it. None, nothing.
+    UnitsPerSecond airSpeed{};
 };
 
 /// A sensed fact: where a target was seen, touched, or roughly where it was heard (Brain::sense), never a
@@ -131,17 +137,6 @@ struct Approach {
 /// The most points ahead an agent slows down for: as many as the corners it sees ahead.
 inline constexpr std::size_t kMostApproaches = 4;
 
-/// What a body gains across in the air (PM_AirAccelerate's cap on the speed it wishes): a flight that takes
-/// no more than this takes no run at it.
-inline constexpr UnitsPerSecond kAirSpeed{30.0F};
-
-/// How fast across a body that runs at `maxSpeed` at most leaves a ledge: its run, or what it gains in the
-/// air standing. Its ways go over no gap that takes more (navigation::leastLeapSpeedOf,
-/// navigation::PathRequest::leapSpeed).
-[[nodiscard]] inline auto leapSpeedOf(UnitsPerSecond maxSpeed) noexcept -> UnitsPerSecond {
-    return std::max(maxSpeed, kAirSpeed);
-}
-
 /// What a decision asks of a body, as a player's command would: where to move, where to look, whether
 /// to attack or to jump; and what ahead on its way it slows down for, which steering heeds.
 struct Intent {
@@ -172,8 +167,8 @@ struct Intent {
     /// It uses what it looks at (lookAt), as a player's use key does: what opens a door, near enough.
     bool uses = false;
     /// It holds its duck key: on or coming to floor of the kind Crouch, or across a link of the kind
-    /// CrouchedJump going up. A body's keys ask a third of their speed then, of all it asks however it
-    /// steers.
+    /// CrouchedJump going up or over a gap. A body's keys ask a third of their speed then, of all it asks
+    /// however it steers.
     bool crouches = false;
     /// What ahead on its way it slows down for, the nearest first, approachCount of them: each corner it
     /// sees ahead with the way on after it, passed at the cosine of half the way's turn there (straight on
@@ -247,7 +242,7 @@ public:
     /// toward the end and looking well below level, or straight down where the floors lie on one side of it,
     /// as a body climbs down one no faster (PM_LadderMove). A body off the mesh is Blocked as it stays there,
     /// each decision searching anew, and jumps, letting go of a ladder it holds. Its body runs at `maxSpeed`
-    /// at most: its ways go over no gap that takes more than it leaves a ledge at (leapSpeedOf), searched
+    /// at most: its ways go over no gap that takes more than it leaves the start at (bodyMotion), searched
     /// anew as that changes, as a frozen round's start ends; and it leaves one no faster than it moves, at
     /// `velocity`, lets it.
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond maxSpeed,
@@ -259,6 +254,17 @@ public:
     void openGate(Vec3 door, navigation::GateOpener opener) noexcept;
     /// The middle of the door it goes to open; none while it does not.
     [[nodiscard]] auto gateItOpens() const noexcept -> std::optional<Vec3>;
+    /// How its body moves running at `maxSpeed` at most (navigation::BodyMotion): crouched at its share of
+    /// that, gaining what the air and its run give it by its rules, and losing what its friction takes. Its
+    /// ways go over no gap that takes more than it leaves the start at (navigation::fastestTakeoffOf,
+    /// navigation::PathRequest::body).
+    [[nodiscard]] inline auto bodyMotion(UnitsPerSecond maxSpeed) const noexcept -> navigation::BodyMotion {
+        return navigation::BodyMotion{.runSpeed = maxSpeed,
+                                      .crouchedSpeed = maxSpeed * rules.crouchedShare,
+                                      .airSpeed = rules.airSpeed,
+                                      .acceleration = rules.acceleration,
+                                      .braking = rules.braking};
+    }
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
     /// `velocity`, at `maxSpeed` at most, and no faster than it can still slow down for what the intent
@@ -317,15 +323,15 @@ private:
     /// The target it pursues from `feet`, as decide chooses it; none when it recognizes none.
     [[nodiscard]] auto choose(Vec3 feet) const -> const Memory*;
     /// Keeps the corridor from `feet` toward `goal`, searching anew when the pursuit or position asks it, as
-    /// its body comes back to the ground below the link it crossed, or as how fast it leaves a ledge,
-    /// `leapSpeed`, changes.
+    /// its body comes back to the ground below the link it crossed, or as how its body moves, `body`,
+    /// changes.
     void planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ecs::Entity> pursued,
                       navigation::NavigationQuery& query, std::span<const navigation::Gate> gates,
-                      UnitsPerSecond leapSpeed);
+                      const navigation::BodyMotion& body);
     /// A crossing of `link` failed, its body back on the ground short of its end: twice in a row, and its
     /// ways keep off that link (PathRequest::shunned) for as long as they have another, while it goes on
-    /// after the same thing: nothing else tells it what a link flown at a leap's speed takes from where it
-    /// is, a ledge with no room for a run at it say, where it jumped and fell back for good.
+    /// after the same thing: the mesh tells how a body leaves a link's start (navigation::Takeoff), not what
+    /// may stop it in the air, a wall at its landing say, where it jumped and fell back for good.
     void noteLinkFailed(const navigation::MeshLink& link);
     /// Forgets a completed goal or an investigated target after arriving.
     void finishArrival(const Memory* selected);
@@ -340,7 +346,8 @@ private:
                   UnitsPerSecond maxSpeed);
     /// Finds `next` and crosses it when `feet` are within arrivalDistance of its start, a body going at
     /// `velocity` too slowly for a gap there backing off for a run at it once (runUpFrom), as far as running
-    /// at `maxSpeed` it gains what it takes. If crossing fails, finds `next` again because the corridor may
+    /// at `maxSpeed` it gains what it takes (navigation::runUpOf), and no farther than the floor behind the
+    /// start goes (navigation::Takeoff::room). If crossing fails, finds `next` again because the corridor may
     /// have changed. Returns whether it crosses one.
     [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPerSecond maxSpeed,
                                      navigation::NavigationQuery& query,
@@ -357,8 +364,8 @@ private:
     std::optional<Vec3> givenGoal{};
     std::optional<Vec3> plannedGoal{};
     std::optional<Vec3> plannedFrom{};
-    /// How fast across its body left a ledge as its corridor was searched (leapSpeedOf).
-    UnitsPerSecond plannedLeap{};
+    /// How its body moved as its corridor was searched (bodyMotion).
+    navigation::BodyMotion plannedBody{};
     std::optional<navigation::Corridor> corridor{};
     /// The link of its corridor its body crosses, the corridor gone on from the link's end; none while it
     /// walks along it.

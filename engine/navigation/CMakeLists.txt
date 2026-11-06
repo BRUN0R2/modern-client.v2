@@ -10,10 +10,12 @@ nxAddModuleLibrary(nxNavigation
         src/profile.cppm
         src/geometry.cppm
         src/mesh.cppm
+        src/flight.cppm
         src/query.cppm
         src/corridor.cppm
     SOURCES
         src/profile.cpp
+        src/flight.cpp
         src/build.cpp
         src/detour.cpp
     DEPENDS

@@ -54,21 +54,29 @@ convex polygons, through Recast and Detour.
   ducked body fits, and else `drop`, down only. Over a gap each way is a link of its own, a flight of its own: the
   one back starts where the other lands, in whichever tile that is, so that a build hands each tile the links
   that start in it from the tiles about it before Detour takes any, Detour keeping a link in the tile it starts
-  in alone. A brain crosses one from its start, jumping once for a link up or
-  across a gap, having slowed down for what the link's way turns across its own, since in the air a body flies on,
-  and heads for its end without steering, as DetourCrowd moves an agent over a link. It has crossed only on the
+  in alone. Each keeps the ground its start is (`Takeoff`): how high a body rises there before its head meets
+  anything, straight up as a body that leaves it slowly rises, and whether only a crouched body stands there, in
+  the link's id; and how far the floor goes on behind it, away from its end, which a walk on the mesh tells as
+  Detour takes the tiles. A brain crosses one from its start, jumping once for a link up or
+  across a gap, ducking in the air over a crouched jump up or across a gap, having slowed down for what the link's
+  way turns across its own, since in the air a body flies on, and heads for its end without steering, as
+  DetourCrowd moves an agent over a link. It has crossed only on the
   ground, at the height of the end and as far from the start; back on the ground below that height it fell short,
   and searches its way anew from where it stands. Back short of one link twice in a row, its ways keep off that
-  link (`PathRequest::shunned`) for as long as they have another: a link is flown at a leap's speed, and nothing
-  else tells it that a floor has no room for that. The ledge its next link leaves from is no wall to its steering,
+  link (`PathRequest::shunned`) for as long as they have another: a link is flown at the fastest body's speed, and
+  the ground at its start tells how a body leaves it, not what may stop it in the air, a wall at its landing say. The ledge its next link leaves from is no wall to its steering,
   and within four radii of it, it heads straight for it, the walls of a floor no bigger than a block being all
   round it. What a gap takes is how fast across a body covers what its box does not span in the time it is in the
-  air (`leastLeapSpeedOf`), each way by its own flight: a body's way goes over no link that takes more than
-  it leaves a ledge at, its run or what the air gives it (`PathRequest::leapSpeed`, `nx::agents::leapSpeedOf`),
-  and is searched anew as that changes, so that a zombie slower than a gap takes goes round it, and a bot frozen
-  at a round's start searches again once it may run. Over a gap it needs the speed the flight takes, and a margin:
-  too slow, it backs off along the way across it for a run at it (`Brain::isRunningUp`), as far as anything lets
-  it, and it comes no faster than a small floor lets it land on. On the ground on another floor than its corridor,
+  air (`leastLeapSpeedOf`), each way by its own flight, rising as high as the ground at its start lets it: a body's
+  way goes over no link that takes more than it leaves the start at (`fastestTakeoffOf`), as fast as its run gains
+  it over the floor behind the start, crouched where only a crouched body stands, or what the air gives it, by how
+  it moves (`PathRequest::body`, `BodyMotion`: its run and crouched speeds, what the air gives it, its
+  acceleration and its friction, a brain's from its rules, `Brain::bodyMotion`), and is searched anew as that
+  changes, so that a zombie slower than a gap takes goes round it, a bot frozen at a round's start searches again
+  once it may run, and a bot on a sill too shallow for a run at a gap goes round it. Over a gap it needs the speed
+  the flight takes, and a margin: too slow, it backs off along the way across it for a run at it
+  (`Brain::isRunningUp`), as far as its run gains it that speed (`runUpOf`) and no farther than the floor behind
+  the start goes, and it comes no faster than a small floor lets it land on. On the ground on another floor than its corridor,
   as a body that fell, it searches its way anew. While its way goes on it never stands with nothing to head for:
   the corners of small polygons may all lie within its arrival of it just short of a link. A decision reuses its
   next-link lookup to anticipate the way over it when braking; after an attempted crossing fails and may have

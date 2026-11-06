@@ -91,27 +91,35 @@ struct MeshPolygon {
     [[nodiscard]] inline auto operator==(const MeshPolygon&) const noexcept -> bool = default;
 };
 
+/// The ground a body leaves the start of a link over a gap from, which how fast it leaves it depends on
+/// (fastestTakeoffOf, leastLeapSpeedOf): how far that floor goes on behind the start, straight away from the
+/// end, as far as a body's middle stands on the mesh; how high a body jumping there rises before its head
+/// meets anything, as high as the link's kind jumps at most, as the build flies it; and whether only a
+/// crouched body stands there, which runs no faster than it walks crouched.
+struct Takeoff {
+    HammerUnits room{};
+    HammerUnits rise{};
+    bool isCrouched = false;
+
+    [[nodiscard]] inline auto operator==(const Takeoff&) const noexcept -> bool = default;
+};
+
 /// A link of a mesh between a ledge and the floor below (AreaKind::Jump, AreaKind::Drop), or two floors a
 /// ladder joins (AreaKind::Ladder) or a door between (AreaKind::Door): where a body leaves the one, where it
 /// lands on the other, and its kind, of which Ladder and Door go both ways, and Jump and CrouchedJump too but
 /// over a gap, where each way is a link of its own, a flight of its own; of a Ladder or a Door, the middle of
-/// what it goes through across, to whole units, at the height of the start.
+/// what it goes through across, to whole units, at the height of the start; and of a link over a gap, the
+/// ground a body leaves its start from, none for one that tells nothing of it, which is left as from open
+/// ground.
 struct MeshLink {
     Vec3 start{};
     Vec3 end{};
     AreaKind kind = AreaKind::Drop;
     Vec3 through{};
+    std::optional<Takeoff> takeoff{};
 
     [[nodiscard]] inline auto operator==(const MeshLink&) const noexcept -> bool = default;
 };
-
-/// How fast across a body of `profile` leaves the start of `link`, up to `shortOfStart` short of it, for its
-/// box to come down over the floor at its end: over the gap between them, what its two sides do not span, by
-/// the time it is in the air jumping as high as the link's kind takes, to the end's height. None for a
-/// ladder, a door, or a link with no gap. A way goes over no link that takes more than its body leaves a
-/// ledge at (PathRequest::leapSpeed), and a brain leaves one faster than it takes, by a margin of its own.
-[[nodiscard]] auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile,
-                                    HammerUnits shortOfStart) noexcept -> UnitsPerSecond;
 
 /// How a body opens a door by what opens it.
 enum class OpenerKind : std::uint8_t {
@@ -309,6 +317,33 @@ inline constexpr std::uint32_t kThroughIdCoordinateMask = (std::uint32_t{1} << k
     return Vec3{.x = static_cast<float>(static_cast<std::int16_t>(id >> kThroughIdCoordinateBits)),
                 .y = static_cast<float>(static_cast<std::int16_t>(id & kThroughIdCoordinateMask)),
                 .z = height};
+}
+
+/// What the id of a link over a gap keeps of the ground a body leaves its start from (Takeoff), the floor
+/// behind it being the mesh's to tell: that it is one, whether only a crouched body stands there, and how
+/// high a body rises there, in tenths of a unit, which a jump's height is given to.
+inline constexpr std::uint32_t kRiseIdBits = 16;
+inline constexpr std::uint32_t kRiseIdMask = (std::uint32_t{1} << kRiseIdBits) - 1U;
+inline constexpr float kRiseIdUnitsPerUnit = 10.0F;
+inline constexpr std::uint32_t kCrouchedIdBit = std::uint32_t{1} << kRiseIdBits;
+inline constexpr std::uint32_t kTakeoffIdBit = kCrouchedIdBit << 1U;
+
+/// The id of a link over a gap whose start a body rises `rise` from, only crouched where `isCrouched`.
+[[nodiscard]] inline auto takeoffIdOf(HammerUnits rise, bool isCrouched) noexcept -> std::uint32_t {
+    const float tenths =
+        std::clamp(std::round(rise.value() * kRiseIdUnitsPerUnit), 0.0F, static_cast<float>(kRiseIdMask));
+    return kTakeoffIdBit | (isCrouched ? kCrouchedIdBit : 0U) | static_cast<std::uint32_t>(tenths);
+}
+
+/// The ground the start of the link of `id` is, of a link over a gap (takeoffIdOf), its floor going on `room`
+/// behind it; none for another link's.
+[[nodiscard]] inline auto takeoffOfId(std::uint32_t id, HammerUnits room) noexcept -> std::optional<Takeoff> {
+    if ((id & kTakeoffIdBit) == 0) {
+        return std::nullopt;
+    }
+    return Takeoff{.room = room,
+                   .rise = HammerUnits{static_cast<float>(id & kRiseIdMask) / kRiseIdUnitsPerUnit},
+                   .isCrouched = (id & kCrouchedIdBit) != 0};
 }
 
 /// The flag of the polygons agents may cross: every one today; a door will close its own (TODO.md).
