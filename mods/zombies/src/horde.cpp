@@ -18,8 +18,6 @@ import cs.server;
 namespace zombies {
 namespace {
 constexpr nx::log::Category kLog{"zombies"};
-constexpr float kHalfTurnDegrees = 180.0F;
-constexpr float kFullTurnDegrees = kHalfTurnDegrees * 2.0F;
 /// The stream of random numbers a stuck zombie's wiggles and jumps draw from, of its body.
 constexpr std::string_view kStuckStream = "zombie stuck";
 /// How far a body's slot is shifted from its generation in the seed of its stuck watch's draws.
@@ -188,7 +186,7 @@ namespace {
         return std::isfinite(value) && value > 0.0F;
     };
     if (!positive(read->thinkInterval.count()) || !positive(read->sightRange.value()) ||
-        !positive(read->fieldOfView.value()) || read->fieldOfView.value() > kFullTurnDegrees ||
+        !positive(read->fieldOfView.value()) || read->fieldOfView > nx::kFullTurnDegrees ||
         !positive(read->memoryLifetime.count()) || !positive(read->arrivalDistance.value()) ||
         !positive(read->replanDistance.value()) || !std::isfinite(read->replanShare) ||
         read->replanShare < 0.0F || !std::isfinite(read->braking) || read->braking < 0.0F ||
@@ -476,8 +474,8 @@ void Horde::perceive(std::span<const cs::PerceptionTarget> targets,
                      std::span<const nx::game::SolidBrushEntity> solids) {
     cs::Game& game = *owner;
     const nx::game::TickTime time = game.time();
-    const float minimumDot =
-        std::cos(settings.fieldOfView.value() * std::numbers::pi_v<float> / kFullTurnDegrees);
+    // Within half the field of view either way of where it faces.
+    const float minimumDot = std::cos(nx::toRadians(settings.fieldOfView / 2.0F).value());
     // The players there still are, living: a zombie forgets the others (nx::agents::Brain::forgetAbsent).
     std::vector<nx::ecs::Entity> present =
         targets | std::views::transform(&cs::PerceptionTarget::entity) | std::ranges::to<std::vector>();
@@ -582,10 +580,9 @@ void Horde::holdDecisions() {
                 aim = *decision.intent.climb;
             }
             if (nx::length(aim) > 0.0F) {
-                command.viewAngles.yaw =
-                    nx::Degrees{std::atan2(aim.y, aim.x) * kHalfTurnDegrees / std::numbers::pi_v<float>};
-                command.viewAngles.pitch = nx::Degrees{-std::atan2(aim.z, std::hypot(aim.x, aim.y)) *
-                                                       kHalfTurnDegrees / std::numbers::pi_v<float>};
+                const nx::EulerAngles aimed = nx::vectorAngles(aim);
+                command.viewAngles.yaw = aimed.yaw;
+                command.viewAngles.pitch = aimed.pitch;
             }
             member.command = command;
             if (member.walks) {

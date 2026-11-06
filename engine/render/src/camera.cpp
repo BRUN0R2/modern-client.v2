@@ -28,7 +28,7 @@ struct HalfExtents {
 };
 
 [[nodiscard]] auto halfExtentsOf(Degrees fieldOfView, float aspect) noexcept -> HalfExtents {
-    expects(aspect > 0.0F && fieldOfView.value() > 0.0F && fieldOfView.value() < 180.0F,
+    expects(aspect > 0.0F && fieldOfView > Degrees{} && fieldOfView < kHalfTurnDegrees,
             "the camera: a positive aspect and a field of view below 180 degrees");
     // The vertical angle of a 4:3 view with that horizontal angle, kept at every aspect.
     const float height = std::tan(toRadians(fieldOfView).value() * 0.5F) / kFieldOfViewAspect;

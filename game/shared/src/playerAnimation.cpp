@@ -23,7 +23,7 @@ constexpr double kLeastGaitSpeed = 5.0;
 /// How fast its legs turn after its body, by the frame, when the body faces nearly ahead of them or away
 /// from them (m_flYawModifier), and below which a turn is none.
 constexpr double kNearlyAhead = 5.0;
-constexpr double kFacingAway = 90.0;
+constexpr double kFacingAway = double{nx::kQuarterTurnDegrees.value()};
 constexpr float kNearlyAheadModifier = 0.05F;
 constexpr float kFacingAwayModifier = 3.5F;
 constexpr double kShortGaitFrame = 0.25;
@@ -31,9 +31,9 @@ constexpr double kLeastTurn = 0.1;
 /// Beyond this angle between its body and the way it moves, a player moves backwards (CalculateYawBlend).
 constexpr double kBackwardsAngle = 120.0;
 
-constexpr double kDegreesPerTurn = 360.0;
-constexpr double kHalfTurn = 180.0;
-constexpr double kQuarterTurn = 90.0;
+constexpr double kDegreesPerTurn = double{nx::kFullTurnDegrees.value()};
+constexpr double kHalfTurn = double{nx::kHalfTurnDegrees.value()};
+constexpr double kQuarterTurn = double{nx::kQuarterTurnDegrees.value()};
 /// The yaw blend: the angle between the body and the legs over a quarter turn, times the blend's half,
 /// from its middle; held to its range.
 constexpr double kYawBlendHalf = 128.0;
@@ -42,7 +42,7 @@ constexpr double kBlendTop = 255.0;
 /// The pitch blend (StudioPlayerBlend): the body's pitch times 3, the view's, from 45 up to 45 down.
 constexpr float kBodyPitchScale = 3.0F;
 constexpr float kPitchReach = 45.0F;
-constexpr float kPitchSpan = 90.0F;
+constexpr float kPitchSpan = kPitchReach * 2.0F;
 
 /// The view's pitch a body's is a third of, negated (SV_RunCmd).
 constexpr double kBodyPitchShare = 3.0;

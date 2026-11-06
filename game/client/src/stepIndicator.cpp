@@ -214,7 +214,7 @@ auto StepIndicatorCvars::registerIn(nx::console::Console& console)
 auto bearingOf(nx::Vec3 listener, nx::Degrees yaw, nx::Vec3 source) noexcept -> float {
     // The map's yaw turns counterclockwise from +x seen from above; the bearing turns clockwise.
     const float toward = std::atan2(source.y - listener.y, source.x - listener.x);
-    const float facing = yaw.value() * std::numbers::pi_v<float> / 180.0F;
+    const float facing = nx::toRadians(yaw).value();
     return std::remainder(facing - toward, kFullTurn);
 }
 

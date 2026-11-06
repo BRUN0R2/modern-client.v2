@@ -10,7 +10,6 @@ namespace nx {
 
 namespace {
 
-constexpr Degrees kFullTurnDegrees = kHalfTurnDegrees + kHalfTurnDegrees;
 constexpr double kRadiansPerDegree = std::numbers::pi / static_cast<double>(kHalfTurnDegrees.value());
 constexpr double kDegreesPerRadian = static_cast<double>(kHalfTurnDegrees.value()) / std::numbers::pi;
 
