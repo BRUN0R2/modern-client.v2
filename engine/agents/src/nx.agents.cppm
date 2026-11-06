@@ -158,6 +158,8 @@ struct Intent {
     /// speeds it asks, turning what goes into the ladder's face into going up it and what looks down into
     /// coming down (PM_LadderMove); none off one.
     std::optional<Vec3> climb{};
+    /// It uses what it looks at (lookAt), as a player's use key does: what opens a door, near enough.
+    bool uses = false;
     /// It holds its duck key: on or coming to floor of the kind Crouch, or across a link of the kind
     /// CrouchedJump going up. A body's keys ask a third of their speed then, of all it asks however it
     /// steers.
@@ -186,6 +188,8 @@ struct Decision {
     Behavior behavior = Behavior::Idle;
     std::optional<ecs::Entity> target{};
     std::optional<navigation::NavigationError> navigationError{};
+    /// The middle of the closed door its way goes through next, which it waits at unless it opens it.
+    std::optional<Vec3> closedGate{};
 };
 
 /// Bounded perception memory and a corridor, never a body's position or health. The mesh used by
@@ -233,7 +237,12 @@ public:
     /// as a body climbs down one no faster (PM_LadderMove). A body off the mesh is Blocked as it stays there,
     /// each decision searching anew, and jumps, letting go of a ladder it holds.
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround = true,
-                              Vec3 velocity = {}) -> Decision;
+                              Vec3 velocity = {}, std::span<const navigation::Gate> gates = {}) -> Decision;
+    /// It goes to `opener`, what opens the closed door whose middle is `door`, and uses it, then goes on with
+    /// what it pursues (Decision::closedGate; Deciders picks who).
+    void openGate(Vec3 door, Vec3 opener) noexcept;
+    /// The middle of the door it goes to open; none while it does not.
+    [[nodiscard]] auto gateItOpens() const noexcept -> std::optional<Vec3>;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
     /// `velocity`, at `maxSpeed` at most, and no faster than it can still slow down for what the intent
@@ -294,7 +303,7 @@ private:
     /// Keeps the corridor from `feet` toward `goal`, searching anew when the pursuit or position asks it, or
     /// as its body comes back to the ground below the link it crossed.
     void planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ecs::Entity> pursued,
-                      navigation::NavigationQuery& query);
+                      navigation::NavigationQuery& query, std::span<const navigation::Gate> gates);
     /// A crossing of `link` failed, its body back on the ground short of its end: twice in a row, and its
     /// ways keep off that link (PathRequest::shunned) for as long as they have another, while it goes on
     /// after the same thing: nothing else tells it what a link flown at a leap's speed takes from where it
@@ -314,6 +323,7 @@ private:
     /// finds `next` again because the corridor may have changed. Returns whether it crosses one.
     [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity,
                                      navigation::NavigationQuery& query,
+                                     std::span<const navigation::Gate> gates,
                                      std::optional<navigation::MeshLink>& next) -> bool;
     /// Forgets the corridor it follows, and the link it crosses on it: another is searched.
     void forgetCorridor() noexcept;
@@ -336,6 +346,12 @@ private:
     bool isKnockedOffCrossing = false;
     /// The start of the next link is near: it heads straight for it, round nothing (kLinkLeadRadii).
     bool headsForLink = false;
+    /// The door it goes to open, and what opens it (openGate).
+    struct OpeningGate {
+        Vec3 door{};
+        Vec3 opener{};
+    };
+    std::optional<OpeningGate> opening{};
     /// Where it backs off to for a run at the gap of the next link; none while it does not.
     std::optional<Vec3> runUpFrom{};
     int runUpStops = 0; ///< How many decisions in a row it has been stopped on its way back.
@@ -496,10 +512,27 @@ public:
     /// leave it stuck. Its decision is written at its index of `decisions`, which must be as long, in jobs
     /// of `jobs` of the priority Critical, which the calling thread runs too while it waits for them. The
     /// brains and the watches must be distinct, and none of them used by another thread meanwhile.
+    /// Of the brains whose way leads to a closed door of `gates` (Decision::closedGate), the one nearest what
+    /// opens it, by a way there through no closed door, goes to open it (Brain::openGate), one a door, so
+    /// that the rest do not all run off: it holds that door until it no longer goes to open it, or its body
+    /// has not decided for a while.
     void decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> requests,
-                std::span<Decision> decisions, std::span<const Body> bodies = {});
+                std::span<Decision> decisions, std::span<const Body> bodies = {},
+                std::span<const navigation::Gate> gates = {});
 
 private:
+    /// Who goes to open a door, and for how long more that holds with no decision of its body; no body, none
+    /// could when last looked for, and for how long more none is.
+    struct GateClaim {
+        Vec3 door{};
+        std::optional<ecs::Entity> body{};
+        Seconds left{};
+    };
+    /// Picks who goes to open each door of `gates`, one at most.
+    void assignGates(std::span<const DecisionRequest> requests, std::span<const Decision> decisions,
+                     std::span<const navigation::Gate> gates);
+
+    std::vector<GateClaim> gateClaims;
     const navigation::NavigationMesh* decidedOn;
     std::vector<navigation::NavigationQuery> queries; ///< One for each batch, made as batches need them.
     /// The bodies by the square of the ground each stands in, kept from tick to tick for its room.

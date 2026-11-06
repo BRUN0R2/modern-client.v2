@@ -261,8 +261,8 @@ TEST(NavigationQueryTest, ALadderJoinsTheFloorsItLeadsToBothWaysAndOneTooShortJo
     ASSERT_NE(link, outline.links.end());
     EXPECT_NEAR(link->start.z, 0.0F, kTolerance);
     EXPECT_NEAR(link->end.z, 256.0F, kTolerance);
-    EXPECT_NEAR(link->ladder.x, 506.0F, 1.0F);
-    EXPECT_NEAR(link->ladder.y, 256.0F, 1.0F);
+    EXPECT_NEAR(link->through.x, 506.0F, 1.0F);
+    EXPECT_NEAR(link->through.y, 256.0F, 1.0F);
     NavigationQuery query{mesh};
     for (const auto& [from, to] : {std::pair{floor, roof}, std::pair{roof, floor}}) {
         const auto path = query.findPath({.from = from, .to = to});

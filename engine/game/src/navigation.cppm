@@ -38,6 +38,10 @@ struct NavigationData {
 [[nodiscard]] auto navigationGeometryOf(const assets::BspView& map, ecs::World& world)
     -> navigation::Geometry;
 
+/// The doors of `world`, of `map`, as agents see them now: each solid door, as it stands closed, open or not,
+/// and the buttons that fire it.
+[[nodiscard]] auto gatesOf(const assets::BspView& map, ecs::World& world) -> std::vector<navigation::Gate>;
+
 } // namespace nx::game
 
 template <>

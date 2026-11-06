@@ -145,7 +145,8 @@ void bodiesNear(const DecisionRequest& request, const BodyGrid& bodies, float ra
 } // namespace
 
 void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> requests,
-                      std::span<Decision> decisions, std::span<const Body> bodies) {
+                      std::span<Decision> decisions, std::span<const Body> bodies,
+                      std::span<const navigation::Gate> gates) {
     expects(decisions.size() == requests.size(), "Deciders::decide: a decision for each request");
     const std::size_t count = std::min(requests.size(), decisions.size());
     if (count == 0) {
@@ -171,7 +172,7 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
                 request.brain->noteKnockedBack();
             }
             Decision decision =
-                request.brain->decide(request.feet, query, request.isOnGround, request.velocity);
+                request.brain->decide(request.feet, query, request.isOnGround, request.velocity, gates);
             if (length(decision.intent.direction) > 0.0F && request.maxSpeed > UnitsPerSecond{}) {
                 bodiesNear(request, grid, range, height, sorted, nearby);
                 request.brain->steer(decision.intent, request.velocity, request.maxSpeed, nearby, query);
@@ -204,6 +205,83 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
     };
     jobs.forBatches({.label = "agents.decide", .priority = jobs::Priority::Critical}, count, kSmallestBatch,
                     decideBatch);
+    if (!gates.empty()) {
+        assignGates(requests.first(count), decisions.first(count), gates);
+    }
+}
+
+void Deciders::assignGates(std::span<const DecisionRequest> requests, std::span<const Decision> decisions,
+                           std::span<const navigation::Gate> gates) {
+    // What a decision of its body renews: past this, a body gone holds the door no more.
+    constexpr Seconds kClaimLife{2.0F};
+    // Till none is looked for again of a door none could open: a search that finds no way goes all over the
+    // mesh.
+    constexpr Seconds kNoneLife{1.0F};
+    const Seconds elapsed = requests.empty() ? Seconds{} : requests.front().elapsed;
+    for (GateClaim& claim : gateClaims) {
+        claim.left = claim.left - elapsed;
+    }
+    for (const DecisionRequest& request : requests) {
+        if (!request.body) {
+            continue;
+        }
+        const auto claim = std::ranges::find_if(
+            gateClaims, [&request](const GateClaim& held) { return held.body == request.body; });
+        if (claim != gateClaims.end()) {
+            claim->left = request.brain->gateItOpens() ? kClaimLife : Seconds{};
+        }
+    }
+    std::erase_if(gateClaims, [](const GateClaim& claim) { return claim.left <= Seconds{}; });
+    // What opens a door, and the body nearest it as the crow flies of those its way there stops at.
+    struct Candidate {
+        float distance = std::numeric_limits<float>::max();
+        const DecisionRequest* request = nullptr;
+        Vec3 opener{};
+    };
+    std::vector<Candidate> candidates;
+    navigation::NavigationQuery& query = queries.front();
+    for (const navigation::Gate& gate : gates) {
+        if (gate.isOpen || gate.openers.empty() ||
+            std::ranges::any_of(gateClaims, [&gate](const GateClaim& claim) {
+                return navigation::isSameDoor(claim.door, gate.middle);
+            })) {
+            continue;
+        }
+        candidates.clear();
+        for (const Vec3 opener : gate.openers) {
+            Candidate nearest{.opener = opener};
+            for (std::size_t index = 0; index < requests.size(); ++index) {
+                const DecisionRequest& request = requests[index];
+                if (!request.body || !decisions[index].closedGate ||
+                    !navigation::isSameDoor(*decisions[index].closedGate, gate.middle)) {
+                    continue;
+                }
+                const Vec3 toOpener{.x = opener.x - request.feet.x, .y = opener.y - request.feet.y};
+                if (const float distance = length(toOpener); distance < nearest.distance) {
+                    nearest.distance = distance;
+                    nearest.request = &request;
+                }
+            }
+            if (nearest.request != nullptr) {
+                candidates.push_back(nearest);
+            }
+        }
+        if (candidates.empty()) {
+            continue;
+        }
+        std::ranges::sort(candidates, {}, &Candidate::distance);
+        // By a way through no closed door: by this one, it would wait at it for itself.
+        const auto chosen = std::ranges::find_if(candidates, [&](const Candidate& candidate) {
+            return query.findPath({.from = candidate.request->feet, .to = candidate.opener, .gates = gates})
+                .has_value();
+        });
+        if (chosen != candidates.end()) {
+            chosen->request->brain->openGate(gate.middle, chosen->opener);
+            gateClaims.push_back({.door = gate.middle, .body = *chosen->request->body, .left = kClaimLife});
+        } else {
+            gateClaims.push_back({.door = gate.middle, .left = kNoneLife});
+        }
+    }
 }
 
 } // namespace nx::agents

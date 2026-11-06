@@ -136,6 +136,9 @@ struct Body {
     collision::Hull hull = collision::Hull::Standing;
     Aabb box{};                                      ///< About its origin.
     std::optional<assets::ModelIndex> groundModel{}; ///< The brush model of the entity it stands on.
+    /// It goes through the other boxes (a horde's semiclip): laid over one of them, it is stuck in nothing,
+    /// and no pusher takes it for being in its way.
+    bool passesThroughBoxes = false;
     /// Whether pushers push it and it blocks them: not a player in noclip, which they pass through as
     /// the original's pass a MOVETYPE_NOCLIP entity. It still touches triggers.
     bool isPushed = true;

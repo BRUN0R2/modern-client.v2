@@ -42,8 +42,8 @@ convex polygons, through Recast and Detour.
   itself, so that Recast's erosion from everything, which took those away, is not what keeps it
   (`keepFromWalls`). A floor is the top of whatever a body fits on; an island smaller than `smallestIsland` is
   left out.
-- **Links.** Ladders, jumps, drops and teleporters are links between polygons, found in the map
-  (`func_ladder`, ledges, `trigger_teleport`) and added by plugins. Jumps and drops are found at the
+- **Links.** Ladders, doors, jumps, drops and teleporters are links between polygons, found in the map
+  (`func_ladder`, `func_door`, ledges, `trigger_teleport`) and added by plugins. Jumps and drops are found at the
   ledges as each tile is built: along each edge of a polygon that no other shares, one every two
   widths of the profile, and along the side of a tile, where no floor goes on past it. From each it looks
   outward as far as a leap flies, for the nearest floor of each height a body comes down on: one lower once
@@ -65,8 +65,19 @@ convex polygons, through Recast and Detour.
   way goes on it never stands with nothing to head for: the corners of small polygons may all lie within its
   arrival of it just short of a link. A decision reuses its next-link lookup to anticipate the way over it when
   braking; after an attempted crossing fails and may have changed the corridor, it looks again.
-- **What changes in a match.** Doors and breakables turn their areas and links on and off as the
-  game reports them, without rebuilding; moving agents avoid each other locally (ADR-0024).
+- **Doors.** The box of a door, solid like any other as it stands closed, has its two sides joined by a link of the
+  kind `Door`, both ways, which names it. How it stands is not in the mesh: the game reports it each turn
+  (`nx::navigation::Gate`, `nx::game::gatesOf`), open, or opened by walking into it, or closed with what opens it,
+  the buttons that name it and, used only, itself. A brain's way keeps off closed doors while it has another
+  (`PathRequest::gates`), and goes through one nothing is known to open only as through a wall: not at all. It
+  waits at a closed one that opens (`Decision::closedGate`), using what opens it there, while of those waiting
+  the one nearest what opens it elsewhere goes to use it (`Deciders`, `Brain::openGate`, `Intent::uses`), one a
+  door, by a way through no closed door: a button behind the door it is to open, however near, is no way to open
+  it, and it waited there for itself. What pushes a body meets no box it goes through
+  (`Body::passesThroughBoxes`): a door held back by a horde stood in each other's boxes at it, took them for
+  stuck, and went back.
+- **What changes in a match.** Breakables turn their areas and links on and off as the game reports them,
+  without rebuilding; moving agents avoid each other locally (ADR-0024).
 - **Tactical layer.** Hiding spots, sniper spots, encounter spots, choke points and places (named
   regions, for the radio's "BombsiteA") are computed once for each mesh and kept with it.
 - **Cache.** A mesh is built once for a map's content hash, a profile and the build's settings,

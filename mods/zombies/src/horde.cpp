@@ -396,7 +396,8 @@ auto Horde::commands() -> std::span<const cs::EntityCommand> {
         writeSteeredAround(bodies);
         // Nor does a decision depend on another's.
         decisions.resize(requests.size());
-        deciders.decide(*jobs, requests, decisions, steeredAround);
+        const std::vector<nx::navigation::Gate> gates = game.gates();
+        deciders.decide(*jobs, requests, decisions, steeredAround, gates);
         holdDecisions();
     }
     writeAsked(bodies);
@@ -564,6 +565,10 @@ void Horde::holdDecisions() {
             if (decision.intent.attacks && decision.intent.lookAt) {
                 aim = *decision.intent.lookAt - turn.eye;
                 command.buttons.set(cs::Button::Attack);
+            }
+            if (decision.intent.uses && decision.intent.lookAt) {
+                aim = *decision.intent.lookAt - turn.eye;
+                command.buttons.set(cs::Button::Use);
             }
             if (decision.intent.jumps) {
                 command.buttons.set(cs::Button::Jump);

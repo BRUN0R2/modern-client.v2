@@ -158,14 +158,49 @@ auto readNavigationData(std::string_view text, std::string_view sourceName)
     return std::move(*read);
 }
 
+auto gatesOf(const assets::BspView& map, ecs::World& world) -> std::vector<navigation::Gate> {
+    std::vector<navigation::Gate> gates;
+    const auto middleOf = [&map](const BrushModel& model, Vec3 origin) {
+        const Aabb& bounds = map.models()[model.index.value].bounds;
+        return ((bounds.min + bounds.max) * 0.5F) + origin;
+    };
+    ecs::Query<const Door&, const BrushModel&, const Transform&, const BrushSolidity&,
+               ecs::Optional<const Named>>{world}
+        .forEach([&](const Door& door, const BrushModel& model, const Transform& transform,
+                     const BrushSolidity& solidity, const Named* named) {
+            if (solidity.solid != Solid::Bsp) {
+                return;
+            }
+            const auto* const slide = std::get_if<DoorSlide>(&door.motion);
+            navigation::Gate gate{
+                .middle = middleOf(model, slide != nullptr ? slide->closed : transform.origin),
+                // Walking into it opens one that nothing else does.
+                .isOpen = door.state == DoorState::Open || (!door.isNamed && !door.isUseOnly)};
+            if (door.isUseOnly && !door.isNamed) {
+                gate.openers.push_back(gate.middle);
+            }
+            if (named != nullptr) {
+                ecs::Query<const Button&, const Targets&, const BrushModel&, const Transform&>{world}.forEach(
+                    [&](const Button& button, const Targets& targets, const BrushModel& pressed,
+                        const Transform& placed) {
+                        if (targets.target == named->name && button.isUsable) {
+                            gate.openers.push_back(middleOf(pressed, placed.origin));
+                        }
+                    });
+            }
+            gates.push_back(std::move(gate));
+        });
+    return gates;
+}
+
 auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navigation::Geometry {
     navigation::Geometry geometry;
     geometry.bodyHull = bodyHullOf(map, assets::kWorldModel, kStandingClipHull);
     geometry.crouchedBodyHull = bodyHullOf(map, assets::kWorldModel, kDuckedClipHull);
     addModelFaces(geometry, map, assets::kWorldModel, BrushPlacement{.axes = angleVectors(EulerAngles{})});
-    ecs::Query<const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
-        [&geometry, &map](const BrushModel& model, const Transform& transform,
-                          const BrushSolidity& solidity) {
+    ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
+        [&geometry, &map, &world](ecs::Entity entity, const BrushModel& model, const Transform& transform,
+                                  const BrushSolidity& solidity) {
             if (solidity.solid == Solid::Bsp) {
                 addModelFaces(
                     geometry, map, model.index,
@@ -184,6 +219,10 @@ auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navi
                          .bounds = reached,
                          .hull = bodyHullOf(map, model.index, kDuckedClipHull)});
                 }
+            }
+            if (solidity.solid == Solid::Bsp && world.has<Door>(entity)) {
+                const Aabb& bounds = map.models()[model.index.value].bounds;
+                geometry.doors.push_back(linkedBoxOf(bounds, transform.origin, transform.angles));
             }
             if (solidity.contents == assets::Contents::Ladder) {
                 const Aabb& bounds = map.models()[model.index.value].bounds;

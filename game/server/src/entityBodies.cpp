@@ -13,6 +13,14 @@ import cs.shared;
 
 namespace cs {
 namespace {
+/// The solid of an entity's body: it goes through the other boxes, as its moves do, and no pusher finds it
+/// stuck in one of them.
+[[nodiscard]] auto solidOfBody(const MovementState& movement) -> nx::game::Body {
+    nx::game::Body solid = bodyOf(movement);
+    solid.passesThroughBoxes = true;
+    return solid;
+}
+
 constexpr nx::log::Category kLog{"entities"};
 /// How far from the nearest player a body moves how often: near one, each tick; away from them all, in longer
 /// steps that take it as far, as the original's monsters move at their thinks, a tenth of a second apart,
@@ -244,6 +252,7 @@ struct BodyMade {
     nx::ecs::Entity entity{};
     std::optional<EntityStep> step{};
     std::optional<nx::Vec3> strikesAlong{};
+    std::optional<nx::game::UseView> uses{}; ///< It pressed its use key, looking so.
     std::vector<nx::collision::ModelIndex> touched{};
     std::optional<nx::Aabb> box{}; ///< The box it ducked or stood up into.
 };
@@ -301,7 +310,7 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<con
     MovementResult moved =
         simulateMovement(body.movement, command, MovementSettings{}, moving.hulls, nearBrushes, near);
     body.movement = moved.state;
-    solid = bodyOf(body.movement);
+    solid = solidOfBody(body.movement);
     std::optional<EntityStep> step;
     if (type.definition.stride && body.movement.isOnGround) {
         // A step each stride it walks on the ground, as its feet meet it.
@@ -331,10 +340,19 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<con
     }
     const std::optional<nx::Aabb> box =
         body.movement.isDucked != wasDucked ? std::optional{solid.box} : std::nullopt;
-    if (step || strikesAlong || !moved.touchedModels.empty() || box) {
+    // Pressed, not held, as a player's use key: what a button does a held key would do again.
+    const bool usesNow = command.buttons.test(Button::Use) && !body.isUseHeld;
+    body.isUseHeld = command.buttons.test(Button::Use);
+    const std::optional<nx::game::UseView> uses =
+        usesNow ? std::optional{nx::game::UseView{.eye = body.movement.origin +
+                                                         nx::Vec3{.z = body.movement.viewHeight.value()},
+                                                  .forward = nx::angleVectors(command.viewAngles).forward}}
+                : std::nullopt;
+    if (step || strikesAlong || uses || !moved.touchedModels.empty() || box) {
         made.push_back({.entity = entity,
                         .step = step,
                         .strikesAlong = strikesAlong,
+                        .uses = uses,
                         .touched = std::move(moved.touchedModels),
                         .box = box});
     }
@@ -374,7 +392,7 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
                   catalog.model(type.model).files->view->sequences()[type.sequences.idle.value],
                   nx::game::tickTimeOf(world).now);
     const nx::ecs::Entity entity =
-        world.spawn(placement, body, bodyOf(body.movement), nx::game::BoxSolidity{.box = kStandingBox},
+        world.spawn(placement, body, solidOfBody(body.movement), nx::game::BoxSolidity{.box = kStandingBox},
                     nx::game::ClipMethod{.clip = &clipEntity}, PlacedEntityHitboxes{},
                     nx::game::DamageMethod{.takeAttack = &harmEntity},
                     nx::game::Classified{.classification = nx::game::Classification::Organic});
@@ -497,6 +515,10 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         }
         if (!move.touched.empty()) {
             nx::game::touchBrushEntities(world, hulls, move.touched, move.entity);
+            strikesMeet.reset();
+        }
+        if (move.uses) {
+            std::ignore = nx::game::playerUse(world, hulls, move.entity, *move.uses);
             strikesMeet.reset();
         }
     }

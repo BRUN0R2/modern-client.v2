@@ -510,6 +510,48 @@ TEST(NavigationMeshTest, AFloorABrushEntityLeavesNoRoomOnIsNoFloor) {
         << "the nearest floor is past where it stops a body";
 }
 
+TEST(NavigationMeshTest, ADoorJoinsTheFloorsOnItsTwoSidesBothWaysAndNamesItself) {
+    // Two rooms, a wall across them with a door in it, which stands closed, solid like the wall.
+    constexpr nx::Aabb kDoor{.min = {.x = 496.0F, .y = 224.0F, .z = 0.0F},
+                             .max = {.x = 528.0F, .y = 288.0F, .z = 96.0F}};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 496.0F, .y = -32.0F, .z = 0.0F},
+                     {.x = 528.0F, .y = 224.0F, .z = 128.0F});
+    nx::test::addBox(geometry, {.x = 496.0F, .y = 288.0F, .z = 0.0F},
+                     {.x = 528.0F, .y = 544.0F, .z = 128.0F});
+    nx::test::addBox(geometry, kDoor.min, kDoor.max);
+    const Vec3 here{.x = 128.0F, .y = 256.0F};
+    const Vec3 there{.x = 896.0F, .y = 256.0F};
+    {
+        const NavigationMesh mesh = nx::test::playerMesh(geometry);
+        nx::navigation::NavigationQuery query{mesh};
+        EXPECT_FALSE(query.isReachable(here, there).value_or(true)) << "no way but the door";
+    }
+    geometry.doors.push_back(kDoor);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    const auto isOfDoor = [](const MeshLink& link) {
+        return link.kind == AreaKind::Door;
+    };
+    ASSERT_TRUE(std::ranges::any_of(outline.links, isOfDoor));
+    for (const MeshLink& link : outline.links | std::views::filter(isOfDoor)) {
+        EXPECT_NEAR(nx::test::distanceAcross(link.through, (kDoor.min + kDoor.max) * 0.5F), 0.0F, 1.0F);
+    }
+    nx::navigation::NavigationQuery query{mesh};
+    EXPECT_TRUE(query.isReachable(here, there).value_or(false));
+    EXPECT_TRUE(query.isReachable(there, here).value_or(false));
+
+    // A way asked to go through no door closed among those it is told of.
+    std::array gates{nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F, .isOpen = false}};
+    const auto closed = query.findPath({.from = here, .to = there, .gates = gates});
+    ASSERT_FALSE(closed.has_value());
+    EXPECT_EQ(closed.error().code, nx::navigation::NavigationError::Unreachable);
+    gates.front().isOpen = true;
+    EXPECT_TRUE(query.findPath({.from = here, .to = there, .gates = gates}).has_value());
+    EXPECT_TRUE(query.findPath({.from = here, .to = there}).has_value()) << "none told of";
+}
+
 TEST(NavigationMeshTest, ALedgeOnlyACrouchedJumpReachesIsLinkedBothWaysOfItsOwnKind) {
     // On a floor at 0, a box 50 tall: higher than a jump and within one ducking in the air.
     constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};

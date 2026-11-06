@@ -26,12 +26,16 @@ struct AvoidedPlace {
 
 /// What a way is asked for: from where, to where, what each kind of area costs it, the mesh's profile's
 /// costs when none are given, the places it keeps away from, a polygon several of them reach costing
-/// the most any of them makes it, and the links it goes over none of, either way.
+/// the most any of them makes it, the doors as they stand, through none of which it goes closed, but what
+/// opens it when `opensGates`: one no gate names it goes through as through one open; and the links it goes
+/// over none of, either way.
 struct PathRequest {
     Vec3 from{};
     Vec3 to{};
     std::optional<AreaCosts> costs{};
     std::span<const AvoidedPlace> avoided{};
+    std::span<const Gate> gates{};
+    bool opensGates = false;
     std::span<const MeshLink> shunned{};
 };
 

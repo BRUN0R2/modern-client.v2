@@ -35,6 +35,7 @@ struct EntityBody {
     KnockedBack knockedBack{};
     bool isKnockedBack = false; ///< As of its last move, a hit still held back its walk.
     nx::HammerUnits walked{};
+    bool isUseHeld = false; ///< Its use key was held at the end of its last move.
     nx::Vec3 movedFrom{};   ///< Where its last move started.
     nx::GameTime movedAt{}; ///< When its last move ended, as a snapshot tells the time.
     std::uint32_t ticksPerMove =

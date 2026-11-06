@@ -44,13 +44,20 @@ private:
     bool isGathered = false;
 };
 
+/// The boxes that stop `body`: of `boxes`, none for one that goes through them.
+[[nodiscard]] auto boxesMeeting(const Body& body, PushedBoxes& boxes) -> const SolidBoxes& {
+    static const SolidBoxes kNoBoxes;
+    return body.passesThroughBoxes ? kNoBoxes : boxes.all();
+}
+
 /// Whether the box of `body`, of `entity`, at `origin` is in solid in `world` but itself
 /// (SV_TestEntityPosition).
 [[nodiscard]] auto isStuck(ecs::World& world, const collision::BrushHulls& hulls, PushedBoxes& boxes,
                            ecs::Entity entity, const Body& body, Vec3 origin) -> bool {
     ServerTrace stay = hullTrace(body.hull, origin, origin);
     stay.ignored = entity;
-    return traceSolidsHit(world, hulls, solidBrushesOf(world, hulls), boxes.all(), stay).trace.startsSolid;
+    return traceSolidsHit(world, hulls, solidBrushesOf(world, hulls), boxesMeeting(body, boxes), stay)
+        .trace.startsSolid;
 }
 
 /// Whether a body's linked box, at `origin`, overlaps `box`, more than touching it (SV_PushMove).
@@ -100,7 +107,7 @@ struct Moved {
     Solid& pusherSolid = world.get<BrushSolidity>(pusher)->solid;
     const Solid solid = std::exchange(pusherSolid, Solid::Not);
     const collision::Trace pushed =
-        traceSolidsHit(world, hulls, solidBrushesOf(world, hulls), boxes.all(), way).trace;
+        traceSolidsHit(world, hulls, solidBrushesOf(world, hulls), boxesMeeting(body, boxes), way).trace;
     pusherSolid = solid;
     if (pushed.fraction != 0.0F) {
         origin = pushed.end;

@@ -31,6 +31,8 @@ enum class AreaKind : std::uint8_t {
     /// A link between a ledge and the floor below, higher than the profile jumps and within what it jumps
     /// ducking in the air: dropped down, and jumped up crouched.
     CrouchedJump,
+    /// A link between the two sides of a door: walked through, once it is open (Gate).
+    Door,
     Count,
 };
 
