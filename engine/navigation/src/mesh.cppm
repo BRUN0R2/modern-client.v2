@@ -32,9 +32,10 @@ struct MeshKey {
     [[nodiscard]] inline auto operator==(const MeshKey&) const noexcept -> bool = default;
 };
 
-/// The key of the mesh of `geometry` for `profile` by `settings`: of the geometry's vertices and triangles,
-/// of what of the profile shapes the tiles (its size, step, jump, drop and steepest floor, not its name or
-/// its costs, which only queries weigh) and of every setting, and of the version of the build and of
+/// The key of the mesh of `geometry` for `profile` by `settings`: of all a build reads of the geometry (its
+/// vertices and triangles, ladders, doors and body hulls, and each brush entity's hull with where a body may
+/// meet it), of what of the profile shapes the tiles (its size, step, jump, drop and steepest floor, not its
+/// name or its costs, which only queries weigh) and of every setting, and of the version of the build and of
 /// Detour's tiles, which change with what they make.
 [[nodiscard]] auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile,
                              const BuildSettings& settings) -> MeshKey;
