@@ -240,11 +240,15 @@ public:
     /// corridor's end following its goal along the mesh. A ladder it climbs (Intent::climb): up, facing it
     /// level until its feet come within a step of the end's height, then on to the end; down, walking off
     /// toward the end and looking well below level, or straight down where the floors lie on one side of it,
-    /// as a body climbs down one no faster (PM_LadderMove). A body off the mesh is Blocked as it stays there,
-    /// each decision searching anew, and jumps, letting go of a ladder it holds. Its body runs at `maxSpeed`
-    /// at most: its ways go over no gap that takes more than it leaves the start at (bodyMotion), searched
-    /// anew as that changes, as a frozen round's start ends; and it leaves one no faster than it moves, at
-    /// `velocity`, lets it.
+    /// as a body climbs down one no faster (PM_LadderMove). At a door closed among `gates`, the next link of
+    /// its way going through it, it waits short of it (Decision::closedGate), using what opens it within
+    /// reach of the link's start, or walking into what opens it there on its side and standing in it; one
+    /// Deciders sends to open a door (openGate) goes to what opens it by a way through no closed door, and
+    /// uses it (Intent::uses) or stands in it, then goes on. A body off the mesh is Blocked as it stays
+    /// there, each decision searching anew, and jumps, letting go of a ladder it holds. Its body runs at
+    /// `maxSpeed` at most: its ways go over no gap that takes more than it leaves the start at (bodyMotion),
+    /// searched anew as that changes, as a frozen round's start ends; and it leaves one no faster than it
+    /// moves, at `velocity`, lets it.
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond maxSpeed,
                               bool isOnGround = true, Vec3 velocity = {},
                               std::span<const navigation::Gate> gates = {}) -> Decision;
