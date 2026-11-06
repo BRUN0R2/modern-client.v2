@@ -1318,6 +1318,13 @@ void appendChild(std::vector<std::byte>& bytes, const BodyHullChild& child) {
     }
 }
 
+/// Adds to `bytes` the corners of `box`.
+void appendBox(std::vector<std::byte>& bytes, const Aabb& box) {
+    for (const float value : {box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z}) {
+        appendLittleEndian(bytes, value);
+    }
+}
+
 /// Adds to `bytes` all of `hull`.
 void appendHull(std::vector<std::byte>& bytes, const BodyHull& hull) {
     appendChild(bytes, hull.root);
@@ -1370,18 +1377,13 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
     }
     appendLittleEndian(bytes, std::uint64_t{geometry.ladders.size()});
     for (const Aabb& ladder : geometry.ladders) {
-        for (const float value :
-             {ladder.min.x, ladder.min.y, ladder.min.z, ladder.max.x, ladder.max.y, ladder.max.z}) {
-            appendLittleEndian(bytes, value);
-        }
+        appendBox(bytes, ladder);
     }
     appendHull(bytes, geometry.bodyHull);
     appendHull(bytes, geometry.crouchedBodyHull);
     appendLittleEndian(bytes, std::uint64_t{geometry.doors.size()});
     for (const Aabb& door : geometry.doors) {
-        for (const float value : {door.min.x, door.min.y, door.min.z, door.max.x, door.max.y, door.max.z}) {
-            appendLittleEndian(bytes, value);
-        }
+        appendBox(bytes, door);
     }
     for (const auto* const placed : {&geometry.brushBodyHulls, &geometry.crouchedBrushBodyHulls}) {
         appendLittleEndian(bytes, std::uint64_t{placed->size()});
@@ -1389,6 +1391,8 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
             for (const float value : {brush.origin.x, brush.origin.y, brush.origin.z}) {
                 appendLittleEndian(bytes, value);
             }
+            // Where a body's middle may meet it at all bounds where its hull stops one (isSolidAt).
+            appendBox(bytes, brush.bounds);
             appendHull(bytes, brush.hull);
         }
     }

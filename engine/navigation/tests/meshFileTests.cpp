@@ -163,6 +163,15 @@ TEST(MeshFileTest, AKeyChangesWithWhatShapesTheTilesAlone) {
     EXPECT_NE(keyOf(stoppedOtherwise), keyOf(stopped));
     EXPECT_NE(keyOf(stoppedCrouched), key);
     EXPECT_NE(keyOf(stoppedCrouched), keyOf(stopped));
+    // A brush entity's hull, and where a body may meet it at all, which bounds where the hull stops one.
+    Geometry brushStopped = geometry;
+    brushStopped.brushBodyHulls.push_back(
+        {.bounds = {.min = {.x = 64.0F, .y = 64.0F}, .max = {.x = 128.0F, .y = 128.0F, .z = 64.0F}},
+         .hull = stopped.bodyHull});
+    Geometry brushStoppedNarrower = brushStopped;
+    brushStoppedNarrower.brushBodyHulls.front().bounds.max.x -= 1.0F;
+    EXPECT_NE(keyOf(brushStopped), key);
+    EXPECT_NE(keyOf(brushStoppedNarrower), keyOf(brushStopped));
     EXPECT_NE(keyOf(moved), key);
     EXPECT_NE(keyOf(otherKind), key);
     EXPECT_NE(nx::navigation::meshKeyOf(geometry, wider, nx::test::testSettings()), key);
