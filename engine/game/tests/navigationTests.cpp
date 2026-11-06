@@ -289,6 +289,49 @@ TEST(NavigationGatesTest, AVolumeThatFiresADoorIsEnteredOnEachSideOfItItReachesP
     EXPECT_TRUE(forEntities.front().openers.empty()) << "no volume fires for an entity's body";
 }
 
+TEST(NavigationGatesTest, ARotatingDoorTurnedOrStandingOpenHasItsGateWhereItsLinksGoThroughIt) {
+    const std::vector<std::byte> bytes = readSeed("boxWithEntity.bsp");
+    const auto map = nx::assets::BspView::parse(bytes);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const nx::game::EntityClasses classes{
+        .brushClasses = {nx::game::BrushClass{.classname = "func_door_rotating",
+                                              .solid = nx::game::Solid::Bsp,
+                                              .behavior = nx::game::BrushBehavior::RotatingDoor}}};
+    struct Case {
+        std::string_view angles;
+        std::string_view spawnflags;
+        std::string_view name;
+    };
+    constexpr std::string_view kStartsOpen = "1";
+    for (const Case& placed :
+         {Case{.angles = "0 30 0", .spawnflags = "0", .name = "turned as it stands closed"},
+          Case{.angles = "0 0 0", .spawnflags = kStartsOpen, .name = "standing open"}}) {
+        SCOPED_TRACE(placed.name);
+        nx::ecs::World world;
+        ASSERT_TRUE(nx::game::registerComponents(world).has_value());
+        const std::vector entities{
+            nx::assets::BspEntity{.keyValues = {{"classname", "func_door_rotating"},
+                                                {"model", "*1"},
+                                                {"angles", std::string{placed.angles}},
+                                                {"distance", "90"},
+                                                {"spawnflags", std::string{placed.spawnflags}},
+                                                {"targetname", "vault"}}}};
+        ASSERT_TRUE(nx::game::spawnBrushEntities(world, entities, map->models(), classes).has_value());
+
+        const std::vector<nx::navigation::Gate> gates =
+            nx::game::gatesOf(*map, world, nx::game::AgentBodies::Players);
+        const Geometry geometry = nx::game::navigationGeometryOf(*map, world);
+        ASSERT_EQ(gates.size(), 1U);
+        ASSERT_EQ(geometry.doors.size(), 1U);
+        // Turned about its origin, off the middle of its model: a box of its whole reach about the origin
+        // was a door's link box, and its links named no gate, the door taken for open.
+        EXPECT_TRUE(nx::navigation::isSameDoor(geometry.doors.front().center(), gates.front().middle))
+            << std::format("door {}, gate {}", geometry.doors.front().center(), gates.front().middle);
+        const Vec3 size = geometry.doors.front().size();
+        EXPECT_NE(size.x, size.y) << "thin one way, for its links to cross it that way";
+    }
+}
+
 TEST(NavigationGeometryTest, AFloorUnderWaterIsWater) {
     // The box's room made water: the contents of its empty leaf, leaf 1.
     std::vector<std::byte> bytes = readSeed("boxEmbedded.bsp");
