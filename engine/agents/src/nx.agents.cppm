@@ -253,9 +253,10 @@ public:
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond maxSpeed,
                               bool isOnGround = true, Vec3 velocity = {},
                               std::span<const navigation::Gate> gates = {}) -> Decision;
-    /// It goes to `opener`, what opens the closed door whose middle is `door`, and uses it, then goes on with
-    /// what it pursues (Decision::closedGate; Deciders picks who).
-    void openGate(Vec3 door, Vec3 opener) noexcept;
+    /// It goes to `opener`, what opens the closed door whose middle is `door`, and uses it, or stands in it
+    /// for the door to open as it walks into it, then goes on with what it pursues (Decision::closedGate;
+    /// Deciders picks who).
+    void openGate(Vec3 door, navigation::GateOpener opener) noexcept;
     /// The middle of the door it goes to open; none while it does not.
     [[nodiscard]] auto gateItOpens() const noexcept -> std::optional<Vec3>;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
@@ -371,7 +372,7 @@ private:
     /// The door it goes to open, and what opens it (openGate).
     struct OpeningGate {
         Vec3 door{};
-        Vec3 opener{};
+        navigation::GateOpener opener{};
     };
     std::optional<OpeningGate> opening{};
     /// Where it backs off to for a run at the gap of the next link; none while it does not.

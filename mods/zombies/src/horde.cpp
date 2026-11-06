@@ -396,7 +396,7 @@ auto Horde::commands() -> std::span<const cs::EntityCommand> {
         writeSteeredAround(bodies);
         // Nor does a decision depend on another's.
         decisions.resize(requests.size());
-        const std::vector<nx::navigation::Gate> gates = game.gates();
+        const std::vector<nx::navigation::Gate> gates = game.gates(nx::game::AgentBodies::Entities);
         deciders.decide(*jobs, requests, decisions, steeredAround, gates);
         holdDecisions();
     }

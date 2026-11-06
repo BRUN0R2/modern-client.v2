@@ -406,8 +406,8 @@ auto Game::isInLeaves(const nx::assets::LeafSet& leaves, nx::Vec3 spot) const ->
     return leaves.contains(m_state.map.map().leafAt(spot));
 }
 
-auto Game::gates() -> std::vector<nx::navigation::Gate> {
-    return nx::game::gatesOf(m_state.map.map(), m_state.world);
+auto Game::gates(nx::game::AgentBodies bodies) -> std::vector<nx::navigation::Gate> {
+    return nx::game::gatesOf(m_state.map.map(), m_state.world, bodies);
 }
 
 auto Game::navigationGeometry() -> nx::navigation::Geometry {

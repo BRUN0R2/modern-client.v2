@@ -111,13 +111,25 @@ struct MeshLink {
 [[nodiscard]] auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile,
                                     HammerUnits shortOfStart) noexcept -> UnitsPerSecond;
 
+/// How a body opens a door by what opens it.
+enum class OpenerKind : std::uint8_t {
+    Used,    ///< It uses it from nearby, as a player presses a button, or a door that only a use opens.
+    Entered, ///< It walks into it: a volume that fires the door as a body touches it (trigger_multiple).
+};
+
+/// What opens a door: its box, and how a body opens the door by it.
+struct GateOpener {
+    Aabb box{};
+    OpenerKind kind = OpenerKind::Used;
+};
+
 /// A door of a map, as the agents whose ways go through it (AreaKind::Door) see it: the middle of its box as
 /// it stands closed, as its links name it (MeshLink::through); whether a body gets through, open or opened by
-/// walking into it; and where what opens it is, what a body uses from nearby.
+/// walking into it; and what opens it, that a body uses from nearby or walks into.
 struct Gate {
     Vec3 middle{};
     bool isOpen = false;
-    std::vector<Vec3> openers{};
+    std::vector<GateOpener> openers{};
 };
 
 /// Whether `first` and `second`, what a link or a gate has for the middle of a door, are of one door: a link
