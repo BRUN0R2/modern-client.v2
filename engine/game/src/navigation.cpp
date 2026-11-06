@@ -144,6 +144,36 @@ constexpr Vec3 kBodyReach{.x = 16.0F, .y = 16.0F, .z = 36.0F};
     return hull;
 }
 
+/// The box of the brush model of `model` of `map` with its origin at `origin`.
+[[nodiscard]] auto boxOf(const assets::BspView& map, const BrushModel& model, Vec3 origin) -> Aabb {
+    const Aabb& bounds = map.models()[model.index.value].bounds;
+    return Aabb{.min = bounds.min + origin, .max = bounds.max + origin};
+}
+
+/// Adds to `openers` what a body walks into of `volume`, a volume that fires the door whose box is `door`: on
+/// each side of the door, across the way it is thin as its links cross it, the part of the volume past that
+/// side; none on a side it does not reach past. A volume the door stands in fires it as a body comes to it
+/// from either side; one elsewhere, as a body goes there.
+void addEntries(std::vector<navigation::GateOpener>& openers, const Aabb& door, const Aabb& volume) {
+    const Vec3 size = door.size();
+    const bool isThinAlongX = size.x <= size.y;
+    const auto across = [isThinAlongX](Vec3 point) {
+        return isThinAlongX ? point.x : point.y;
+    };
+    const auto enteredBetween = [&](float from, float to) {
+        Aabb part = volume;
+        (isThinAlongX ? part.min.x : part.min.y) = from;
+        (isThinAlongX ? part.max.x : part.max.y) = to;
+        openers.push_back({.box = part, .kind = navigation::OpenerKind::Entered});
+    };
+    if (across(volume.min) < across(door.min)) {
+        enteredBetween(across(volume.min), std::min(across(volume.max), across(door.min)));
+    }
+    if (across(volume.max) > across(door.max)) {
+        enteredBetween(std::max(across(volume.min), across(door.max)), across(volume.max));
+    }
+}
+
 } // namespace
 
 auto readNavigationData(std::string_view text, std::string_view sourceName)
@@ -158,12 +188,9 @@ auto readNavigationData(std::string_view text, std::string_view sourceName)
     return std::move(*read);
 }
 
-auto gatesOf(const assets::BspView& map, ecs::World& world) -> std::vector<navigation::Gate> {
+auto gatesOf(const assets::BspView& map, ecs::World& world, AgentBodies bodies)
+    -> std::vector<navigation::Gate> {
     std::vector<navigation::Gate> gates;
-    const auto middleOf = [&map](const BrushModel& model, Vec3 origin) {
-        const Aabb& bounds = map.models()[model.index.value].bounds;
-        return ((bounds.min + bounds.max) * 0.5F) + origin;
-    };
     ecs::Query<const Door&, const BrushModel&, const Transform&, const BrushSolidity&,
                ecs::Optional<const Named>>{world}
         .forEach([&](const Door& door, const BrushModel& model, const Transform& transform,
@@ -172,21 +199,33 @@ auto gatesOf(const assets::BspView& map, ecs::World& world) -> std::vector<navig
                 return;
             }
             const auto* const slide = std::get_if<DoorSlide>(&door.motion);
-            navigation::Gate gate{
-                .middle = middleOf(model, slide != nullptr ? slide->closed : transform.origin),
-                // Walking into it opens one that nothing else does.
-                .isOpen = door.state == DoorState::Open || (!door.isNamed && !door.isUseOnly)};
+            const Aabb closed = boxOf(map, model, slide != nullptr ? slide->closed : transform.origin);
+            navigation::Gate gate{.middle = closed.center(),
+                                  // Walking into it opens one that nothing else does.
+                                  .isOpen =
+                                      door.state == DoorState::Open || (!door.isNamed && !door.isUseOnly)};
             if (door.isUseOnly && !door.isNamed) {
-                gate.openers.push_back(gate.middle);
+                gate.openers.push_back({.box = closed, .kind = navigation::OpenerKind::Used});
             }
             if (named != nullptr) {
                 ecs::Query<const Button&, const Targets&, const BrushModel&, const Transform&>{world}.forEach(
                     [&](const Button& button, const Targets& targets, const BrushModel& pressed,
                         const Transform& placed) {
                         if (targets.target == named->name && button.isUsable) {
-                            gate.openers.push_back(middleOf(pressed, placed.origin));
+                            gate.openers.push_back({.box = boxOf(map, pressed, placed.origin),
+                                                    .kind = navigation::OpenerKind::Used});
                         }
                     });
+                if (bodies == AgentBodies::Players) {
+                    ecs::Query<const Trigger&, const Targets&, const BrushModel&, const Transform&>{world}
+                        .forEach([&](const Trigger& trigger, const Targets& targets, const BrushModel& volume,
+                                     const Transform& placed) {
+                            if (targets.target == named->name && trigger.isTouchedByPlayers &&
+                                !trigger.isSpent) {
+                                addEntries(gate.openers, closed, boxOf(map, volume, placed.origin));
+                            }
+                        });
+                }
             }
             gates.push_back(std::move(gate));
         });

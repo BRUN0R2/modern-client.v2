@@ -70,13 +70,17 @@ convex polygons, through Recast and Detour.
   the corners of small polygons may all lie within its arrival of it just short of a link. A decision reuses its
   next-link lookup to anticipate the way over it when braking; after an attempted crossing fails and may have
   changed the corridor, it looks again.
-- **Doors.** The box of a door, solid like any other as it stands closed, has its two sides joined by a link of the
-  kind `Door`, both ways, which names it. How it stands is not in the mesh: the game reports it each turn
+- **Doors.** The box of a door, solid like any other as it stands closed, has its two sides joined by a link of
+  the kind `Door`, both ways, which names it. How it stands is not in the mesh: the game reports it each turn
   (`nx::navigation::Gate`, `nx::game::gatesOf`), open, or opened by walking into it, or closed with what opens it,
-  the buttons that name it and, used only, itself. A brain's way keeps off closed doors while it has another
-  (`PathRequest::gates`), and goes through one nothing is known to open only as through a wall: not at all. It
-  waits at a closed one that opens (`Decision::closedGate`), using what opens it there, while of those waiting
-  the one nearest what opens it elsewhere goes to use it (`Deciders`, `Brain::openGate`, `Intent::uses`), one a
+  the buttons that name it and, used only, itself, which a body uses, and the volumes that fire it as a player
+  walks into them (`trigger_multiple`), which it enters (`nx::navigation::OpenerKind`): each on each side of the
+  door it reaches past, for players' bodies alone, as the game fires a volume for no entity's
+  (`nx::game::AgentBodies`). A brain's way keeps off closed doors while it has another (`PathRequest::gates`), and
+  goes through one nothing is known to open only as through a wall: not at all. It waits at a closed one that
+  opens (`Decision::closedGate`), using what opens it there, or walking into what opens it there on its side, well
+  into it, since the game finds a body in a volume by its hull, and standing in it, while of those waiting the one
+  nearest what opens it elsewhere goes to use or enter it (`Deciders`, `Brain::openGate`, `Intent::uses`), one a
   door, by a way through no closed door: a button behind the door it is to open, however near, is no way to open
   it, and it waited there for itself. What pushes a body meets no box it goes through
   (`Body::passesThroughBoxes`): a door held back by a horde stood in each other's boxes at it, took them for

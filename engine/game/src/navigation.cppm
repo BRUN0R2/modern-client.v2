@@ -38,9 +38,18 @@ struct NavigationData {
 [[nodiscard]] auto navigationGeometryOf(const assets::BspView& map, ecs::World& world)
     -> navigation::Geometry;
 
-/// The doors of `world`, of `map`, as agents see them now: each solid door, as it stands closed, open or not,
-/// and the buttons that fire it.
-[[nodiscard]] auto gatesOf(const assets::BspView& map, ecs::World& world) -> std::vector<navigation::Gate>;
+/// Whose bodies agents move: players', whom a map's volumes fire for but those flagged "no clients", or
+/// entities', whom none does (touchTriggers).
+enum class AgentBodies : std::uint8_t {
+    Players,
+    Entities,
+};
+
+/// The doors of `world`, of `map`, as agents whose `bodies` they are see them now: each solid door, as it
+/// stands closed, open or not, and what opens it: the buttons that fire it, used, and the volumes that fire
+/// it as such a body touches them, entered on each side of the door they reach past (navigation::OpenerKind).
+[[nodiscard]] auto gatesOf(const assets::BspView& map, ecs::World& world, AgentBodies bodies)
+    -> std::vector<navigation::Gate>;
 
 } // namespace nx::game
 

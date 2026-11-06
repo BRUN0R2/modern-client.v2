@@ -236,7 +236,7 @@ void Deciders::assignGates(std::span<const DecisionRequest> requests, std::span<
     struct Candidate {
         float distance = std::numeric_limits<float>::max();
         const DecisionRequest* request = nullptr;
-        Vec3 opener{};
+        navigation::GateOpener opener{};
     };
     std::vector<Candidate> candidates;
     navigation::NavigationQuery& query = queries.front();
@@ -248,7 +248,7 @@ void Deciders::assignGates(std::span<const DecisionRequest> requests, std::span<
             continue;
         }
         candidates.clear();
-        for (const Vec3 opener : gate.openers) {
+        for (const navigation::GateOpener& opener : gate.openers) {
             Candidate nearest{.opener = opener};
             for (std::size_t index = 0; index < requests.size(); ++index) {
                 const DecisionRequest& request = requests[index];
@@ -256,7 +256,8 @@ void Deciders::assignGates(std::span<const DecisionRequest> requests, std::span<
                     !navigation::isSameDoor(*decisions[index].closedGate, gate.middle)) {
                     continue;
                 }
-                const Vec3 toOpener{.x = opener.x - request.feet.x, .y = opener.y - request.feet.y};
+                const Vec3 middle = opener.box.center();
+                const Vec3 toOpener{.x = middle.x - request.feet.x, .y = middle.y - request.feet.y};
                 if (const float distance = length(toOpener); distance < nearest.distance) {
                     nearest.distance = distance;
                     nearest.request = &request;
@@ -274,7 +275,7 @@ void Deciders::assignGates(std::span<const DecisionRequest> requests, std::span<
         const auto chosen = std::ranges::find_if(candidates, [&](const Candidate& candidate) {
             return query
                 .findPath({.from = candidate.request->feet,
-                           .to = candidate.opener,
+                           .to = candidate.opener.box.center(),
                            .gates = gates,
                            .leapSpeed = leapSpeedOf(candidate.request->maxSpeed)})
                 .has_value();

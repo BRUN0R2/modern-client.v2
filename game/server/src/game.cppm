@@ -225,8 +225,8 @@ public:
     [[nodiscard]] auto isInLeaves(const nx::assets::LeafSet& leaves, nx::Vec3 spot) const -> bool;
     /// World and solid brush surfaces where they are now, without moving bodies.
     [[nodiscard]] auto navigationGeometry() -> nx::navigation::Geometry;
-    /// The map's doors now, as the agents whose ways go through them see them.
-    [[nodiscard]] auto gates() -> std::vector<nx::navigation::Gate>;
+    /// The map's doors now, as the agents whose ways go through them see them, moving `bodies`.
+    [[nodiscard]] auto gates(nx::game::AgentBodies bodies) -> std::vector<nx::navigation::Gate>;
     /// The authoritative clock, independent of a command's requested duration.
     [[nodiscard]] auto time() const -> nx::game::TickTime;
 

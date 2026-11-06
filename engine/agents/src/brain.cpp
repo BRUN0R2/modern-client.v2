@@ -170,6 +170,35 @@ void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
         intent.ahead = intent.direction;
     }
 }
+/// How far across into a volume a body goes to be in it: the game finds it in by the volume's hull, which a
+/// box that only meets its side may stay out of, a body standing for good at a door it never opened.
+constexpr float kEntryDepth = 4.0F;
+/// The part of `box` at least kEntryDepth inside it across, its middle where it is thinner than twice that.
+[[nodiscard]] auto innerOf(const Aabb& box) noexcept -> Aabb {
+    const auto inner = [](float low, float high) {
+        return high - low > 2.0F * kEntryDepth ? std::pair{low + kEntryDepth, high - kEntryDepth}
+                                               : std::pair{(low + high) * 0.5F, (low + high) * 0.5F};
+    };
+    const auto [lowX, highX] = inner(box.min.x, box.max.x);
+    const auto [lowY, highY] = inner(box.min.y, box.max.y);
+    return Aabb{.min = {.x = lowX, .y = lowY, .z = box.min.z},
+                .max = {.x = highX, .y = highY, .z = box.max.z}};
+}
+/// The point of `box` nearest `feet` across, at the height of `feet`.
+[[nodiscard]] auto nearestAcross(const Aabb& box, Vec3 feet) noexcept -> Vec3 {
+    return Vec3{.x = std::clamp(feet.x, box.min.x, box.max.x),
+                .y = std::clamp(feet.y, box.min.y, box.max.y),
+                .z = feet.z};
+}
+/// Whether the standing box of a body of `profile` with its feet at `feet` is in `volume`, kEntryDepth into
+/// it across, as the game finds a body in a volume it touches.
+[[nodiscard]] auto isIn(const Aabb& volume, Vec3 feet, const navigation::AgentProfile& profile) noexcept
+    -> bool {
+    const float radius = profile.radius.value();
+    const Aabb body{.min = feet - Vec3{.x = radius, .y = radius},
+                    .max = feet + Vec3{.x = radius, .y = radius, .z = profile.standingHeight.value()}};
+    return body.intersects(innerOf(volume));
+}
 /// Climbs `intent` across `link`, a ladder, from `feet`, as Brain::decide says, a body of `radius` and
 /// `stepHeight`.
 void climbAcross(Intent& intent, Vec3 feet, const navigation::MeshLink& link, float radius,
@@ -480,7 +509,7 @@ void Brain::finishArrival(const Memory* selected) {
     }
 }
 
-void Brain::openGate(Vec3 door, Vec3 opener) noexcept {
+void Brain::openGate(Vec3 door, navigation::GateOpener opener) noexcept {
     opening = OpeningGate{.door = door, .opener = opener};
     plannedGoal.reset();
 }
@@ -511,7 +540,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
     }
     // A target remembered first, else the goal given, which no entity is pursued for.
     const Vec3 pursuedGoal = selected != nullptr ? selected->observation.position : *givenGoal;
-    const Vec3 goal = opening ? opening->opener : pursuedGoal;
+    const Vec3 goal = opening ? opening->opener.box.center() : pursuedGoal;
     const std::optional<ecs::Entity> pursued =
         selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
     Decision decision{.behavior = Behavior::MoveTo};
@@ -542,14 +571,23 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
     }
     invariant(corridor.has_value(), "Brain: a planned corridor or a reported path error");
     std::ignore = corridor->moveTarget(query, goal);
-    if (opening && !crossing &&
-        (groundDistance(feet, opening->opener) <= kUseReach ||
-         groundDistance(feet, corridor->target()) <= rules.arrivalDistance.value())) {
-        // Near what opens the door: it uses it, looking at it.
-        decision.intent.lookAt = opening->opener;
-        decision.intent.uses = true;
-        decision.intent.direction = {};
-        return decision;
+    if (opening && !crossing) {
+        const navigation::GateOpener& opener = opening->opener;
+        const bool isThere = groundDistance(feet, corridor->target()) <= rules.arrivalDistance.value();
+        if (opener.kind == navigation::OpenerKind::Used &&
+            (isThere || groundDistance(feet, opener.box.center()) <= kUseReach)) {
+            // Near what opens the door: it uses it, looking at it.
+            decision.intent.lookAt = opener.box.center();
+            decision.intent.uses = true;
+            decision.intent.direction = {};
+            return decision;
+        }
+        if (opener.kind == navigation::OpenerKind::Entered && (isThere || isIn(opener.box, feet, profile))) {
+            // In what opens the door as it touches it: it stands there, looking at the door, for it to open.
+            decision.intent.lookAt = opening->door;
+            decision.intent.direction = {};
+            return decision;
+        }
     }
     const HammerUnits crouchLead{kCrouchLeadRadii * profile.radius.value()};
     // At the end of a link onto floor it only fits on crouched: down a ladder into a vent, standing, its head
@@ -602,14 +640,34 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
         if (gate != nullptr && !gate->isOpen) {
             decision.closedGate = gate->middle;
             // What opens it there, as a door used only is opened by itself, it goes on to and uses, facing
-            // it; else it waits at the door, facing it, for it to open.
-            const auto opener = std::ranges::find_if(gate->openers, [&nextLink](Vec3 opens) {
-                return groundDistance(nextLink->start, opens) <= kUseReach;
+            // it; what opens it as it walks into it on its side of the door, it walks into and stands in,
+            // facing the door; else it waits at the door, facing it, for it to open.
+            const auto isOnItsSide = [&](const navigation::GateOpener& opens) {
+                return dot(acrossOf(opens.box.center() - gate->middle),
+                           acrossOf(nextLink->start - gate->middle)) > 0.0F;
+            };
+            const auto opener = std::ranges::find_if(gate->openers, [&](const navigation::GateOpener& opens) {
+                return opens.kind == navigation::OpenerKind::Used
+                           ? groundDistance(nextLink->start, opens.box.center()) <= kUseReach
+                           : isOnItsSide(opens) &&
+                                 groundDistance(nextLink->start, nearestAcross(opens.box, nextLink->start)) <=
+                                     kUseReach;
             });
             const bool hasOpener = opener != gate->openers.end();
-            if (hasOpener && groundDistance(feet, *opener) <= kUseReach) {
-                decision.intent.ahead = wayAcross(*opener - feet, decision.intent.ahead);
-                decision.intent.lookAt = *opener;
+            if (hasOpener && opener->kind == navigation::OpenerKind::Entered &&
+                groundDistance(feet, nearestAcross(opener->box, feet)) <= kUseReach) {
+                decision.intent.lookAt = gate->middle;
+                if (isIn(opener->box, feet, profile)) {
+                    decision.intent.direction = {};
+                } else {
+                    headFor(decision.intent, feet, nearestAcross(innerOf(opener->box), feet));
+                }
+                return decision;
+            }
+            if (hasOpener && opener->kind == navigation::OpenerKind::Used &&
+                groundDistance(feet, opener->box.center()) <= kUseReach) {
+                decision.intent.ahead = wayAcross(opener->box.center() - feet, decision.intent.ahead);
+                decision.intent.lookAt = opener->box.center();
                 decision.intent.uses = true;
                 return decision;
             }

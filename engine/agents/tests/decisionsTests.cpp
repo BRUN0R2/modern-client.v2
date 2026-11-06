@@ -459,6 +459,11 @@ TEST(AgentDeciders, ABodyInTheAirHasNotLandedAcrossALink) {
 /// A door in a wall along x = 0 across two rooms.
 constexpr nx::Aabb kDoor{.min = {.x = -16, .y = -32, .z = 0}, .max = {.x = 16, .y = 32, .z = 96}};
 
+/// What a body uses at `point` to open a door: a button there.
+[[nodiscard]] auto usedAt(nx::Vec3 point) -> nx::navigation::GateOpener {
+    return {.box = {.min = point, .max = point}, .kind = nx::navigation::OpenerKind::Used};
+}
+
 /// The mesh of those rooms.
 auto roomsWithADoor() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;
@@ -481,8 +486,9 @@ TEST(AgentDeciders, WhatOpensADoorFromBehindItIsNoWayToOpenItHoweverNearItIs) {
     constexpr nx::Seconds kTick{0.01F};
     const nx::Vec3 behind{.x = 100, .y = 200};
     const nx::Vec3 onItsSide{.x = -450, .y = 200};
-    const std::vector gates{nx::navigation::Gate{
-        .middle = (kDoor.min + kDoor.max) * 0.5F, .isOpen = false, .openers = {behind, onItsSide}}};
+    const std::vector gates{nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F,
+                                                 .isOpen = false,
+                                                 .openers = {usedAt(behind), usedAt(onItsSide)}}};
     nx::Vec3 feet{.x = -60};
     const auto entity = world.spawn();
     nx::agents::Brain brain{rules()};
@@ -534,7 +540,7 @@ TEST(AgentDeciders, AWayKeepsOffAClosedDoorWhileItHasAnother) {
     nx::navigation::NavigationQuery query{mesh};
     const std::vector gates{nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F,
                                                  .isOpen = false,
-                                                 .openers = {nx::Vec3{.x = -400, .y = 100}}}};
+                                                 .openers = {usedAt({.x = -400, .y = 100})}}};
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 200});
     const nx::agents::Decision decision = brain.decide({.x = -60}, query, kRunSpeed, true, {}, gates);
@@ -553,7 +559,8 @@ TEST(AgentDeciders, ADoorUsedOnlyIsUsedByTheBodyThatGetsThere) {
     constexpr nx::UnitsPerSecond kSpeed{250.0F};
     constexpr nx::Seconds kTick{0.01F};
     const nx::Vec3 middle = (kDoor.min + kDoor.max) * 0.5F;
-    const std::vector gates{nx::navigation::Gate{.middle = middle, .isOpen = false, .openers = {middle}}};
+    const std::vector gates{
+        nx::navigation::Gate{.middle = middle, .isOpen = false, .openers = {usedAt(middle)}}};
     nx::Vec3 feet{.x = -200};
     const auto entity = world.spawn();
     nx::agents::Brain brain{rules()};
@@ -585,7 +592,7 @@ TEST(AgentDeciders, NoBodyGoesToOpenADoorWhenAllThatOpensItIsBehindIt) {
     constexpr nx::Seconds kTick{0.01F};
     const std::vector gates{nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F,
                                                  .isOpen = false,
-                                                 .openers = {nx::Vec3{.x = 100, .y = 200}}}};
+                                                 .openers = {usedAt({.x = 100, .y = 200})}}};
     const auto entity = world.spawn();
     nx::agents::Brain brain{rules()};
     brain.setGoal(nx::Vec3{.x = 400});
@@ -608,8 +615,8 @@ TEST(AgentDeciders, TheBodyNearestWhatOpensAClosedDoorOpensItWhileTheOthersWaitA
     constexpr float kArrived = 24.0F;
     const nx::Vec3 opener{.x = -200, .y = 200};
     const nx::Vec3 goal{.x = 400};
-    std::vector gates{
-        nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F, .isOpen = false, .openers = {opener}}};
+    std::vector gates{nx::navigation::Gate{
+        .middle = (kDoor.min + kDoor.max) * 0.5F, .isOpen = false, .openers = {usedAt(opener)}}};
     std::array feet{nx::Vec3{.x = -150, .y = 120}, nx::Vec3{.x = -300, .y = -120}};
     const std::array entities{world.spawn(), world.spawn()};
     std::vector<nx::agents::Brain> brains;
@@ -651,6 +658,89 @@ TEST(AgentDeciders, TheBodyNearestWhatOpensAClosedDoorOpensItWhileTheOthersWaitA
         EXPECT_LT(nx::test::distanceAcross(feet[agent], goal), kArrived)
             << "agent " << agent << " through it";
     }
+}
+
+/// What a body walks into to open a door: a volume of `box` that fires it as the body touches it.
+[[nodiscard]] auto enteredIn(nx::Aabb box) -> nx::navigation::GateOpener {
+    return {.box = box, .kind = nx::navigation::OpenerKind::Entered};
+}
+
+/// How a body walking from `from` to `goal` through the door of roomsWithADoor, which `opener` opens as a
+/// body's box meets it, fares: whether it ever used anything, whether its box met the opener, how far it went
+/// while the door stood closed, and where it ends.
+struct DoorWalk {
+    bool used = false;
+    bool met = false;
+    float farthestWhileClosed = std::numeric_limits<float>::lowest();
+    nx::Vec3 feet{};
+};
+
+[[nodiscard]] auto walkThroughDoor(nx::Vec3 from, nx::Vec3 goal, nx::navigation::GateOpener opener)
+    -> DoorWalk {
+    const auto mesh = roomsWithADoor();
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::ecs::World world;
+    constexpr nx::Seconds kTick{0.01F};
+    const float radius = mesh.profile().radius.value();
+    std::vector gates{
+        nx::navigation::Gate{.middle = (kDoor.min + kDoor.max) * 0.5F, .isOpen = false, .openers = {opener}}};
+    const auto entity = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(goal);
+    DoorWalk walk{.feet = from};
+    for (int tick = 0; tick < 1000; ++tick) {
+        const std::array requests{nx::agents::DecisionRequest{
+            .brain = &brain, .feet = walk.feet, .maxSpeed = kRunSpeed, .body = entity, .elapsed = kTick}};
+        std::array<nx::agents::Decision, 1> decisions{};
+        deciders.decide(*jobs, requests, decisions, {}, gates);
+        const nx::agents::Intent& intent = decisions.front().intent;
+        walk.used = walk.used || intent.uses;
+        walk.feet += intent.direction * (kRunSpeed.value() * intent.speedShare * kTick.count());
+        // As the game fires a volume a body's box meets.
+        const nx::Aabb body{.min = walk.feet - nx::Vec3{.x = radius, .y = radius},
+                            .max = walk.feet + nx::Vec3{.x = radius, .y = radius, .z = 72.0F}};
+        walk.met = walk.met || body.intersects(opener.box);
+        if (!gates.front().isOpen) {
+            walk.farthestWhileClosed = std::max(walk.farthestWhileClosed, walk.feet.x);
+        }
+        gates.front().isOpen = walk.met;
+    }
+    return walk;
+}
+
+/// The part of a volume about the door 14 units deep past its side short of x = 0, as de_nuke's glass doors
+/// have them.
+constexpr nx::Aabb kAtTheDoor{.min = {.x = kDoor.min.x - 14.0F, .y = kDoor.min.y, .z = 0.0F},
+                              .max = {.x = kDoor.min.x, .y = kDoor.max.y, .z = 64.0F}};
+
+TEST(AgentDeciders, ABodyWalksIntoWhatOpensADoorAsItIsEnteredOnItsSideAndUsesNothing) {
+    constexpr nx::Vec3 kGoal{.x = 400};
+    const DoorWalk walk = walkThroughDoor({.x = -200}, kGoal, enteredIn(kAtTheDoor));
+    EXPECT_TRUE(walk.met) << "on to the door, not waiting short of it";
+    EXPECT_FALSE(walk.used);
+    EXPECT_LT(walk.farthestWhileClosed, kDoor.min.x) << "none through it closed";
+    EXPECT_LT(nx::test::distanceAcross(walk.feet, kGoal), 24.0F) << "through it once open";
+}
+
+TEST(AgentDeciders, ABodyGoesToWhatOpensADoorAsItIsEnteredAwayFromItAndStandsInIt) {
+    // A plate in the floor of the room, far from the door: the body waiting at the door goes there.
+    constexpr nx::Aabb kPlate{.min = {.x = -320, .y = 150, .z = 0}, .max = {.x = -280, .y = 190, .z = 8}};
+    constexpr nx::Vec3 kGoal{.x = 400};
+    const DoorWalk walk = walkThroughDoor({.x = -100}, kGoal, enteredIn(kPlate));
+    EXPECT_TRUE(walk.met);
+    EXPECT_FALSE(walk.used);
+    EXPECT_LT(walk.farthestWhileClosed, kDoor.min.x);
+    EXPECT_LT(nx::test::distanceAcross(walk.feet, kGoal), 24.0F);
+}
+
+TEST(AgentDeciders, WhatOpensADoorAsItIsEnteredOnlyBeyondItIsNoWayToOpenItFromThisSide) {
+    constexpr nx::Aabb kBeyond{.min = {.x = kDoor.max.x, .y = kDoor.min.y, .z = 0.0F},
+                               .max = {.x = kDoor.max.x + 14.0F, .y = kDoor.max.y, .z = 64.0F}};
+    const DoorWalk walk = walkThroughDoor({.x = -200}, {.x = 400}, enteredIn(kBeyond));
+    EXPECT_FALSE(walk.met);
+    EXPECT_LT(walk.farthestWhileClosed, kDoor.min.x);
+    EXPECT_LT(walk.feet.x, kDoor.min.x) << "it waits at the door";
 }
 
 TEST(AgentDeciders, FewerBrainsThanABatchAndNoneDecideToo) {

@@ -202,7 +202,8 @@ TEST(NavigationGatesTest, ADoorIsOpenWalkedIntoAndClosedWithWhatOpensItWhenOther
                                               .behavior = nx::game::BrushBehavior::SlidingDoor}}};
     ASSERT_TRUE(nx::game::spawnBrushEntities(world, entities, map->models(), classes).has_value());
 
-    const std::vector<nx::navigation::Gate> gates = nx::game::gatesOf(*map, world);
+    const std::vector<nx::navigation::Gate> gates =
+        nx::game::gatesOf(*map, world, nx::game::AgentBodies::Players);
     ASSERT_EQ(gates.size(), 3U) << "the doors, not the button";
     const auto openWalkedInto = std::ranges::count_if(
         gates, [](const nx::navigation::Gate& gate) { return gate.isOpen && gate.openers.empty(); });
@@ -211,16 +212,81 @@ TEST(NavigationGatesTest, ADoorIsOpenWalkedIntoAndClosedWithWhatOpensItWhenOther
         gates, [](const nx::navigation::Gate& gate) { return !gate.isOpen && gate.openers.size() == 1; });
     EXPECT_EQ(closed, 2) << "by a button, and by a use of itself";
     EXPECT_TRUE(std::ranges::any_of(gates, [](const nx::navigation::Gate& gate) {
-        return !gate.openers.empty() && gate.openers.front() == gate.middle;
+        return !gate.openers.empty() && gate.openers.front().box.center() == gate.middle;
     }));
 
     nx::ecs::Query<nx::game::Door&>{world}.forEach(
         [](nx::game::Door& door) { door.state = nx::game::DoorState::Open; });
-    EXPECT_TRUE(std::ranges::all_of(nx::game::gatesOf(*map, world), &nx::navigation::Gate::isOpen))
+    EXPECT_TRUE(std::ranges::all_of(nx::game::gatesOf(*map, world, nx::game::AgentBodies::Players),
+                                    &nx::navigation::Gate::isOpen))
         << "open, however it opens";
 
     const Geometry geometry = nx::game::navigationGeometryOf(*map, world);
     EXPECT_EQ(geometry.doors.size(), 3U);
+}
+
+TEST(NavigationGatesTest, AVolumeThatFiresADoorIsEnteredOnEachSideOfItItReachesPastByPlayersAlone) {
+    const std::vector<std::byte> bytes = readSeed("boxWithEntity.bsp");
+    const auto map = nx::assets::BspView::parse(bytes);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    nx::ecs::World world;
+    ASSERT_TRUE(nx::game::registerComponents(world).has_value());
+    // The door's model, and volumes of it moved across the way it is thin, past one side or the other.
+    const nx::Aabb door = map->models()[1].bounds;
+    const Vec3 size = door.size();
+    const bool isThinAlongX = size.x <= size.y;
+    constexpr float kPast = 24.0F;
+    const Vec3 past = isThinAlongX ? Vec3{.x = kPast} : Vec3{.y = kPast};
+    constexpr std::string_view kNotByPlayers = "2";
+    using KeyValues = std::vector<std::pair<std::string, std::string>>;
+    const auto volumeAt = [](Vec3 origin, KeyValues extra) {
+        KeyValues keys{{"classname", "trigger_multiple"},
+                       {"model", "*1"},
+                       {"target", "vault"},
+                       {"origin", std::format("{} {} {}", origin.x, origin.y, origin.z)}};
+        keys.insert(keys.end(), extra.begin(), extra.end());
+        return nx::assets::BspEntity{.keyValues = std::move(keys)};
+    };
+    const std::vector entities{nx::assets::BspEntity{.keyValues = {{"classname", "func_door"},
+                                                                   {"model", "*1"},
+                                                                   {"angles", "0 0 0"},
+                                                                   {"targetname", "vault"}}},
+                               volumeAt(past, {}), volumeAt(past * -1.0F, {}),
+                               volumeAt(past * 2.0F, {{"spawnflags", std::string{kNotByPlayers}}})};
+    const nx::game::EntityClasses classes{
+        .brushClasses = {nx::game::BrushClass{.classname = "func_door",
+                                              .solid = nx::game::Solid::Bsp,
+                                              .behavior = nx::game::BrushBehavior::SlidingDoor},
+                         nx::game::BrushClass{.classname = "trigger_multiple",
+                                              .solid = nx::game::Solid::Not,
+                                              .behavior = nx::game::BrushBehavior::Trigger}}};
+    ASSERT_TRUE(nx::game::spawnBrushEntities(world, entities, map->models(), classes).has_value());
+
+    const std::vector<nx::navigation::Gate> gates =
+        nx::game::gatesOf(*map, world, nx::game::AgentBodies::Players);
+    ASSERT_EQ(gates.size(), 1U);
+    const nx::navigation::Gate& gate = gates.front();
+    EXPECT_FALSE(gate.isOpen);
+    ASSERT_EQ(gate.openers.size(), 2U) << "one each side, none of the volume no player fires";
+    const auto acrossOf = [isThinAlongX](Vec3 point) {
+        return isThinAlongX ? point.x : point.y;
+    };
+    const float middle = acrossOf(gate.middle);
+    for (const nx::navigation::GateOpener& opener : gate.openers) {
+        EXPECT_EQ(opener.kind, nx::navigation::OpenerKind::Entered);
+        // Wholly past the door's side, each is all of its volume, its middle as far from the door's.
+        EXPECT_FLOAT_EQ(std::abs(acrossOf(opener.box.center()) - middle), kPast);
+        EXPECT_EQ(opener.box.size(), size);
+    }
+    EXPECT_LT(acrossOf(gate.openers[0].box.center() - gate.middle) *
+                  acrossOf(gate.openers[1].box.center() - gate.middle),
+              0.0F)
+        << "on its two sides";
+
+    const std::vector<nx::navigation::Gate> forEntities =
+        nx::game::gatesOf(*map, world, nx::game::AgentBodies::Entities);
+    ASSERT_EQ(forEntities.size(), 1U);
+    EXPECT_TRUE(forEntities.front().openers.empty()) << "no volume fires for an entity's body";
 }
 
 TEST(NavigationGeometryTest, AFloorUnderWaterIsWater) {

@@ -369,7 +369,7 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
         }
     }
     std::vector<nx::agents::Decision> decisions(requests.size());
-    const std::vector<nx::navigation::Gate> gates = game->gates();
+    const std::vector<nx::navigation::Gate> gates = game->gates(nx::game::AgentBodies::Players);
     deciders.decide(*jobs, requests, decisions, bodies, gates);
     inBatches({.label = "bots.commands", .priority = nx::jobs::Priority::Critical}, turns.size(),
               [this, &turns, &decisions, &sights](std::size_t index, nx::navigation::NavigationQuery& query) {
