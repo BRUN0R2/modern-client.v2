@@ -11,12 +11,18 @@ import nx.core;
 import nx.ecs;
 import nx.collision;
 import :clock;
+import :components;
 
 namespace nx::game {
 
 /// Door `entity` starts opening (CBaseDoor::DoorGoUp): a turning one away from what opened it, but
 /// one-way.
 void openDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity);
+
+/// How long `door`, as `transform` places it, takes to open from where it stands, as openDoor moves it at its
+/// speed (LinearMove, AngularMove); one that opens away by the nearer of its two ways, as it does not know
+/// yet which way it opens. None standing open.
+[[nodiscard]] auto openingTimeOf(const Door& door, const Transform& transform) noexcept -> Seconds;
 
 /// Door `entity` starts closing (CBaseDoor::DoorGoDown).
 void closeDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity);

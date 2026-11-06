@@ -12,6 +12,7 @@ import nx.ecs;
 import nx.jobs;
 import nx.navigation;
 import nx.agents;
+#include "contractRecorder.hpp"
 #include "testAgents.hpp"
 #include "testGeometry.hpp"
 
@@ -314,6 +315,31 @@ TEST(AgentDeciders, ABodyKnockedBackWhereItIsIsNoStuckOneAndKeepsToItsWay) {
         EXPECT_GT(decisions.front().intent.direction.x, 0.9F) << "on along its way";
     }
     EXPECT_TRUE(agent.brain.goal().has_value());
+}
+
+TEST(AgentDeciders, TheRequestsOfACallAreOfOneTick) {
+    constexpr nx::Seconds kTick{0.01F};
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -512}, {.x = 512, .y = 512}, 0);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    std::array agents{
+        nx::agents::Agent{.brain = nx::agents::Brain{rules()}, .stuck = nx::test::stuckWatch()},
+        nx::agents::Agent{.brain = nx::agents::Brain{rules()}, .stuck = nx::test::stuckWatch()}};
+    const auto requestOf = [](nx::agents::Agent& agent, nx::Seconds elapsed) {
+        return nx::agents::DecisionRequest{.brain = &agent.brain,
+                                           .maxSpeed = nx::UnitsPerSecond{250.0F},
+                                           .stuck = &agent.stuck,
+                                           .elapsed = elapsed};
+    };
+    std::array<nx::agents::Decision, 2> decisions{};
+    const nx::test::ContractRecorder recorder;
+    deciders.decide(*jobs, std::array{requestOf(agents[0], kTick), requestOf(agents[1], kTick)}, decisions);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 0);
+    deciders.decide(*jobs, std::array{requestOf(agents[0], kTick), requestOf(agents[1], kTick + kTick)},
+                    decisions);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
 TEST(AgentDeciders, ABodyInTheAirIsNoStuckOneButOneStuckStaysSoThroughItsJumps) {

@@ -152,6 +152,12 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
     if (count == 0) {
         return;
     }
+    // Under observe, the doors claimed age by the first's.
+    const Seconds elapsed = requests.front().elapsed;
+    expects(
+        std::ranges::all_of(requests.first(count),
+                            [elapsed](const DecisionRequest& request) { return request.elapsed == elapsed; }),
+        "Deciders::decide: the requests of one tick, each as long after its last");
     const std::size_t batchCount = jobs.batchCountOf(count, kSmallestBatch);
     while (queries.size() < batchCount) {
         queries.emplace_back(*decidedOn);
@@ -206,18 +212,17 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
     jobs.forBatches({.label = "agents.decide", .priority = jobs::Priority::Critical}, count, kSmallestBatch,
                     decideBatch);
     if (!gates.empty()) {
-        assignGates(requests.first(count), decisions.first(count), gates);
+        assignGates(requests.first(count), decisions.first(count), gates, elapsed);
     }
 }
 
 void Deciders::assignGates(std::span<const DecisionRequest> requests, std::span<const Decision> decisions,
-                           std::span<const navigation::Gate> gates) {
+                           std::span<const navigation::Gate> gates, Seconds elapsed) {
     // What a decision of its body renews: past this, a body gone holds the door no more.
     constexpr Seconds kClaimLife{2.0F};
     // Till none is looked for again of a door none could open: a search that finds no way goes all over the
     // mesh.
     constexpr Seconds kNoneLife{1.0F};
-    const Seconds elapsed = requests.empty() ? Seconds{} : requests.front().elapsed;
     for (GateClaim& claim : gateClaims) {
         claim.left = claim.left - elapsed;
     }

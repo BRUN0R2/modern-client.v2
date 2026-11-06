@@ -135,10 +135,12 @@ struct GateOpener {
 
 /// A door of a map, as the agents whose ways go through it (AreaKind::Door) see it: the middle of its box as
 /// it stands closed, as its links name it (MeshLink::through); whether a body gets through, open or opened by
-/// walking into it; and what opens it, that a body uses from nearby or walks into.
+/// walking into it; how long it takes to open from where it stands, none standing open; and what opens it,
+/// that a body uses from nearby or walks into.
 struct Gate {
     Vec3 middle{};
     bool isOpen = false;
+    Seconds opensIn{};
     std::vector<GateOpener> openers{};
 };
 

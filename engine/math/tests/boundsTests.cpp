@@ -56,6 +56,11 @@ TEST(AabbTest, Including) {
     static_assert(kPlayer.including(Vec3{}) == kPlayer);
 }
 
+TEST(AabbTest, ClosestPointIsOnTheBoxOrThePointWithinIt) {
+    static_assert(kPlayer.closestPoint(Vec3{.x = 100, .y = 4, .z = -100}) == Vec3{.x = 16, .y = 4, .z = -36});
+    static_assert(kPlayer.closestPoint(Vec3{.x = 1, .y = 2, .z = 3}) == Vec3{.x = 1, .y = 2, .z = 3});
+}
+
 TEST(AabbTest, ExpandedIsTheMinkowskiSum) {
     constexpr Vec3 halfHull{.x = 16, .y = 16, .z = 36};
     constexpr Aabb crate = Aabb::around(Vec3{.x = 100}, Vec3{.x = 8, .y = 8, .z = 8});
