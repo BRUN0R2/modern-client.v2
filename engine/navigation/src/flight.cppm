@@ -37,7 +37,8 @@ struct BodyMotion {
 /// the time it is in the air, rising as high as the link's kind jumps, or as the ground at its start lets it
 /// (Takeoff::rise), its head stopping it there, then falling to the end's height. None for a ladder, a door,
 /// or a link with no gap; more than any body's for one whose end is higher than a body rises from its start.
-/// A link that tells nothing of its start is left as from open ground, a full jump high.
+/// A link that tells nothing of its start is left as from open ground, a full jump high. Requires a profile
+/// of a gravity and jump heights finite and more than none, as checkProfile has it.
 [[nodiscard]] auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile,
                                     HammerUnits shortOfStart) noexcept -> UnitsPerSecond;
 
@@ -45,7 +46,7 @@ struct BodyMotion {
 /// gains running at it from rest over the floor behind it (Takeoff::room) but for its radius, at its run
 /// there, its crouched one where only a crouched body stands (Takeoff::isCrouched), or what the air gives it,
 /// if more. From open ground, as a link that tells nothing of its start is left, its run or what the air
-/// gives it.
+/// gives it. Requires a valid motion (isValidMotion).
 [[nodiscard]] auto fastestTakeoffOf(const MeshLink& link, const AgentProfile& profile,
                                     const BodyMotion& motion) noexcept -> UnitsPerSecond;
 
@@ -53,7 +54,8 @@ struct BodyMotion {
 /// leave it at `takeoff`: its radius, and as far as its run gains it that speed while its friction takes what
 /// the speed it has gives it (PM_Accelerate, PM_Friction), counted at that speed; its radius alone for a body
 /// at its full speed at once. None for a takeoff faster than its run there, crouched where only a crouched
-/// body stands, or one its friction takes as much of as its run gains it.
+/// body stands, or one its friction takes as much of as its run gains it. Requires a valid motion
+/// (isValidMotion).
 [[nodiscard]] auto runUpOf(const MeshLink& link, const AgentProfile& profile, const BodyMotion& motion,
                            UnitsPerSecond takeoff) noexcept -> std::optional<HammerUnits>;
 

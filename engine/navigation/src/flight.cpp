@@ -18,6 +18,16 @@ namespace {
                                                                         : profile.jumpHeight.value();
 }
 
+/// Whether `profile` flies as leastLeapSpeedOf requires: its gravity and jump heights finite and more than
+/// none.
+[[nodiscard]] auto fliesAsGiven(const AgentProfile& profile) noexcept -> bool {
+    const auto isPositive = [](float value) {
+        return std::isfinite(value) && value > 0.0F;
+    };
+    return isPositive(profile.gravity.value()) && isPositive(profile.jumpHeight.value()) &&
+           (!profile.crouchedJumpHeight || isPositive(profile.crouchedJumpHeight->value()));
+}
+
 /// How fast a body runs at most on the ground `takeoff` is: crouched where only a crouched body stands.
 [[nodiscard]] auto runOn(const std::optional<Takeoff>& takeoff, const BodyMotion& motion) noexcept -> float {
     return takeoff && takeoff->isCrouched ? motion.crouchedSpeed.value() : motion.runSpeed.value();
@@ -33,9 +43,13 @@ auto isValidMotion(const BodyMotion& motion) noexcept -> bool {
 
 auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerUnits shortOfStart) noexcept
     -> UnitsPerSecond {
+    expects(fliesAsGiven(profile), "leastLeapSpeedOf: a gravity and jump heights finite and more than none");
     const float gap = detail::gapAcross(link.start, link.end, profile.radius);
     if (link.kind == AreaKind::Ladder || link.kind == AreaKind::Door || gap <= 0.0F) {
         return UnitsPerSecond{};
+    }
+    if (!fliesAsGiven(profile)) {
+        return UnitsPerSecond{std::numeric_limits<float>::infinity()}; // under observe: no body takes it
     }
     const float jump = jumpOf(link.kind, profile);
     const float rise = link.takeoff ? std::min(link.takeoff->rise.value(), jump) : jump;
@@ -49,6 +63,10 @@ auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerU
 
 auto fastestTakeoffOf(const MeshLink& link, const AgentProfile& profile, const BodyMotion& motion) noexcept
     -> UnitsPerSecond {
+    expects(isValidMotion(motion), "fastestTakeoffOf: a motion of speeds and rates finite, of none or more");
+    if (!isValidMotion(motion)) {
+        return UnitsPerSecond{}; // under observe: it leaves no ledge
+    }
     const float run = runOn(link.takeoff, motion);
     float ground = run;
     if (link.takeoff && motion.acceleration > 0.0F) {
@@ -64,6 +82,10 @@ auto fastestTakeoffOf(const MeshLink& link, const AgentProfile& profile, const B
 
 auto runUpOf(const MeshLink& link, const AgentProfile& profile, const BodyMotion& motion,
              UnitsPerSecond takeoff) noexcept -> std::optional<HammerUnits> {
+    expects(isValidMotion(motion), "runUpOf: a motion of speeds and rates finite, of none or more");
+    if (!isValidMotion(motion)) {
+        return std::nullopt; // under observe: no run gets it there
+    }
     const float run = runOn(link.takeoff, motion);
     const float speed = takeoff.value();
     if (speed > run) {
