@@ -79,6 +79,21 @@ void openDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
     turnTo(world, hulls, entity, eulerOf(vectorOf(turn.open) * sign), turn.speed);
 }
 
+auto openingTimeOf(const Door& door, const Transform& transform) noexcept -> Seconds {
+    if (door.state == DoorState::Open) {
+        return Seconds{};
+    }
+    if (const auto* slide = std::get_if<DoorSlide>(&door.motion)) {
+        return Seconds{length(slide->open - transform.origin) / std::abs(slide->speed.value())};
+    }
+    const DoorTurn& turn = std::get<DoorTurn>(door.motion);
+    const Vec3 open = vectorOf(turn.open);
+    const Vec3 at = vectorOf(transform.angles);
+    const float turned =
+        turn.opensAway ? std::min(length(open - at), length((open * -1.0F) - at)) : length(open - at);
+    return Seconds{turned / std::abs(turn.speed.value())};
+}
+
 void closeDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity) {
     Door& door = *world.get<Door>(entity);
     door.state = DoorState::Closing;
