@@ -585,6 +585,35 @@ TEST(AgentBrain, ALinkItFailsTwiceInARowIsOneItsWaysKeepOffWhileTheyHaveAnother)
     EXPECT_GT(nx::length(way[1] - linkStart), 1.0F) << "by another";
 }
 
+TEST(AgentBrain, ALinkItIsKnockedOffIsNoneItFailedHoweverOftenItIs) {
+    constexpr int kKnockedOff = 5;
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 30}};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 512, .y = 256, .z = box.high.z});
+    std::ignore = brain.decide({.x = 300, .y = 256}, query);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    ASSERT_GE(way.size(), 3U);
+    const nx::Vec3 atIt = way[1] - nx::Vec3{.x = 2.0F};
+    const auto jumpsAndFallsBack = [&](bool isKnockedOff) {
+        const nx::agents::Decision atTheLink = brain.decide(atIt, query);
+        EXPECT_TRUE(atTheLink.intent.jumps) << "at it again";
+        if (isKnockedOff) {
+            brain.noteKnockedBack();
+        }
+        std::ignore = brain.decide({.x = atIt.x, .y = atIt.y, .z = box.high.z / 2.0F}, query, false);
+    };
+    for (int time = 0; time < kKnockedOff; ++time) {
+        jumpsAndFallsBack(true);
+    }
+    // Falling of itself, twice in a row, it failed it as ever.
+    jumpsAndFallsBack(false);
+    jumpsAndFallsBack(false);
+    EXPECT_FALSE(brain.decide(atIt, query).intent.jumps) << "not again";
+}
+
 TEST(AgentBrain, ABodyOnATargetsHeadStrikesItsEyesThoughItsFeetAreOutOfReach) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};
@@ -1373,10 +1402,13 @@ TEST(AgentBrain, ABrakingBodyAnticipatesAndCrossesADrop) {
 }
 
 /// A floor with a block in its far corner, which the way from the top left to the bottom right turns round.
+/// The corner of cornerMesh's block that a way from the floor's top left to its bottom right turns round.
+constexpr nx::Vec3 kBlockCorner{.x = 300, .y = 300};
+
 auto cornerMesh() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 1024}, 0);
-    nx::test::addBox(geometry, {.x = 300, .y = 300}, {.x = 1024, .y = 1024, .z = 300});
+    nx::test::addBox(geometry, kBlockCorner, {.x = 1024, .y = 1024, .z = 300});
     return nx::test::playerMesh(geometry, 0);
 }
 
@@ -1485,6 +1517,32 @@ TEST(AgentBrain, ABodyThatRoundsACornerWideHeadsOnFromItRatherThanBackToIt) {
     const nx::Vec3 toCorner = corner - drifted;
     EXPECT_LT(nx::dot(decision.intent.direction, toCorner / nx::length(toCorner)), 0.7F)
         << "on to the corner after it, not back to it";
+}
+
+TEST(AgentBrain, ABodyDrawnBackFromACornerItReachedAsItGotStuckReturnsToIt) {
+    auto mesh = cornerMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(nx::Vec3{.x = 900, .y = 150});
+    std::ignore = brain.decide({.x = 150, .y = 900}, query);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    // Down the block's side, round its corner, and on: the turn round it is the way's corner nearest it.
+    const auto turn =
+        std::ranges::min_element(way, {}, [](nx::Vec3 point) { return nx::length(point - kBlockCorner); });
+    ASSERT_TRUE(turn != way.begin() && std::ranges::next(turn) != way.end());
+    const nx::Vec3 corner = *turn;
+    // It reaches that turn, stopping just short of it as its funnel lists it only until then.
+    std::ignore = brain.decide(*std::ranges::prev(turn), query);
+    std::ignore = brain.decide(corner + nx::Vec3{.x = -2, .y = 2}, query);
+    // It gets stuck there, and is drawn back up the block's side.
+    constexpr nx::Vec3 kDrawnBack{.y = 60.0F};
+    const nx::Vec3 drawnBack = corner + kDrawnBack;
+    brain.noteStuck();
+    const nx::Vec3 direction = brain.decide(drawnBack, query).intent.direction;
+    const nx::Vec3 toCorner = corner - drawnBack;
+    EXPECT_GT(nx::dot(direction, toCorner / nx::length(toCorner)), 0.7F) << "back to the corner";
+    EXPECT_LT(direction.x, 0.2F) << "along the block's side, not on to the next corner through the block";
 }
 
 TEST(AgentBrain, InACrowdABodyWaitsForThoseAheadNearerItsEndAndTheyGoOn) {

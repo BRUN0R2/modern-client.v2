@@ -392,8 +392,10 @@ void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ec
         } else if (isOnGround && leftGround && std::abs(feet.z - crossing->end.z) > stepHeight) {
             // Back on the ground below the link's end, as it fell off a ledge it jumped at. Its corridor goes
             // on from up there, and its one jump is spent: pushing on at the ledge's face, it stayed until
-            // its watch gave its way up, and then its goal.
-            noteLinkFailed(*crossing);
+            // its watch gave its way up, and then its goal. Shot off it, it failed nothing of the link's.
+            if (!isKnockedOffCrossing) {
+                noteLinkFailed(*crossing);
+            }
             forgetCorridor();
             plannedGoal.reset();
         }
@@ -769,6 +771,7 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, navigati
         return false;
     }
     leftGround = false;
+    isKnockedOffCrossing = false;
     if (crossing->kind == navigation::AreaKind::Ladder) {
         const navigation::AgentProfile& profile = query.mesh().profile();
         climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());

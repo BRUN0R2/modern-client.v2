@@ -292,6 +292,7 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<con
     body.movement.maxSpeed = type.definition.speed;
     if (type.definition.knockback) {
         const float share = walkShareOf(*type.definition.knockback, body.knockedBack, time.now, time.rate);
+        body.isKnockedBack = share < 1.0F;
         if (share > 0.0F) {
             body.movement.maxSpeed = type.definition.speed * share;
         } else {
@@ -575,7 +576,8 @@ void writeEntityStates(nx::ecs::World& world, std::vector<EntityState>& states, 
                                             .movedAt = body.movedAt,
                                             .ticksPerMove = body.ticksPerMove,
                                             .isDucked = body.movement.isDucked,
-                                            .isOnGround = body.movement.isOnGround};
+                                            .isOnGround = body.movement.isOnGround,
+                                            .isKnockedBack = body.isKnockedBack};
             }
         }
     };

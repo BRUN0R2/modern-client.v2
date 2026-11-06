@@ -646,7 +646,12 @@ void Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision, const Si
                                       .now = time.now,
                                       .rate = time.rate},
                                      rules.fire, driver->aim);
-    if (presses) {
+    // Pressing on an empty clip a gun never reloads, as it does with no button down (ItemPostFrame), and it
+    // would click for good: it reloads (ReloadCheck).
+    const std::optional<GunRounds>& rounds = self.heldRounds;
+    if (rounds && rounds->clip == 0 && rounds->carried > 0) {
+        command.buttons.set(Button::Reload);
+    } else if (presses) {
         command.buttons.set(Button::Attack);
     }
 }

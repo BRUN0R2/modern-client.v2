@@ -35,7 +35,7 @@ struct Rules {
     /// fought (saw a target it recognized), the later, so that what it perceived while it fought waits for
     /// it to look into once the fight is over.
     Seconds memoryLifetime{};
-    /// How near a target it sees must be to be attacked.
+    /// How near a target it sees must be to be attacked: its feet, or the point it is aimed at.
     HammerUnits attackDistance{};
     /// How near the corridor's end counts as arrived.
     HammerUnits arrivalDistance{};
@@ -224,8 +224,8 @@ public:
     /// projected destination, including an airborne observation. With no target remembered, it moves to its
     /// goal (MoveTo), which it forgets as it arrives (Idle): within arrivalDistance of its corridor's end
     /// across, and a step of its height, as it measures how near a corner is; a corner it reached it heads
-    /// on from, however far it drifts from it before its corridor drops it. Its feet within
-    /// arrivalDistance of the start of
+    /// on from, however far it drifts from it before its corridor drops it, unless it gets stuck
+    /// (noteStuck). Its feet within arrivalDistance of the start of
     /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up, and heads
     /// for the link's end, which its corridor goes on from, until it stands on the ground, `isOnGround`,
     /// within a step of the end's height as far from the start as the end is; back on it below that height,
@@ -259,6 +259,10 @@ public:
     /// link's end as it decided, off the mesh, as DetourCrowd moves an agent over a link without steering.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
+    /// Its body is stuck (StuckWatch), which draws it away from its way: it forgets the corner it last
+    /// reached, so that once back it heads for the first corner ahead of it from where it is, not on from
+    /// that one, past what that one rounds.
+    inline void noteStuck() noexcept { reachedCorner.reset(); }
     /// It backs off for a run at a gap: a body that goes little and turns round, and is no stuck one for
     /// that.
     [[nodiscard]] inline auto isRunningUp() const noexcept -> bool { return runUpFrom.has_value(); }
@@ -269,6 +273,9 @@ public:
     /// after which a hunt picks another place), and keeps away from its last `reroutes` places on its way
     /// to the one it chases.
     void giveUp(const navigation::AvoidedPlace& stuckAt, std::size_t reroutes);
+    /// A hit throws its body about (DecisionRequest::isKnockedBack): falling from the link it crosses now is
+    /// no failure of that link's (PathRequest::shunned).
+    inline void noteKnockedBack() noexcept { isKnockedOffCrossing = true; }
     /// Gives it `goal`, a point of the mesh to move to when it has no target to pursue; none forgets it. A
     /// goal is pursued anew: its ways keep away from none of the places it got stuck at.
     inline void setGoal(std::optional<Vec3> goal) noexcept {
@@ -335,6 +342,8 @@ private:
     std::optional<navigation::MeshLink> crossing{};
     /// Its body left the ground since it began crossing it, as it jumped, dropped or took to a ladder.
     bool leftGround = false;
+    /// Its body was knocked back since it began crossing it (noteKnockedBack).
+    bool isKnockedOffCrossing = false;
     /// The start of the next link is near: it heads straight for it, round nothing (kLinkLeadRadii).
     bool headsForLink = false;
     /// The door it goes to open, and what opens it (openGate).
@@ -473,6 +482,9 @@ struct DecisionRequest {
     std::optional<ecs::Entity> body{};
     StuckWatch* stuck = nullptr;
     Seconds elapsed{};
+    /// A hit still throws its body about: how it moves now is none of its own doing, so it is not stuck for
+    /// going nowhere, and a link it falls from is none it failed.
+    bool isKnockedBack = false;
 };
 
 /// The fewest brains a batch of Deciders decides: a decision costs some microseconds on a large map
@@ -492,9 +504,12 @@ public:
     /// Each request's brain decides at its feet (Brain::decide), then steers its decision among `bodies`,
     /// those of the tick, when it moves and its request has a speed (Brain::steer): the bodies within the
     /// steering range of it across and a standing height up or down, but its own, the nearest first, ties
-    /// by entity. Its watch, last, gets its body out when it is stuck on the way its decision follows
+    /// by entity. Its watch, last, gets its body out, its brain forgetting the corner it last reached
+    /// (Brain::noteStuck), when it is stuck on the way its decision follows
     /// (StuckWatch::watch, followsCorridor), and its brain gives up where it goes when it is stuck too long
-    /// (Brain::giveUp). Its decision is written at its index of `decisions`, which must be as long, in jobs
+    /// (Brain::giveUp). It judges a body only when it is not knocked back (Brain::noteKnockedBack tells its
+    /// brain so) and it stands on the ground, climbs, or is stuck already, so that the jumps that get it out
+    /// leave it stuck. Its decision is written at its index of `decisions`, which must be as long, in jobs
     /// of `jobs` of the priority Critical, which the calling thread runs too while it waits for them. The
     /// brains and the watches must be distinct, and none of them used by another thread meanwhile.
     /// Of the brains whose way leads to a closed door of `gates` (Decision::closedGate), the one nearest what

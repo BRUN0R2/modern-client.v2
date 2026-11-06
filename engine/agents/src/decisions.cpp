@@ -168,6 +168,9 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
         std::vector<navigation::SteeringBody> nearby;
         for (std::size_t index = first; index < last; ++index) {
             const DecisionRequest& request = requests[index];
+            if (request.isKnockedBack) {
+                request.brain->noteKnockedBack();
+            }
             Decision decision =
                 request.brain->decide(request.feet, query, request.isOnGround, request.velocity, gates);
             if (length(decision.intent.direction) > 0.0F && request.maxSpeed > UnitsPerSecond{}) {
@@ -175,13 +178,27 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
                 request.brain->steer(decision.intent, request.velocity, request.maxSpeed, nearby, query);
             }
             // Last, so that what gets a stuck body out overrides how it steers (UpdatePathMovement). A body
-            // told to wait, its way taken by other bodies, is not stuck: it moves on as they make way.
-            const bool moves = followsCorridor(decision.behavior) &&
-                               length(decision.intent.direction) > 0.0F && !request.brain->isRunningUp();
-            if (request.stuck != nullptr &&
-                request.stuck->watch(decision.intent, request.feet, request.maxSpeed, moves,
-                                     request.elapsed) == Progress::GivesUp) {
-                request.brain->giveUp(request.stuck->stuckPlace(), request.stuck->reroutes());
+            // told to wait, its way taken by other bodies, is not stuck: it moves on as they make way, nor is
+            // one that backs off for a run at a gap. One knocked back, held where it is by the shots at it,
+            // goes nowhere of its own doing: wiggled off its way for it, it went astray. Nor does one in the
+            // air, straight down a drop say; but one stuck already stays so through the jumps that get it
+            // out.
+            if (request.stuck != nullptr) {
+                const bool isJudged =
+                    !request.isKnockedBack &&
+                    (request.isOnGround || decision.intent.climb || request.stuck->isStuck());
+                const bool moves = isJudged && followsCorridor(decision.behavior) &&
+                                   length(decision.intent.direction) > 0.0F && !request.brain->isRunningUp();
+                if (request.stuck->watch(decision.intent, request.feet, request.maxSpeed, moves,
+                                         request.elapsed) == Progress::GivesUp) {
+                    request.brain->giveUp(request.stuck->stuckPlace(), request.stuck->reroutes());
+                }
+                // Drawn away from its way, a body comes back short of the corner it reached, on the wrong
+                // side of what that corner rounds: heading on from it, it walked into that and along it to
+                // a dead end.
+                if (request.stuck->isStuck()) {
+                    request.brain->noteStuck();
+                }
             }
             decisions[index] = decision;
         }

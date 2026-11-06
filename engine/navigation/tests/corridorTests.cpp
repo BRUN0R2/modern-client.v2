@@ -191,6 +191,26 @@ TEST(CorridorTest, ItSteersAsItWantsWithNothingInTheWayAndAroundABodyStandingInI
         << "the same for the same inputs";
 }
 
+TEST(CorridorTest, ItGoesItsWayOverABodyItOverlapsRatherThanInStepWithIt) {
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    auto corridor =
+        Corridor::plan(query, {.from = {.x = 500.0F, .y = 256.0F}, .to = {.x = 900.0F, .y = 256.0F}});
+    ASSERT_TRUE(corridor.has_value());
+    // Pushed back along its way together with a body 12 units from its middle.
+    const Vec3 pushed{.x = -kSpeed.value() * 0.5F};
+    const std::array overlapped{nx::navigation::SteeringBody{.feet = corridor->position() + Vec3{.y = 12.0F},
+                                                             .velocity = pushed,
+                                                             .radius = nx::HammerUnits{16.0F}}};
+    const Vec3 desired{.x = kSpeed.value()};
+    const Vec3 steered = corridor->steer(
+        query, {.velocity = pushed, .desired = desired, .maxSpeed = kSpeed, .bodies = overlapped});
+    EXPECT_GT(steered.x, 0.5F * kSpeed.value()) << "on along its way, against how it was pushed";
+}
+
 /// A floor with a box 120 tall on it, which the player drops from unhurt.
 [[nodiscard]] auto boxOnAFloor() -> Geometry {
     Geometry geometry;

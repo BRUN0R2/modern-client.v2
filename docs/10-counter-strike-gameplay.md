@@ -922,7 +922,9 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   where it aims, and its pause went by; with a pistol it fires as fast as it may above 0.75 of skill,
   its attack up and down each command (`StartRapidFire`), else 0.15 to 0.4 seconds apart; with a gun
   at once below half a skill or nearer than 400 units, 0.3 to 0.7 seconds apart beyond 800, else
-  0.15 to 0.5, each pause a think less.
+  0.15 to 0.5, each pause a think less. On an empty clip with rounds carried it presses its reload
+  instead (`ReloadCheck`): a gun reloads by itself only with no fire button down (`ItemPostFrame`),
+  and one pressed on would click for good.
 - It chases what it no longer sees to where it saw it, and, with nothing to pursue, hunts a place of
   the mesh drawn within `huntRadius` of it, running at its full speed (`GetMoveSpeed`) along its
   corridor, standing (the mesh leaves out what only a ducked player passes), its view level ahead
@@ -940,7 +942,9 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   Condition Zero's bot does (`StuckCheck`, `Wiggle`, `nx::agents::StuckWatch`, the `stuck` table of
   `bots.toml`): sampled each tenth of a second, it is stuck when across the last five samples it went
   slower than 20 units a second, back and forth included, as long as it means to move along its way and
-  may run faster than that (not in a frozen round); stuck, it moves ahead, back or to a side drawn each
+  may run faster than that (not in a frozen round), and stands on the ground or climbs a ladder: in the
+  air it goes nowhere of its own doing, though once stuck it stays so through the jumps that get it out;
+  stuck, it moves ahead, back or to a side drawn each
   0.5 to 1.5 seconds, its view still along its way, jumping within half a second and then each 1 to 2,
   until it is 75 units from where it got stuck. Stuck 4.5 seconds, five since it last made its way
   (`UpdatePathMovement`'s `giveUpDuration`), it gives its way up and searches another to the same

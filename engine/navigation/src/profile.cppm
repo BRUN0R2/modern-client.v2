@@ -70,9 +70,9 @@ struct AgentProfile {
     HammerUnits dropHeight{};
     /// How fast it leaves a ledge to jump across a gap, the slowest of those that walk its mesh: its links
     /// span no gap such a flight falls short of.
-    UnitsPerSecond leapSpeed{230.0F};
+    UnitsPerSecond leapSpeed{};
     /// What pulls it down in the air.
-    UnitsPerSecondSquared gravity{800.0F};
+    UnitsPerSecondSquared gravity{};
     /// The least upward share of a floor's unit normal it stands on: a steeper floor is a wall.
     float minGroundNormalZ = 0.0F;
     /// The kinds of area that do not cost their length, each once and at least 1: A* finds the cheapest
@@ -145,11 +145,11 @@ struct nx::meta::Description<nx::navigation::AgentProfile> {
         nx::meta::field<&nx::navigation::AgentProfile::standingHeight>("standingHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::crouchedHeight>("crouchedHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::stepHeight>("stepHeight"),
-        nx::meta::field<&nx::navigation::AgentProfile::leapSpeed>("leapSpeed"),
-        nx::meta::field<&nx::navigation::AgentProfile::gravity>("gravity"),
         nx::meta::field<&nx::navigation::AgentProfile::jumpHeight>("jumpHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::crouchedJumpHeight>("crouchedJumpHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::dropHeight>("dropHeight"),
+        nx::meta::field<&nx::navigation::AgentProfile::leapSpeed>("leapSpeed"),
+        nx::meta::field<&nx::navigation::AgentProfile::gravity>("gravity"),
         nx::meta::field<&nx::navigation::AgentProfile::minGroundNormalZ>("minGroundNormalZ"),
         nx::meta::field<&nx::navigation::AgentProfile::areaCosts>("areaCosts"),
     };

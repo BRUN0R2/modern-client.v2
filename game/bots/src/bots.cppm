@@ -125,10 +125,10 @@ public:
     /// moves along its corridor as it steers, wiggling and jumping while it is stuck (BotRules::stuck), or,
     /// as it attacks, crouches and holds, or dodges and keeps its range (fightMove, BotRules::combat);
     /// and presses its attack as its trigger lets it (pullTrigger), its level's attack delay after it took
-    /// its enemy on. With nothing to pursue, it hunts a place drawn on the mesh within BotRules::huntRadius,
-    /// another when it gives the last up, stuck too long. Spawning again, killed or alive at a round's
-    /// start (SpawnBot's ResetValues), it starts with a new brain, its watch, its view still, its aim and
-    /// its trigger anew.
+    /// its enemy on, or its reload instead on an empty clip with rounds carried (ReloadCheck). With nothing
+    /// to pursue, it hunts a place drawn on the mesh within BotRules::huntRadius, another when it gives the
+    /// last up, stuck too long. Spawning again, killed or alive at a round's start (SpawnBot's ResetValues),
+    /// it starts with a new brain, its watch, its view still, its aim and its trigger anew.
     [[nodiscard]] auto commands() -> std::vector<PlayerCommand>;
 
     /// How many bots are in the game.
