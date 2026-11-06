@@ -146,8 +146,40 @@ constexpr Vec3 kBodyReach{.x = 16.0F, .y = 16.0F, .z = 36.0F};
 
 /// The box of the brush model of `model` of `map` with its origin at `origin`.
 [[nodiscard]] auto boxOf(const assets::BspView& map, const BrushModel& model, Vec3 origin) -> Aabb {
+    return map.models()[model.index.value].bounds.translated(origin);
+}
+
+/// `bounds`, a brush model's, turned by `angles` about its origin: the box of its corners so turned.
+[[nodiscard]] auto turnedBoundsOf(const Aabb& bounds, EulerAngles angles) -> Aabb {
+    if (angles == EulerAngles{}) {
+        return bounds;
+    }
+    const AngleVectors axes = angleVectors(angles);
+    const auto cornerOf = [&bounds](std::size_t corner) {
+        return Vec3{.x = (corner & 1U) != 0 ? bounds.max.x : bounds.min.x,
+                    .y = (corner & 2U) != 0 ? bounds.max.y : bounds.min.y,
+                    .z = (corner & 4U) != 0 ? bounds.max.z : bounds.min.z};
+    };
+    const Vec3 first = outOfAxes(axes, cornerOf(0));
+    Aabb turned{.min = first, .max = first};
+    constexpr std::size_t kBoxCorners = 8;
+    for (std::size_t corner = 1; corner < kBoxCorners; ++corner) {
+        turned = turned.including(outOfAxes(axes, cornerOf(corner)));
+    }
+    return turned;
+}
+
+/// The box of `door`, the brush model of `model` of `map` at `transform` now, where it stands closed: a
+/// sliding door's at the origin it closes to, a rotating door's turned by the angles it closes to about its
+/// origin. Its links and its gate both go through it, so that a link finds the door's gate (isSameDoor)
+/// whether the door stands open, turned or not.
+[[nodiscard]] auto closedBoxOf(const assets::BspView& map, const BrushModel& model, const Door& door,
+                               const Transform& transform) -> Aabb {
+    if (const auto* const slide = std::get_if<DoorSlide>(&door.motion)) {
+        return boxOf(map, model, slide->closed);
+    }
     const Aabb& bounds = map.models()[model.index.value].bounds;
-    return Aabb{.min = bounds.min + origin, .max = bounds.max + origin};
+    return turnedBoundsOf(bounds, std::get<DoorTurn>(door.motion).closed).translated(transform.origin);
 }
 
 /// Adds to `openers` what a body walks into of `volume`, a volume that fires the door whose box is `door`: on
@@ -198,8 +230,7 @@ auto gatesOf(const assets::BspView& map, ecs::World& world, AgentBodies bodies)
             if (solidity.solid != Solid::Bsp) {
                 return;
             }
-            const auto* const slide = std::get_if<DoorSlide>(&door.motion);
-            const Aabb closed = boxOf(map, model, slide != nullptr ? slide->closed : transform.origin);
+            const Aabb closed = closedBoxOf(map, model, door, transform);
             navigation::Gate gate{.middle = closed.center(),
                                   // Walking into it opens one that nothing else does.
                                   .isOpen =
@@ -237,9 +268,9 @@ auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navi
     geometry.bodyHull = bodyHullOf(map, assets::kWorldModel, kStandingClipHull);
     geometry.crouchedBodyHull = bodyHullOf(map, assets::kWorldModel, kDuckedClipHull);
     addModelFaces(geometry, map, assets::kWorldModel, BrushPlacement{.axes = angleVectors(EulerAngles{})});
-    ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
-        [&geometry, &map, &world](ecs::Entity entity, const BrushModel& model, const Transform& transform,
-                                  const BrushSolidity& solidity) {
+    ecs::Query<const BrushModel&, const Transform&, const BrushSolidity&, ecs::Optional<const Door>>{world}
+        .forEach([&geometry, &map](const BrushModel& model, const Transform& transform,
+                                   const BrushSolidity& solidity, const Door* door) {
             if (solidity.solid == Solid::Bsp) {
                 addModelFaces(
                     geometry, map, model.index,
@@ -259,9 +290,11 @@ auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navi
                          .hull = bodyHullOf(map, model.index, kDuckedClipHull)});
                 }
             }
-            if (solidity.solid == Solid::Bsp && world.has<Door>(entity)) {
-                const Aabb& bounds = map.models()[model.index.value].bounds;
-                geometry.doors.push_back(linkedBoxOf(bounds, transform.origin, transform.angles));
+            if (solidity.solid == Solid::Bsp && door != nullptr) {
+                // Linked as it would be unturned, square to its closed box, so that its links cross the way
+                // it is thin.
+                geometry.doors.push_back(
+                    linkedBoxOf(closedBoxOf(map, model, *door, transform), Vec3{}, EulerAngles{}));
             }
             if (solidity.contents == assets::Contents::Ladder) {
                 const Aabb& bounds = map.models()[model.index.value].bounds;
