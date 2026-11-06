@@ -28,10 +28,11 @@ struct AvoidedPlace {
 /// What a way is asked for: from where, to where, what each kind of area costs it, the mesh's profile's
 /// costs when none are given, the places it keeps away from, a polygon several of them reach costing
 /// the most any of them makes it, the doors as they stand, through none of which it goes closed, but what
-/// opens it when `opensGates`: one no gate names it goes through as through one open; the links it goes
-/// over none of, either way; and how the body it is for moves, which takes it over no link whose gap takes
-/// more than it leaves the start at (leastLeapSpeedOf, fastestTakeoffOf), each way over a gap being a link of
-/// its own: none, over any the mesh has.
+/// opens it when `opensGates`, each that is not open costing what a body loses at it, the walk to what opens
+/// it and back and the time it takes to open: one no gate names it goes through as through one open; the
+/// links it goes over none of, either way; and how the body it is for moves, which takes it over no link
+/// whose gap takes more than it leaves the start at (leastLeapSpeedOf, fastestTakeoffOf), each way over a gap
+/// being a link of its own: none, over any the mesh has.
 struct PathRequest {
     Vec3 from{};
     Vec3 to{};

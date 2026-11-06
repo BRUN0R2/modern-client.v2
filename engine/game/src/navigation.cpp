@@ -234,7 +234,8 @@ auto gatesOf(const assets::BspView& map, ecs::World& world, AgentBodies bodies)
             navigation::Gate gate{.middle = closed.center(),
                                   // Walking into it opens one that nothing else does.
                                   .isOpen =
-                                      door.state == DoorState::Open || (!door.isNamed && !door.isUseOnly)};
+                                      door.state == DoorState::Open || (!door.isNamed && !door.isUseOnly),
+                                  .opensIn = openingTimeOf(door, transform)};
             if (door.isUseOnly && !door.isNamed) {
                 gate.openers.push_back({.box = closed, .kind = navigation::OpenerKind::Used});
             }

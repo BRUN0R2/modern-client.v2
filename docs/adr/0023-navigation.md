@@ -88,7 +88,10 @@ convex polygons, through Recast and Detour.
   walks into them (`trigger_multiple`), which it enters (`nx::navigation::OpenerKind`): each on each side of the
   door it reaches past, for players' bodies alone, as the game fires a volume for no entity's
   (`nx::game::AgentBodies`). A brain's way keeps off closed doors while it has another (`PathRequest::gates`), and
-  goes through one nothing is known to open only as through a wall: not at all. It waits at a closed one that
+  goes through one nothing is known to open only as through a wall: not at all. A door costs a way its length, as
+  floor, and one that is not open what a body loses there besides, in what it would have run meanwhile: the time
+  it takes to open from where it stands (`Gate::opensIn`), and the walk to the nearest of what opens it and back,
+  as the crow flies; of the ways through closed doors, the one it loses least at. It waits at a closed one that
   opens (`Decision::closedGate`), using what opens it there, or walking into what opens it there on its side, well
   into it, since the game finds a body in a volume by its hull, and standing in it, while of those waiting the one
   nearest what opens it elsewhere goes to use or enter it (`Deciders`, `Brain::openGate`, `Intent::uses`), one a

@@ -28,7 +28,9 @@
 # of area costs it as many times its length as it is slower there: crouched a third of its speed (0.333),
 # in water four fifths (0.8); a jump twice its length, crouched or not, as a Condition Zero bot's path
 # weighs a jump area (CSBot's PathCost, its jumpPenalty), a drop it takes unhurt its length, and a ladder
-# as many times as it climbs slower than it runs (200 units a second, 250). Its square box reaches 22.6
+# as many times as it climbs slower than it runs (200 units a second, 250); a door its length, a body running
+# through one open as over floor, what one that is not open makes it lose added by how it stands, the time it
+# takes to open and the walk to what opens it (nx::navigation::Gate). Its square box reaches 22.6
 # units from its middle on a diagonal, past its radius, and catches corners: its ways keep a player's half
 # width farther from walls where there is room, the floor along them costing twice its length, so that a
 # way through the middle a little longer is the cheaper.
@@ -53,7 +55,6 @@ areaCosts = [
     { area = "jump", cost = 2.0 },
     { area = "ladder", cost = 1.25 },
     { area = "crouchedJump", cost = 2.0 },
-    { area = "door", cost = 4.0 },
 ]
 
 # The voxels Recast fills with a map: `cellSize` across, a quarter of the player's radius, so that a

@@ -47,6 +47,11 @@ struct Aabb {
         return Aabb{.min = componentMin(min, point), .max = componentMax(max, point)};
     }
 
+    /// The point of the box nearest `point`: `point` itself within it.
+    [[nodiscard]] constexpr auto closestPoint(Vec3 point) const noexcept -> Vec3 {
+        return componentMax(min, componentMin(max, point));
+    }
+
     [[nodiscard]] constexpr auto translated(Vec3 offset) const noexcept -> Aabb {
         return Aabb{.min = min + offset, .max = max + offset};
     }
