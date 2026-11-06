@@ -293,9 +293,9 @@ public:
         : dtQueryFilter{base}, avoidedPolygons{avoided}, doors{request.gates}, opensDoors{request.opensGates},
           shunnedLinks{request.shunned}, body{request.body}, agentProfile{&profile}, meshLinks{&links} {}
 
-    [[nodiscard]] auto passFilter(dtPolyRef polygonRef, const dtMeshTile* tile, const dtPoly* polygon) const
-        -> bool override {
-        if (!dtQueryFilter::passFilter(polygonRef, tile, polygon)) {
+    [[nodiscard]] auto passFilter(dtPolyRef polygonReference, const dtMeshTile* tile,
+                                  const dtPoly* polygon) const -> bool override {
+        if (!dtQueryFilter::passFilter(polygonReference, tile, polygon)) {
             return false;
         }
         if (polygon->getType() != DT_POLYTYPE_OFFMESH_CONNECTION) {

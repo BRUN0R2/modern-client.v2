@@ -37,20 +37,14 @@ auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerU
     if (link.kind == AreaKind::Ladder || link.kind == AreaKind::Door || gap <= 0.0F) {
         return UnitsPerSecond{};
     }
-    const float gravity = profile.gravity.value();
     const float jump = jumpOf(link.kind, profile);
     const float rise = link.takeoff ? std::min(link.takeoff->rise.value(), jump) : jump;
-    // Up to as high as it rises, where it stops rising at the top of its jump or with its head on what is
-    // above it, then down from there to the end's height.
-    const float launch = std::sqrt(2.0F * gravity * jump);
-    const float rising =
-        (launch - std::sqrt(std::max((launch * launch) - (2.0F * gravity * rise), 0.0F))) / gravity;
-    const float fall = link.start.z + rise - link.end.z;
-    if (fall < 0.0F) {
+    const std::optional<Seconds> inTheAir = detail::airTimeOf(
+        HammerUnits{jump}, HammerUnits{rise}, HammerUnits{link.start.z - link.end.z}, profile.gravity);
+    if (!inTheAir) {
         return UnitsPerSecond{std::numeric_limits<float>::infinity()};
     }
-    const float falling = std::sqrt(2.0F * fall / gravity);
-    return UnitsPerSecond{(gap + shortOfStart.value()) / (rising + falling)};
+    return UnitsPerSecond{(gap + shortOfStart.value()) / inTheAir->count()};
 }
 
 auto fastestTakeoffOf(const MeshLink& link, const AgentProfile& profile, const BodyMotion& motion) noexcept
@@ -86,3 +80,22 @@ auto runUpOf(const MeshLink& link, const AgentProfile& profile, const BodyMotion
 }
 
 } // namespace nx::navigation
+
+namespace nx::navigation::detail {
+
+auto airTimeOf(HammerUnits jump, HammerUnits rise, HammerUnits drop, UnitsPerSecondSquared gravity) noexcept
+    -> std::optional<Seconds> {
+    const float pull = gravity.value();
+    const float fall = rise.value() + drop.value();
+    if (fall < 0.0F) {
+        return std::nullopt;
+    }
+    // Up to as high as it rises, where it stops rising at the top of its jump or with its head on what is
+    // above it, then down from there.
+    const float launch = std::sqrt(2.0F * pull * jump.value());
+    const float rising =
+        (launch - std::sqrt(std::max((launch * launch) - (2.0F * pull * rise.value()), 0.0F))) / pull;
+    return Seconds{rising + std::sqrt(2.0F * fall / pull)};
+}
+
+} // namespace nx::navigation::detail

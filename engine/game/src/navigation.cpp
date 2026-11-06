@@ -9,6 +9,7 @@ import nx.math;
 import nx.data;
 import nx.ecs;
 import nx.assets;
+import nx.collision;
 import nx.navigation;
 
 namespace nx::game {
@@ -79,9 +80,6 @@ void addModelFaces(navigation::Geometry& geometry, const assets::BspView& map, a
 /// them (docs/07-simulation-and-physics.md, section 3.3).
 constexpr std::size_t kStandingClipHull = 0;
 constexpr std::size_t kDuckedClipHull = 2;
-/// How far past a brush model's bounds the hull of a body's box reaches, a standing player's being the
-/// largest.
-constexpr Vec3 kBodyReach{.x = 16.0F, .y = 16.0F, .z = 36.0F};
 
 /// The clip nodes of `nodes` under `root`, each before those it names: a compiler writes a subtree that
 /// several nodes share once, which may come before them.
@@ -278,9 +276,9 @@ auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navi
                     BrushPlacement{.axes = angleVectors(transform.angles), .origin = transform.origin});
                 // A hull is of its model unturned: one turned stops bodies by its faces alone.
                 if (transform.angles == EulerAngles{}) {
-                    const Aabb& bounds = map.models()[model.index.value].bounds;
-                    const Aabb reached{.min = bounds.min + transform.origin - kBodyReach,
-                                       .max = bounds.max + transform.origin + kBodyReach};
+                    // Where a body's middle meets its hull: its box grown by a standing body's, the tallest.
+                    const Aabb reached = boxOf(map, model, transform.origin)
+                                             .expanded(collision::hullBoxOf(collision::Hull::Standing).max);
                     geometry.brushBodyHulls.push_back(
                         {.origin = transform.origin,
                          .bounds = reached,
@@ -298,9 +296,7 @@ auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navi
                     linkedBoxOf(closedBoxOf(map, model, *door, transform), Vec3{}, EulerAngles{}));
             }
             if (solidity.contents == assets::Contents::Ladder) {
-                const Aabb& bounds = map.models()[model.index.value].bounds;
-                geometry.ladders.push_back(
-                    Aabb{.min = bounds.min + transform.origin, .max = bounds.max + transform.origin});
+                geometry.ladders.push_back(boxOf(map, model, transform.origin));
             }
         });
     return geometry;

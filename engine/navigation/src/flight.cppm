@@ -58,3 +58,14 @@ struct BodyMotion {
                            UnitsPerSecond takeoff) noexcept -> std::optional<HammerUnits>;
 
 } // namespace nx::navigation
+
+// What the module's units share of a flight: not exported.
+namespace nx::navigation::detail {
+
+/// How long a body that jumps `jump` high under `gravity` is in the air: rising `rise` of it, where its head
+/// stops it or it tops, then falling from there to `drop` below where it left; none for a landing higher than
+/// it rises.
+[[nodiscard]] auto airTimeOf(HammerUnits jump, HammerUnits rise, HammerUnits drop,
+                             UnitsPerSecondSquared gravity) noexcept -> std::optional<Seconds>;
+
+} // namespace nx::navigation::detail

@@ -496,7 +496,20 @@ void sortFloorByBodies(rcCompactHeightfield& compact, const TileInput& input) {
 struct TileBounds {
     std::array<float, 3> low{};
     std::array<float, 3> high{};
+
+    /// Whether they and `other` overlap across, Detour's x and z.
+    [[nodiscard]] auto overlaps(const TileBounds& other) const noexcept -> bool {
+        return high[0] >= other.low[0] && low[0] <= other.high[0] && high[2] >= other.low[2] &&
+               low[2] <= other.high[2];
+    }
 };
+
+/// The bounds across of `box`, of the game's space, grown by `reach`, in Detour's: its z is the game's y
+/// turned about.
+[[nodiscard]] auto boundsAbout(const Aabb& box, float reach) noexcept -> TileBounds {
+    return TileBounds{.low = {box.min.x - reach, 0.0F, -box.max.y - reach},
+                      .high = {box.max.x + reach, 0.0F, -box.min.y + reach}};
+}
 
 [[nodiscard]] auto boundsOf(const TileInput& input, std::int32_t tileX, std::int32_t tileY) -> TileBounds {
     const float cell = input.settings.cellSize.value();
@@ -553,9 +566,11 @@ struct TileBounds {
 constexpr float kLinkSpacingRadii = 4.0F;
 
 /// How far across a body of `profile` flies at its leap's speed, landing as high as it left.
-[[nodiscard]] auto farthestLeapOf(const AgentProfile& profile) noexcept -> float {
-    return profile.leapSpeed.value() * 2.0F *
-           std::sqrt(2.0F * profile.jumpHeight.value() / profile.gravity.value());
+[[nodiscard]] auto farthestLeapOf(const AgentProfile& profile) noexcept -> HammerUnits {
+    // A flight down to where it left, from as high as it jumps, lands.
+    const Seconds inTheAir =
+        *airTimeOf(profile.jumpHeight, profile.jumpHeight, HammerUnits{}, profile.gravity);
+    return HammerUnits{profile.leapSpeed.value() * inTheAir.count()};
 }
 /// What a ray's direction and a triangle's plane are taken as parallel below, by Möller and Trumbore's
 /// determinant.
@@ -789,8 +804,8 @@ private:
     return floors;
 }
 
-/// The longest a flight is looked at, in seconds: past the fall from any ledge a body drops from unhurt.
-constexpr float kLongestFlight = 3.0F;
+/// The longest a flight is looked at: past the fall from any ledge a body drops from unhurt.
+constexpr Seconds kLongestFlight{3.0F};
 
 /// Whether `body` moves from feet at `was` to feet at `feet` in the air: what stops it is its hull, and the
 /// surfaces at its knees and at its head, which no hull has of a brush entity, a cell within its middle, its
@@ -825,7 +840,7 @@ constexpr float kLongestFlight = 3.0F;
     float rising = std::sqrt(2.0F * gravity * jump);
     float gone = 0.0F;
     Vec3 at = from;
-    for (float time = tick; time < kLongestFlight; time += tick) {
+    for (float time = tick; time < kLongestFlight.count(); time += tick) {
         // By the mean of its speed over the tick, exact under a constant pull: by its speed at the end alone,
         // a flight peaked short of what the jump reaches by half a tick's rise, a few units.
         const float wasRising = rising;
@@ -976,7 +991,7 @@ struct FoundLink {
     }
     const Vec3 leaves{.x = start.x, .y = start.y, .z = *ledge};
     const Vec3 aboveStep{.z = step + input.settings.cellHeight.value()};
-    const float farthest = farthestLeapOf(profile);
+    const float farthest = farthestLeapOf(profile).value();
     std::vector<float> levels;
     std::vector<FoundLink> found;
     std::optional<float> edgeAt;
@@ -1098,11 +1113,8 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
     const float radius = input.profile.radius.value();
     const float reach = input.settings.cellSize.value() + (radius * (kLadderReachRadii + 1.0F));
     for (const Aabb& ladder : input.ladders) {
-        // Across, Detour's z is the game's y turned about.
-        const TileBounds about{.low = {ladder.min.x - reach, 0.0F, -ladder.max.y - reach},
-                               .high = {ladder.max.x + reach, 0.0F, -ladder.min.y + reach}};
-        if (about.high[0] < bounds.low[0] || about.low[0] > bounds.high[0] || about.high[2] < bounds.low[2] ||
-            about.low[2] > bounds.high[2]) {
+        const TileBounds about = boundsAbout(ladder, reach);
+        if (!about.overlaps(bounds)) {
             continue;
         }
         const std::vector<NearTriangle> near = trianglesAbout(input, about, 0.0F);
@@ -1127,12 +1139,8 @@ void addDoorLinks(const TileInput& input, const TileBounds& bounds, TileLinks& l
         const bool isThinAlongX = half.x <= half.y;
         const float past = (isThinAlongX ? half.x : half.y) + radius + cell;
         const Vec3 across = isThinAlongX ? Vec3{.x = past} : Vec3{.y = past};
-        // Across, Detour's z is the game's y turned about.
-        const float reach = past + radius + cell;
-        const TileBounds about{.low = {door.min.x - reach, 0.0F, -door.max.y - reach},
-                               .high = {door.max.x + reach, 0.0F, -door.min.y + reach}};
-        if (about.high[0] < bounds.low[0] || about.low[0] > bounds.high[0] || about.high[2] < bounds.low[2] ||
-            about.low[2] > bounds.high[2]) {
+        const TileBounds about = boundsAbout(door, past + radius + cell);
+        if (!about.overlaps(bounds)) {
             continue;
         }
         const std::vector<NearTriangle> near = trianglesAbout(input, about, 0.0F);
@@ -1163,7 +1171,8 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
                            std::int32_t tileY) -> TileLinks {
     const AgentProfile& profile = input.profile;
     const float spacing = profile.radius.value() * kLinkSpacingRadii;
-    const float reach = farthestLeapOf(profile) + profile.radius.value() + input.settings.cellSize.value();
+    const float reach =
+        farthestLeapOf(profile).value() + profile.radius.value() + input.settings.cellSize.value();
     const std::vector<NearTriangle> near = trianglesAbout(input, boundsOf(input, tileX, tileY), reach);
     const auto vertexOf = [&polygons](std::uint16_t vertex) {
         const std::array<float, 3> point{
@@ -1362,8 +1371,8 @@ using DraftResult = Result<std::optional<TileDraft>, MeshBuildError>;
 /// How many tiles about a tile's, across or down, the links that start in it may be found from: as many as a
 /// flight from a ledge reaches over (linksOf).
 [[nodiscard]] auto linkReachInTiles(const TileInput& input) noexcept -> std::int32_t {
-    const float reach =
-        farthestLeapOf(input.profile) + input.profile.radius.value() + input.settings.cellSize.value();
+    const float reach = farthestLeapOf(input.profile).value() + input.profile.radius.value() +
+                        input.settings.cellSize.value();
     const float tileSide = static_cast<float>(input.settings.tileCells) * input.settings.cellSize.value();
     return static_cast<std::int32_t>(std::ceil(reach / tileSide));
 }
