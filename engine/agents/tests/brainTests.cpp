@@ -1482,6 +1482,41 @@ TEST(AgentBrain, ABodyHeldAtARoundsStartSearchesItsWayAnewOnceItRuns) {
     EXPECT_GT(way.back().x, 512.0F + kGap) << "over the gap";
 }
 
+TEST(AgentBrain, ABodyInTheAirAtAGapsStartLeapsItOnlyOnceBackOnTheGround) {
+    const auto mesh = gapMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    const nx::Vec3 goal{.x = 900, .y = 256};
+    auto planned = nx::navigation::Corridor::plan(query, {.from = {.x = 400, .y = 256}, .to = goal});
+    ASSERT_TRUE(planned.has_value());
+    const auto link = planned->nextLink(query);
+    ASSERT_TRUE(link.has_value());
+    const nx::Vec3 atTheEdge = link->start - nx::Vec3{.x = 2.0F};
+    constexpr nx::Vec3 kAtSpeed{.x = kRunSpeed.value()};
+    const auto wayOn = [&query](const nx::agents::Brain& brain) {
+        std::vector<nx::Vec3> way;
+        brain.appendWay(query, way);
+        return way;
+    };
+
+    // Within reach of the start as it flies from step to step down stairs, fast enough for the gap: a jump
+    // there is nothing, and it begins no crossing.
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(goal);
+    const nx::agents::Decision flying = brain.decide(atTheEdge, query, kRunSpeed, false, kAtSpeed);
+    EXPECT_EQ(flying.behavior, nx::agents::Behavior::MoveTo);
+    EXPECT_FALSE(flying.intent.jumps);
+    const std::vector<nx::Vec3> before = wayOn(brain);
+    ASSERT_FALSE(before.empty());
+    EXPECT_LT(before.front().x, 512.0F) << "the gap still ahead of its way";
+
+    // On the ground there, it leaps.
+    const nx::agents::Decision landed = brain.decide(atTheEdge, query, kRunSpeed, true, kAtSpeed);
+    EXPECT_TRUE(landed.intent.jumps);
+    const std::vector<nx::Vec3> after = wayOn(brain);
+    ASSERT_FALSE(after.empty());
+    EXPECT_GT(after.front().x, 512.0F + kGap) << "its way on from the far side";
+}
+
 void expectApproachToLink(const nx::agents::Decision& decision, nx::Vec3 start,
                           const nx::navigation::MeshLink& next) {
     constexpr float kDistanceTolerance = 1.0F;

@@ -645,7 +645,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
         return decision;
     }
     std::optional<navigation::MeshLink> nextLink;
-    if (beginCrossing(decision, feet, velocity, maxSpeed, query, gates, nextLink)) {
+    if (beginCrossing(decision, feet, isOnGround, velocity, maxSpeed, query, gates, nextLink)) {
         decision.intent.crouches = crouchesAcross();
         return decision;
     }
@@ -806,9 +806,10 @@ void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
     }
 }
 
-auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPerSecond maxSpeed,
-                          navigation::NavigationQuery& query, std::span<const navigation::Gate> gates,
-                          std::optional<navigation::MeshLink>& next) -> bool {
+auto Brain::beginCrossing(Decision& decision, Vec3 feet, bool isOnGround, Vec3 velocity,
+                          UnitsPerSecond maxSpeed, navigation::NavigationQuery& query,
+                          std::span<const navigation::Gate> gates, std::optional<navigation::MeshLink>& next)
+    -> bool {
     next = corridor->nextLink(query);
     if (!next || groundDistance(feet, next->start) > rules.arrivalDistance.value()) {
         return false;
@@ -822,6 +823,14 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPer
     const navigation::AgentProfile& linkProfile = query.mesh().profile();
     const navigation::BodyMotion body = bodyMotion(maxSpeed);
     const float takeoff = takeoffSpeedOf(*next, linkProfile, rules.arrivalDistance, body);
+    // A link up it jumps once, from its start, and one over a gap; one down it walks off.
+    const bool jumps = next->kind != navigation::AreaKind::Ladder &&
+                       (next->end.z > next->start.z || takeoff > rules.airSpeed.value());
+    if (jumps && !isOnGround) {
+        // In the air, as a body running down stairs flies from step to step, a jump is nothing, and it would
+        // spend the one it has for the link: it walked off the step it was to leap from into the gap.
+        return false;
+    }
     const Vec3 across = wayAcross(next->end - next->start, Vec3{.x = 1.0F});
     if (takeoff > rules.airSpeed.value() && !hasRunUp &&
         dot(acrossOf(velocity), across) < takeoff * kEnoughTakeoff) {
@@ -848,10 +857,7 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPer
         climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());
         return true;
     }
-    // A link up it jumps once, from its start, and one over a gap; one down it walks off.
-    decision.intent.jumps =
-        crossing->end.z > crossing->start.z ||
-        takeoffSpeedOf(*crossing, linkProfile, rules.arrivalDistance, body) > rules.airSpeed.value();
+    decision.intent.jumps = jumps;
     flyFor(decision.intent, feet, crossing->end, velocity, rules.airSpeed);
     return true;
 }
