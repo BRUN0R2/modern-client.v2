@@ -6,6 +6,10 @@
 # Local agent settings and worktrees, which have their own dependencies and build output.
 /.claude/
 
+# A developer's own test probes, never committed: a test's `local` folder, whose sources nxAddTest builds
+# into that test's executable when they are there (docs/18-testing-and-quality.md).
+local/
+
 # vcpkg manifest-mode output
 /vcpkg_installed/
 
