@@ -33,7 +33,8 @@ struct BodyMotion {
 
 /// How fast across a body of `profile` leaves the start of `link`, up to `shortOfStart` short of it, for its
 /// box to come down over the floor at its end: over the gap between them, what its two sides do not span, by
-/// the time it is in the air, rising as high as the link's kind jumps, or as the ground at its start lets it
+/// the time it is in the air, rising as high as the link's kind jumps, its feet lifted at once as it ducks in
+/// the air over a crouched jump from where it stands (detail::leapOf), or as the ground at its start lets it
 /// (Takeoff::rise), its head stopping it there, then falling to the end's height. None for a ladder, a door,
 /// or a link with no gap; more than any body's for one whose end is higher than a body rises from its start.
 /// A link that tells nothing of its start is left as from open ground, a full jump high. Requires a profile
@@ -62,6 +63,20 @@ struct BodyMotion {
 
 // What the module's units share of a flight: not exported.
 namespace nx::navigation::detail {
+
+/// How a body leaves the ground to fly a link: how high its speed up takes it, and how far its feet rise at
+/// once as it ducks in the air (PM_Duck changes its box there and leaves its middle where it is: the box
+/// shrinks about it).
+struct Leap {
+    HammerUnits jump{};
+    HammerUnits lift{};
+};
+
+/// How a body of `profile` leaves the start of a link of the kind `kind`, where only a crouched body stands
+/// or not (`isCrouched`): over a crouched jump it reaches crouchedJumpHeight from standing, its speed up the
+/// same, ducked or not, and half of what it is shorter ducked lifting its feet at once, which a body ducked
+/// already has not; over the others it jumps jumpHeight.
+[[nodiscard]] auto leapOf(AreaKind kind, const AgentProfile& profile, bool isCrouched) noexcept -> Leap;
 
 /// How long a body that jumps `jump` high under `gravity` is in the air: rising `rise` of it, where its head
 /// stops it or it tops, then falling from there to `drop` below where it left; none for a landing higher than

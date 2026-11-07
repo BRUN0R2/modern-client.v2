@@ -399,6 +399,273 @@ TEST(NavigationMeshTest, ABlockABodysBoxStandsOnIsFloorItJumpsOntoAndDownFrom) {
     EXPECT_TRUE(query.isReachable(top, floor).value_or(false));
 }
 
+/// The planes of the faces of a box from `low` to `high`, facing out: a convex solid of
+/// nx::test::bodyHullOf.
+[[nodiscard]] auto solidBox(Vec3 low, Vec3 high) -> std::vector<nx::Plane> {
+    return nx::test::facesOf({.min = low, .max = high});
+}
+
+TEST(NavigationMeshTest, NoLinkOverAGapLeavesFromWhereALeapMeetsARailAtItsEdge) {
+    // Floors at 0 either side of a pit 48 across, and at its near edge a rail 8 thick and 30 tall that only
+    // its hull tells of, as a brush entity's, as cs_italy has. A body that leaps from right at the rail meets
+    // it at once: the rail takes its speed across, and over it the air gives back no more than a crawl, so
+    // that it comes down on the rail. Going on at its leap's speed once over the rail, it had a link from
+    // there, and a bot stood on the rail. The other way it comes down on the rail too, and walks off it onto
+    // the floor.
+    constexpr float kSide = 512.0F;
+    constexpr float kRailFace = 492.0F;
+    constexpr float kNearEdge = 500.0F;
+    constexpr float kFarEdge = 548.0F;
+    constexpr float kRailTop = 30.0F;
+    constexpr float kEnd = 1024.0F;
+    constexpr float kSlab = 16.0F;
+    constexpr float kPitBottom = -64.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kNearEdge, .y = kSide}, 0.0F);
+    nx::test::addFloor(geometry, {.x = kFarEdge, .y = 0.0F}, {.x = kEnd, .y = kSide}, 0.0F);
+    const std::array solids{
+        solidBox({.z = -kSlab}, {.x = kNearEdge, .y = kSide}),
+        solidBox({.x = kFarEdge, .z = -kSlab}, {.x = kEnd, .y = kSide}),
+        solidBox({.x = kRailFace, .z = kPitBottom}, {.x = kNearEdge, .y = kSide, .z = kRailTop}),
+    };
+    nx::test::stopPlayerBodies(geometry, solids);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    ASSERT_FALSE(outline.links.empty());
+    const float width = 2.0F * mesh.profile().radius.value();
+    constexpr float kPitMiddle = (kNearEdge + kFarEdge) * 0.5F;
+    for (const MeshLink& link : outline.links) {
+        if (link.start.x < kPitMiddle && link.end.x > kPitMiddle) {
+            EXPECT_LE(link.start.x, kRailFace - width) << std::format("{} to {}", link.start, link.end);
+        }
+    }
+    nx::navigation::NavigationQuery query{mesh};
+    EXPECT_TRUE(query.isReachable({.x = 800.0F, .y = 256.0F}, {.x = 256.0F, .y = 256.0F}).value_or(false));
+}
+
+TEST(NavigationMeshTest, ACrouchedJumpPastALowRailRightAtItsStartIsLinkedBothWays) {
+    // A floor at 0 to a pit, a clip rail 12 tall standing in it 16 out from its edge, no surface of it, and
+    // past the pit a ledge 50 up, which only a crouched jump reaches. The rail is right ahead of a body that
+    // leaps from the edge: ducking in the air, its feet rise 18 at once, over the rail; from the floor at a
+    // jump's speed up, it met the rail, which took its speed across, and fell into the pit.
+    constexpr float kSide = 512.0F;
+    constexpr float kEdge = 496.0F;
+    constexpr float kRailNear = 512.0F;
+    constexpr float kRailFar = 516.0F;
+    constexpr float kRailTop = 12.0F;
+    constexpr float kLedge = 576.0F;
+    constexpr float kLedgeTop = 50.0F;
+    constexpr float kEnd = 1024.0F;
+    constexpr float kSlab = 16.0F;
+    constexpr float kPitBottom = -64.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = kSide}, 0.0F);
+    const Vec3 ledgeLow{.x = kLedge, .z = kPitBottom};
+    const Vec3 ledgeHigh{.x = kEnd, .y = kSide, .z = kLedgeTop};
+    nx::test::addBox(geometry, ledgeLow, ledgeHigh);
+    const std::array solids{
+        solidBox({.z = -kSlab}, {.x = kEdge, .y = kSide}),
+        solidBox({.x = kRailNear, .z = kPitBottom}, {.x = kRailFar, .y = kSide, .z = kRailTop}),
+        solidBox(ledgeLow, ledgeHigh),
+    };
+    nx::test::stopPlayerBodies(geometry, solids);
+    nx::navigation::AgentProfile jumping = nx::test::playerProfile();
+    jumping.crouchedJumpHeight = nx::HammerUnits{62.5F};
+    const NavigationMesh mesh = nx::test::playerMesh(geometry, 3, jumping);
+    const MeshOutline outline = mesh.outline();
+    ASSERT_FALSE(outline.links.empty());
+    for (const MeshLink& link : outline.links) {
+        EXPECT_EQ(link.kind, AreaKind::CrouchedJump) << std::format("{} to {}", link.start, link.end);
+    }
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 floor{.x = 256.0F, .y = 256.0F};
+    const Vec3 top{.x = 800.0F, .y = 256.0F, .z = kLedgeTop};
+    EXPECT_TRUE(query.isReachable(floor, top).value_or(false)) << "up";
+    EXPECT_TRUE(query.isReachable(top, floor).value_or(false)) << "down";
+}
+
+TEST(NavigationMeshTest, ALeapThatMeetsAFloorItStandsOnRisingAcrossItsWayGoesOnUpAlongIt) {
+    // A floor at 0 under a clip ramp, no surface of it, rising a unit a unit from x 440, as steep as a floor
+    // a body stands on gets, to a gap 56 across, and past the gap a ledge 40 up, level with the ramp's top. A
+    // body leaps from where the ramp holds it up, and rises no faster than the ramp: the ramp turns it up
+    // along itself, as PM_FlyMove's clip keeps what goes along a plane. Stopped by it as by a wall, it went
+    // on at a crawl and fell into the gap; flown from the floor's height under the ramp, it began in the
+    // ramp.
+    constexpr float kSide = 512.0F;
+    constexpr float kFoot = 440.0F;
+    constexpr float kTop = 40.0F;
+    constexpr float kRampEnd = kFoot + kTop;
+    constexpr float kLedge = kRampEnd + 56.0F;
+    constexpr float kEnd = 1024.0F;
+    constexpr float kSlab = 16.0F;
+    constexpr float kPitBottom = -64.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kRampEnd, .y = kSide}, 0.0F);
+    const Vec3 ledgeLow{.x = kLedge, .z = kPitBottom};
+    const Vec3 ledgeHigh{.x = kEnd, .y = kSide, .z = kTop};
+    nx::test::addBox(geometry, ledgeLow, ledgeHigh);
+    // The ramp's slope, facing up and back, among the faces of its bounds.
+    const Vec3 up = normalized(Vec3{.x = -1.0F, .z = 1.0F});
+    std::vector<nx::Plane> ramp =
+        solidBox({.x = kFoot, .z = kPitBottom}, {.x = kRampEnd, .y = kSide, .z = kTop});
+    ramp.push_back({.normal = up, .distance = dot(up, Vec3{.x = kFoot})});
+    const std::array solids{
+        solidBox({.z = -kSlab}, {.x = kFoot, .y = kSide}),
+        ramp,
+        solidBox(ledgeLow, ledgeHigh),
+    };
+    nx::test::stopPlayerBodies(geometry, solids);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    const float radius = mesh.profile().radius.value();
+    std::size_t ups = 0;
+    for (const MeshLink& link : outline.links) {
+        if (link.end.z > link.start.z) {
+            EXPECT_GT(link.start.x, kFoot - radius)
+                << std::format("on the ramp: {} to {}", link.start, link.end);
+            ++ups;
+        }
+    }
+    EXPECT_GT(ups, 0U);
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 floor{.x = 256.0F, .y = 256.0F};
+    const Vec3 top{.x = 800.0F, .y = 256.0F, .z = kTop};
+    EXPECT_TRUE(query.isReachable(floor, top).value_or(false));
+}
+
+TEST(NavigationMeshTest, ALeapWhoseHeadMeetsACeilingComingDownAcrossItsWayGoesOnDownAlongIt) {
+    // Floors at 0 either side of a gap 60 across, under a ceiling 110 up over the near one that comes down
+    // half a unit a unit over the gap to 80 over the far one, as cs_italy has over a crouched gap at
+    // (666 -408). A body's head meets the ceiling soon after it leaps: the ceiling turns it down along
+    // itself, as PM_FlyMove's clip keeps what goes along a plane. Stopped by it as by a wall, it fell into
+    // the gap.
+    constexpr float kSide = 512.0F;
+    constexpr float kEdge = 500.0F;
+    constexpr float kFar = 560.0F;
+    constexpr float kEnd = 1024.0F;
+    constexpr float kHigh = 110.0F;
+    constexpr float kLow = 80.0F;
+    constexpr float kSlab = 16.0F;
+    constexpr float kTop = 200.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = kSide}, 0.0F);
+    nx::test::addFloor(geometry, {.x = kFar, .y = 0.0F}, {.x = kEnd, .y = kSide}, 0.0F);
+    // The ceiling's slope, facing down and back, among the faces of its bounds over the gap.
+    const Vec3 down = normalized(Vec3{.x = -(kHigh - kLow), .z = -(kFar - kEdge)});
+    std::vector<nx::Plane> slope = solidBox({.x = kEdge, .z = kLow}, {.x = kFar, .y = kSide, .z = kTop});
+    slope.push_back({.normal = down, .distance = dot(down, Vec3{.x = kEdge, .z = kHigh})});
+    const std::array solids{
+        solidBox({.z = -kSlab}, {.x = kEdge, .y = kSide}),
+        solidBox({.x = kFar, .z = -kSlab}, {.x = kEnd, .y = kSide}),
+        solidBox({.z = kHigh}, {.x = kEdge, .y = kSide, .z = kTop}),
+        slope,
+        solidBox({.x = kFar, .z = kLow}, {.x = kEnd, .y = kSide, .z = kTop}),
+    };
+    nx::test::stopPlayerBodies(geometry, solids);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    // A ducked body's head meets no ceiling there: it is the standing body's leap, a jump, that tells.
+    constexpr float kGapMiddle = (kEdge + kFar) * 0.5F;
+    EXPECT_TRUE(std::ranges::any_of(mesh.outline().links, [](const MeshLink& link) {
+        return link.kind == AreaKind::Jump && link.start.x < kGapMiddle && link.end.x > kGapMiddle;
+    }));
+}
+
+TEST(NavigationMeshTest, ALeapComesDownWhereACurbAtItsEndHoldsTheBodyUp) {
+    // A floor at 0 to a gap 60 across, and past it a floor 14 lower with a curb 12 tall at its edge that only
+    // its hull tells of, a clip brush's. A body at the far floor's edge stands on the curb: a leap down to
+    // there comes down on it, as one up from there leaves it, and not on the floor under it, as cs_italy has
+    // at (666 -312); flown down to the floor's own height, it stood on the curb short of it, and the link
+    // went up alone.
+    constexpr float kSide = 512.0F;
+    constexpr float kEdge = 500.0F;
+    constexpr float kFar = 560.0F;
+    constexpr float kEnd = 1024.0F;
+    constexpr float kLower = -14.0F;
+    constexpr float kCurb = 6.0F;
+    constexpr float kCurbTop = -2.0F;
+    constexpr float kSlab = 16.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = kSide}, 0.0F);
+    nx::test::addFloor(geometry, {.x = kFar, .y = 0.0F}, {.x = kEnd, .y = kSide}, kLower);
+    const std::array solids{
+        solidBox({.z = -kSlab}, {.x = kEdge, .y = kSide}),
+        solidBox({.x = kFar, .z = kLower - kSlab}, {.x = kEnd, .y = kSide, .z = kLower}),
+        solidBox({.x = kFar, .z = kLower}, {.x = kFar + kCurb, .y = kSide, .z = kCurbTop}),
+    };
+    nx::test::stopPlayerBodies(geometry, solids);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 high{.x = 256.0F, .y = 256.0F};
+    const Vec3 low{.x = 800.0F, .y = 256.0F, .z = kLower};
+    EXPECT_TRUE(query.isReachable(high, low).value_or(false)) << "down";
+    EXPECT_TRUE(query.isReachable(low, high).value_or(false)) << "up";
+}
+
+TEST(NavigationMeshTest, ABarOverTheFloorIsCrouchJumpedOntoByABodyThatRisesBesideIt) {
+    // On a floor at 0, a bar 4 thick from 66 to 70 up, as de_nuke has one at (2004 -1984 -108), for a body
+    // that jumps 74 ducking in the air. Its head starts 12 under the bar: leaping at the bar fast, the body
+    // went in under it before its head got that high, and never got up; jumping beside it, barely moving
+    // across, it rises past the bar and comes down on top, as bots do.
+    constexpr float kSide = 512.0F;
+    constexpr float kEnd = 1024.0F;
+    constexpr float kBarNear = 500.0F;
+    constexpr float kBarFar = 504.0F;
+    constexpr float kBarBottom = 66.0F;
+    constexpr float kBarTop = 70.0F;
+    constexpr float kSlab = 16.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEnd, .y = kSide}, 0.0F);
+    const Vec3 barLow{.x = kBarNear, .z = kBarBottom};
+    const Vec3 barHigh{.x = kBarFar, .y = kSide, .z = kBarTop};
+    nx::test::addBox(geometry, barLow, barHigh);
+    const std::array solids{solidBox({.z = -kSlab}, {.x = kEnd, .y = kSide}), solidBox(barLow, barHigh)};
+    nx::test::stopPlayerBodies(geometry, solids);
+    nx::navigation::AgentProfile jumping = nx::test::playerProfile();
+    jumping.crouchedJumpHeight = nx::HammerUnits{74.0F};
+    const NavigationMesh mesh = nx::test::playerMesh(geometry, 3, jumping);
+    nx::navigation::NavigationQuery query{mesh};
+    const Vec3 floor{.x = 256.0F, .y = 256.0F};
+    const Vec3 bar{.x = (kBarNear + kBarFar) * 0.5F, .y = 256.0F, .z = kBarTop};
+    EXPECT_TRUE(query.isReachable(floor, bar).value_or(false)) << "up";
+    EXPECT_TRUE(query.isReachable(bar, floor).value_or(false)) << "down";
+}
+
+TEST(NavigationMeshTest, ABoxWhoseFaceStopsALeapIsJumpedOntoByWhatTheAirGivesBack) {
+    // On a floor at 0, a box 40 tall, just under the jump. Its face stops a body that leaps at it from where
+    // its link starts, and takes all its speed across: over its top the air gives back a crawl, and the body
+    // comes down there, its box over the top's edge. With nothing from the air it rose and fell along the
+    // face.
+    constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};
+    constexpr Vec3 kHigh{.x = 512.0F, .y = 384.0F, .z = 40.0F};
+    constexpr float kSlab = 16.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, kLow, kHigh);
+    const std::array solids{solidBox({.z = -kSlab}, {.x = 768.0F, .y = 512.0F}), solidBox(kLow, kHigh)};
+    nx::test::stopPlayerBodies(geometry, solids);
+    const Vec3 top{.x = 384.0F, .y = 256.0F, .z = kHigh.z};
+    const Vec3 floor{.x = 128.0F, .y = 256.0F};
+    {
+        const NavigationMesh mesh = nx::test::playerMesh(geometry);
+        const MeshOutline outline = mesh.outline();
+        ASSERT_FALSE(outline.links.empty());
+        for (const MeshLink& link : outline.links) {
+            EXPECT_EQ(link.kind, AreaKind::Jump) << std::format("{} to {}", link.start, link.end);
+        }
+        nx::navigation::NavigationQuery query{mesh};
+        EXPECT_TRUE(query.isReachable(floor, top).value_or(false)) << "up";
+        EXPECT_TRUE(query.isReachable(top, floor).value_or(false)) << "down";
+    }
+    nx::navigation::AgentProfile airless = nx::test::playerProfile();
+    airless.airSpeed = {};
+    const NavigationMesh mesh = nx::test::playerMesh(geometry, 3, airless);
+    for (const MeshLink& link : mesh.outline().links) {
+        EXPECT_EQ(link.kind, AreaKind::Drop) << std::format("{} to {}", link.start, link.end);
+    }
+    nx::navigation::NavigationQuery query{mesh};
+    EXPECT_FALSE(query.isReachable(floor, top).value_or(true));
+}
+
 TEST(NavigationMeshTest, AGapALeapSpansIsLinkedBothWaysAndOneWiderIsNot) {
     // Two floors with nothing under what is between them. A leap at 260 units a second, 41.8 high, flies 168
     // units.
@@ -567,6 +834,40 @@ TEST(NavigationMeshTest, ABodyLeavesAGapsStartAsFastAsItsGroundLetsIt) {
         << "as from open ground where nothing stops it rising";
 }
 
+TEST(NavigationMeshTest, ATakeoffRisesAsHighAsABodysFeetGoUnderTheCeilingOverIt) {
+    // Floors at 0 either side of a gap 60 across, and over the near one a ceiling 90 up: a standing body's
+    // head meets it once its feet are 18 up, and near the top of its jump a body is slowest, so that the rise
+    // a gap's speed is reckoned by must be no cell short of that.
+    constexpr float kSide = 512.0F;
+    constexpr float kEdge = 500.0F;
+    constexpr float kFar = 560.0F;
+    constexpr float kEnd = 1024.0F;
+    constexpr float kCeiling = 90.0F;
+    constexpr float kSlab = 16.0F;
+    constexpr float kExact = 0.25F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = kSide}, 0.0F);
+    nx::test::addFloor(geometry, {.x = kFar, .y = 0.0F}, {.x = kEnd, .y = kSide}, 0.0F);
+    nx::test::addCeiling(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = kSide}, kCeiling);
+    const std::array solids{
+        solidBox({.z = -kSlab}, {.x = kEdge, .y = kSide}),
+        solidBox({.x = kFar, .z = -kSlab}, {.x = kEnd, .y = kSide}),
+        solidBox({.z = kCeiling}, {.x = kEdge, .y = kSide, .z = kCeiling + kSlab}),
+    };
+    nx::test::stopPlayerBodies(geometry, solids);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const float headroom = kCeiling - mesh.profile().standingHeight.value();
+    std::size_t under = 0;
+    for (const MeshLink& link : mesh.outline().links) {
+        if (link.start.x < (kEdge + kFar) * 0.5F && link.end.x > (kEdge + kFar) * 0.5F) {
+            ASSERT_TRUE(link.takeoff.has_value());
+            EXPECT_NEAR(link.takeoff->rise.value(), headroom, kExact) << std::format("{}", link.start);
+            ++under;
+        }
+    }
+    EXPECT_GT(under, 0U);
+}
+
 TEST(NavigationMeshTest, TheTakeoffModelRequiresAProfileThatFliesAndAMotionThatMoves) {
     const nx::navigation::AgentProfile profile = nx::test::playerProfile();
     const MeshLink gap{.start = {}, .end = {.x = 100.0F}, .kind = AreaKind::Jump};
@@ -621,6 +922,7 @@ TEST(NavigationMeshTest, NoWayGoesOverAGapFromWhereItCrouchesFasterThanItWalksCr
     constexpr float kGap = 100.0F;
     constexpr float kHeight = 100.0F;
     constexpr float kRoom = 50.0F;
+    constexpr float kExactRise = 0.25F;
     Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = 512.0F}, kHeight);
     nx::test::addCeiling(geometry, {.x = 0.0F, .y = 0.0F}, {.x = kEdge, .y = 512.0F}, kHeight + kRoom);
@@ -643,7 +945,7 @@ TEST(NavigationMeshTest, NoWayGoesOverAGapFromWhereItCrouchesFasterThanItWalksCr
     for (const MeshLink& link : outline.links) {
         ASSERT_TRUE(link.takeoff.has_value());
         EXPECT_TRUE(link.takeoff->isCrouched);
-        EXPECT_LT(link.takeoff->rise.value(), kRoom - profile.crouchedHeight.value())
+        EXPECT_NEAR(link.takeoff->rise.value(), kRoom - profile.crouchedHeight.value(), kExactRise)
             << "its head on the ceiling";
         takes = std::max(takes, nx::navigation::leastLeapSpeedOf(link, profile, {}));
     }

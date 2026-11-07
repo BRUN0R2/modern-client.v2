@@ -116,6 +116,56 @@ inline void stopBodies(nx::navigation::Geometry& geometry, const nx::Aabb& box) 
     geometry.crouchedBodyHull = geometry.bodyHull;
 }
 
+/// The faces of `box` as planes facing out of it.
+[[nodiscard]] inline auto facesOf(const nx::Aabb& box) -> std::vector<nx::Plane> {
+    return {nx::Plane{.normal = {.x = 1.0F}, .distance = box.max.x},
+            nx::Plane{.normal = {.x = -1.0F}, .distance = -box.min.x},
+            nx::Plane{.normal = {.y = 1.0F}, .distance = box.max.y},
+            nx::Plane{.normal = {.y = -1.0F}, .distance = -box.min.y},
+            nx::Plane{.normal = {.z = 1.0F}, .distance = box.max.z},
+            nx::Plane{.normal = {.z = -1.0F}, .distance = -box.min.z}};
+}
+
+/// What stops the middle of a body `radius` wide either side and `height` tall at the convex solids
+/// `solids`, each the planes of its faces facing out, its bounds' among them: each face moved out by as far
+/// as the body's box reaches past its middle that way, as a map's compiler grows its brushes for a body's
+/// hull.
+[[nodiscard]] inline auto bodyHullOf(std::span<const std::vector<nx::Plane>> solids, float radius,
+                                     float height) -> nx::navigation::BodyHull {
+    using nx::navigation::BodyHullChild;
+    using nx::navigation::BodyHullLeaf;
+    nx::navigation::BodyHull hull;
+    std::uint32_t first = 0;
+    for (std::size_t solid = 0; solid < solids.size(); ++solid) {
+        const std::span<const nx::Plane> faces = solids[solid];
+        const auto next = narrow<std::uint32_t>(first + faces.size());
+        const BodyHullChild outside =
+            solid + 1 < solids.size() ? BodyHullChild{next} : BodyHullChild{BodyHullLeaf::Open};
+        for (std::size_t face = 0; face < faces.size(); ++face) {
+            const nx::Vec3 normal = faces[face].normal;
+            const float reach =
+                (radius * (std::abs(normal.x) + std::abs(normal.y))) + (height * 0.5F * std::abs(normal.z));
+            const BodyHullChild inside = face + 1 < faces.size()
+                                             ? BodyHullChild{narrow<std::uint32_t>(first + face + 1)}
+                                             : BodyHullChild{BodyHullLeaf::Solid};
+            hull.nodes.push_back({.plane = {.normal = normal, .distance = faces[face].distance + reach},
+                                  .children = {outside, inside}});
+        }
+        first = next;
+    }
+    hull.root = solids.empty() ? BodyHullChild{BodyHullLeaf::Open} : BodyHullChild{std::uint32_t{0}};
+    return hull;
+}
+
+/// Makes the convex solids `solids` stop the player's body in `geometry`, standing and crouched, as the
+/// game's hulls do.
+inline void stopPlayerBodies(nx::navigation::Geometry& geometry,
+                             std::span<const std::vector<nx::Plane>> solids) {
+    const nx::navigation::AgentProfile profile = playerProfile();
+    geometry.bodyHull = bodyHullOf(solids, profile.radius.value(), profile.standingHeight.value());
+    geometry.crouchedBodyHull = bodyHullOf(solids, profile.radius.value(), profile.crouchedHeight.value());
+}
+
 /// A job system of `workerCount` workers.
 [[nodiscard]] inline auto jobSystem(std::uint32_t workerCount = 3) -> std::unique_ptr<nx::jobs::JobSystem> {
     auto created = nx::jobs::JobSystem::create({.workerCount = workerCount});
