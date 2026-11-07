@@ -821,85 +821,265 @@ constexpr Seconds kLongestFlight{3.0F};
     });
 }
 
-/// Whether `body` comes down on the floor at `to` when it leaves the floor at `from`, jumping `jump` high, at
-/// the profile's speed across, under its gravity, as the game moves it (movesInTheAir): on across where
-/// nothing stops it, to no farther than `to`; going on up or down along a wall that stops it there, as its
-/// box slides; and falling once its head meets a ceiling.
-[[nodiscard]] auto bodyFlies(const TileInput& input, std::span<const NearTriangle> near,
-                             const ProfileBody& body, Vec3 from, Vec3 to, float jump) -> bool {
-    const AgentProfile& profile = input.profile;
-    const float gravity = profile.gravity.value();
-    const float speed = profile.leapSpeed.value();
-    const Vec3 span{.x = to.x - from.x, .y = to.y - from.y};
-    const float across = length(span);
-    const Vec3 way = across > 0.0F ? span / across : Vec3{};
-    const float tick = input.settings.cellSize.value() / speed;
-    const auto isOpen = [&](Vec3 was, Vec3 feet) {
-        return movesInTheAir(input, near, body, was, feet);
-    };
-    float rising = std::sqrt(2.0F * gravity * jump);
-    float gone = 0.0F;
-    Vec3 at = from;
-    for (float time = tick; time < kLongestFlight.count(); time += tick) {
-        // By the mean of its speed over the tick, exact under a constant pull: by its speed at the end alone,
-        // a flight peaked short of what the jump reaches by half a tick's rise, a few units.
-        const float wasRising = rising;
-        rising -= gravity * tick;
-        const float flown = at.z + ((wasRising + rising) * 0.5F * tick);
-        const bool comesDown = rising < 0.0F && flown <= to.z;
-        const float height = comesDown ? to.z : flown;
-        const float further = std::min(gone + (speed * tick), across);
-        const Vec3 aheadAndUp{.x = from.x + (way.x * further), .y = from.y + (way.y * further), .z = height};
-        const Vec3 ahead{.x = aheadAndUp.x, .y = aheadAndUp.y, .z = at.z};
-        const Vec3 straight{.x = at.x, .y = at.y, .z = height};
-        if (isOpen(at, aheadAndUp)) {
-            gone = further;
-            at = aheadAndUp;
-        } else if (isOpen(at, straight)) {
-            at = straight;
-        } else if (isOpen(at, ahead)) {
-            // Its head on a ceiling, or its feet on a floor, it goes on across as it stops rising or falling.
-            gone = further;
-            at = ahead;
-            rising = std::min(rising, 0.0F);
-        } else {
-            rising = std::min(rising, 0.0F);
-        }
-        if (comesDown && at.z <= to.z) {
-            return gone >= across;
-        }
-    }
-    return false;
-}
-
-/// How high `body` rises from the floor at `from`, jumping `jump` high, before its head meets anything
-/// (movesInTheAir), as a body that leaves it slowly rises: straight up, cell by cell, from where it stands,
-/// its middle out of the solid within its lift over a slope (bodyFitsAt). Faster it may get out from under
-/// what is over it before its head meets it, as the build flies the fastest body (bodyFlies); a body that
-/// leaves a ledge crouched leaves it at a crawl.
-[[nodiscard]] auto headroomAt(const TileInput& input, std::span<const NearTriangle> near,
-                              const ProfileBody& body, Vec3 from, float jump) -> HammerUnits {
+/// Where the feet of `body` are on the floor at `feet` as the game holds it up: as high as its middle is out
+/// of the solid (movesInTheAir), as far as its lift over a slope (bodyLiftOf).
+[[nodiscard]] auto heldUpAt(const TileInput& input, const ProfileBody& body, Vec3 feet) noexcept -> Vec3 {
     const float cellHeight = input.settings.cellHeight.value();
     const float lift = static_cast<float>(input.voxels.liftVoxels) * cellHeight;
     const Vec3 middle{.z = (body.height.value() * 0.5F) + cellHeight};
     float risen = 0.0F;
-    while (risen < lift && body.isSolidAt(from + middle + Vec3{.z = risen})) {
+    while (risen < lift && body.isSolidAt(feet + middle + Vec3{.z = risen})) {
         risen += cellHeight;
     }
+    return feet + Vec3{.z = risen};
+}
+
+/// How many times a move is halved to find where what stops it is met (BodyFlight, headroomAt): to a
+/// thirty-second of the move, an eighth of a unit at a leap's speed.
+constexpr int kContactHalvings = 5;
+
+/// How far a body that met something is tried each way from where it met it, to tell what it met
+/// (BodyFlight): farther than the halvings leave it short of it.
+constexpr HammerUnits kContactProbe{0.5F};
+
+/// How much a floor the profile stands on rises at most for each unit across: the tangent of the steepest,
+/// whose normal's upward share is minGroundNormalZ.
+[[nodiscard]] auto steepestRiseOf(const AgentProfile& profile) noexcept -> float {
+    const float upward = profile.minGroundNormalZ;
+    return std::sqrt(1.0F - (upward * upward)) / upward;
+}
+
+/// A body flying from the floor at one end of a link to the floor at the other (bodyFlies), a tick at a time,
+/// as the game moves it (movesInTheAir, PM_FlyMove), along the way between them and no farther than its end:
+/// where its feet are, how far across it has gone, and how fast it goes on across and up.
+class BodyFlight {
+public:
+    /// A flight of `body` from the floor at `from`, leaving it as `leap` has it at `leapSpeed` across, to the
+    /// floor at `to`: from where the floor holds it up, its feet lifted as it ducks, down to where the floor
+    /// holds it up at the end. From and to the floor's own height, a body on a slope or a step began in its
+    /// solid and was stopped at once, and stood on a curb at its end short of its height.
+    BodyFlight(const TileInput& tileInput, std::span<const NearTriangle> nearTriangles,
+               const ProfileBody& flown, Vec3 start, Vec3 end, const detail::Leap& leap, float leapSpeed)
+        : input{tileInput}, near{nearTriangles}, body{flown}, from{start}, to{end},
+          landing{heldUpAt(tileInput, flown, end).z},
+          across{length(Vec3{.x = end.x - start.x, .y = end.y - start.y})},
+          way{across > 0.0F ? Vec3{.x = end.x - start.x, .y = end.y - start.y} / across : Vec3{}},
+          at{heldUpAt(tileInput, flown, start) + Vec3{.z = leap.lift.value()}}, speed{leapSpeed},
+          rising{std::sqrt(2.0F * tileInput.profile.gravity.value() * leap.jump.value())} {}
+
+    /// Whether it comes down on the floor at its end: once it comes down to the end's height from above it,
+    /// with its box over the end's floor, which goes on to the end (PM_CategorizePosition finds the ground
+    /// under its box, not its middle); from below that height it falls on short of it.
+    [[nodiscard]] auto landsOnTheEnd() -> bool {
+        const float gravity = input.profile.gravity.value();
+        const float tick = input.settings.cellSize.value() / input.profile.leapSpeed.value();
+        for (float time = tick; time < kLongestFlight.count(); time += tick) {
+            // By the mean of its speed over the tick, exact under a constant pull: by its speed at the end
+            // alone, a flight peaked short of what the jump reaches by half a tick's rise, a few units.
+            const float wasRising = rising;
+            rising -= gravity * tick;
+            const float flown = at.z + ((wasRising + rising) * 0.5F * tick);
+            // Taken up to the end's height from under it, a body that topped out under a ledge's edge with
+            // its box past it came down on top.
+            const bool comesDown = rising < 0.0F && flown <= landing;
+            const float height = comesDown && at.z >= landing ? landing : flown;
+            const float further = std::min(gone + (speed * tick), across);
+            const Vec3 aheadAndUp = alongWay(further, height);
+            if (isOpen(at, aheadAndUp)) {
+                gone = further;
+                at = aheadAndUp;
+            } else if (further <= gone) {
+                // Straight up or down over the end, onto what stops it there.
+                rising = 0.0F;
+            } else {
+                meets(further, height);
+            }
+            if (comesDown && at.z <= landing) {
+                return at.z >= landing - input.settings.cellHeight.value() && isOverTheEnd();
+            }
+        }
+        return false;
+    }
+
+private:
+    [[nodiscard]] auto isOpen(Vec3 was, Vec3 feet) const -> bool {
+        return movesInTheAir(input, near, body, was, feet);
+    }
+
+    /// The point `distance` across along its way, at `height`.
+    [[nodiscard]] auto alongWay(float distance, float height) const noexcept -> Vec3 {
+        return Vec3{.x = from.x + (way.x * distance), .y = from.y + (way.y * distance), .z = height};
+    }
+
+    /// The share of the move from `was` to `feet` it makes before what stops it.
+    [[nodiscard]] auto openShareOf(Vec3 was, Vec3 feet) const -> float {
+        float open = 0.0F;
+        float stopped = 1.0F;
+        for (int halving = 0; halving < kContactHalvings; ++halving) {
+            const float share = (open + stopped) * 0.5F;
+            (isOpen(was, was + ((feet - was) * share)) ? open : stopped) = share;
+        }
+        return open;
+    }
+
+    /// What stops its move this tick on to `further` across and up or down to `height`: a floor or a ceiling,
+    /// along which it goes on across, its speed up or down taken; something across its way (meetsAcross); or
+    /// an edge between the two, by which of them it meets first, from where it meets it.
+    void meets(float further, float height) {
+        const float probe = kContactProbe.value();
+        const Vec3 ahead = alongWay(further, at.z);
+        const bool movesAcross = isOpen(at, ahead);
+        const bool movesUpOrDown = isOpen(at, Vec3{.x = at.x, .y = at.y, .z = height});
+        if (movesAcross && !movesUpOrDown) {
+            gone = further;
+            at = ahead;
+            rising = 0.0F;
+        } else if (movesAcross) {
+            const Vec3 aheadAndUp = alongWay(further, height);
+            const float share = openShareOf(at, aheadAndUp);
+            at = at + ((aheadAndUp - at) * share);
+            gone += (further - gone) * share;
+            if (isOpen(at, at + Vec3{.z = height < at.z ? -probe : probe})) {
+                meetsAcross(further, height);
+                return;
+            }
+            rising = 0.0F;
+            if (const Vec3 on = alongWay(further, at.z); isOpen(at, on)) {
+                gone = further;
+                at = on;
+            }
+        } else {
+            // Where it meets it: once its speed across is gone, what is left is within a probe of it.
+            if (speed > input.profile.airSpeed.value()) {
+                gone += (further - gone) * openShareOf(at, ahead);
+                at = alongWay(gone, at.z);
+            }
+            meetsAcross(further, height);
+        }
+    }
+
+    /// Met across its way, it goes on along what it met where that is no steeper than a floor it stands on,
+    /// as PM_FlyMove's clip keeps what goes along a plane: up a floor that rises across its way, or down a
+    /// ceiling that comes down across it, which cs_italy has over a crouched gap bots cross at (666 -408).
+    /// Else it has met a face, which takes its speed across, the air giving it back no more than its air
+    /// speed (PM_AirAccelerate's cap), and it slides up or down along it.
+    void meetsAcross(float further, float height) {
+        const float steepestRise = steepestRiseOf(input.profile);
+        if (goesAlong(further, steepestRise)) {
+            rising = std::max(rising, 0.0F);
+            return;
+        }
+        if (goesAlong(further, -steepestRise)) {
+            rising = std::min(rising, 0.0F);
+            return;
+        }
+        speed = std::min(speed, input.profile.airSpeed.value());
+        if (const Vec3 slid{.x = at.x, .y = at.y, .z = height}; isOpen(at, slid)) {
+            at = slid;
+        } else {
+            rising = 0.0F;
+        }
+    }
+
+    /// Whether it goes on across along a plane that rises `rise` for each unit across its way, a probe of it
+    /// open; if so it goes as far as `further` along it, else the probe.
+    [[nodiscard]] auto goesAlong(float further, float rise) -> bool {
+        const float probed = std::min(gone + kContactProbe.value(), across);
+        const Vec3 along = alongWay(probed, at.z + ((probed - gone) * rise));
+        if (!isOpen(at, along)) {
+            return false;
+        }
+        const Vec3 alongTheSlope = alongWay(further, at.z + ((further - gone) * rise));
+        const bool goesOn = isOpen(at, alongTheSlope);
+        gone = goesOn ? further : probed;
+        at = goesOn ? alongTheSlope : along;
+        return true;
+    }
+
+    /// Whether its box is over the floor at the end's height from within its side ahead on to the end: a box
+    /// against the face under that floor's edge is over none of it.
+    [[nodiscard]] auto isOverTheEnd() const -> bool {
+        const float step = input.profile.stepHeight.value();
+        const float boxAhead = gone + input.profile.radius.value() - kContactProbe.value();
+        for (float distance = boxAhead; distance < across; distance += input.settings.cellSize.value()) {
+            if (!floorAt(alongWay(distance, to.z), near, to.z - step, to.z + step)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    const TileInput& input;
+    std::span<const NearTriangle> near;
+    const ProfileBody& body;
+    Vec3 from{};
+    Vec3 to{};
+    float landing = 0.0F; ///< Where its feet come down at the end, as the floor holds it up there.
+    float across = 0.0F;
+    Vec3 way{};
+    Vec3 at{};
+    float gone = 0.0F;
+    float speed = 0.0F;
+    float rising = 0.0F;
+};
+
+/// Whether `body` comes down on the floor at `to` when it leaves the floor at `from` as `leap` has it, under
+/// its gravity, as the game moves it (BodyFlight): on across where nothing stops it; along a floor or a
+/// ceiling it meets; up along a floor it stands on that rises across its way, or down a ceiling that comes
+/// down across it; and against any other face, at no more than what the air gives it back, sliding up or down
+/// along it. It leaves at the profile's speed across, the fastest of those that walk the mesh, or barely
+/// moving, at what the air gives it: running at a ledge under a lip, a body passes under the lip, where one
+/// that jumps beside the ledge rises past it first, as bots climb onto de_nuke's bar at (2004 -1984 -108).
+[[nodiscard]] auto bodyFlies(const TileInput& input, std::span<const NearTriangle> near,
+                             const ProfileBody& body, Vec3 from, Vec3 to, const detail::Leap& leap) -> bool {
+    const AgentProfile& profile = input.profile;
+    return BodyFlight{input, near, body, from, to, leap, profile.leapSpeed.value()}.landsOnTheEnd() ||
+           BodyFlight{input, near, body, from, to, leap, profile.airSpeed.value()}.landsOnTheEnd();
+}
+
+/// Whether `body` rises straight up from feet at `was` to feet at `feet` with nothing over it: its own middle
+/// out of its hull, and its top meeting no surface. movesInTheAir's cell of slack, which keeps a body flown
+/// along a floor out of it, takes a cell off how high it rises under a ceiling.
+[[nodiscard]] auto risesTo(std::span<const NearTriangle> near, const ProfileBody& body, Vec3 was, Vec3 feet)
+    -> bool {
+    const Vec3 middle{.z = body.height.value() * 0.5F};
+    const Vec3 top{.z = body.height.value()};
+    return !body.isSolidAt(feet + middle) && std::ranges::none_of(near, [&](const NearTriangle& triangle) {
+        return meets(was + top, feet + top, triangle);
+    });
+}
+
+/// How high `body` rises from the floor at `from`, its feet `jump` high at most, before its head meets
+/// anything (risesTo), as a body that leaves it slowly rises: straight up from where the floor holds it up
+/// (heldUpAt), a cell at a time and within the last one by halves: near the top of its jump a body is
+/// slowest, and four units short of where its head meets a ceiling, de_dust2's crouched gap at (12 2262) took
+/// 186 units a second for the 168 bots cross it at. Faster it may get out from under what is over it before
+/// its head meets it, as the build flies the fastest body (bodyFlies); a body that leaves a ledge crouched
+/// leaves it at a crawl.
+[[nodiscard]] auto headroomAt(const TileInput& input, std::span<const NearTriangle> near,
+                              const ProfileBody& body, Vec3 from, float jump) -> HammerUnits {
+    const float cellHeight = input.settings.cellHeight.value();
+    float risen = heldUpAt(input, body, from).z - from.z;
     while (risen < jump) {
         const float next = std::min(risen + cellHeight, jump);
-        if (!movesInTheAir(input, near, body, from + Vec3{.z = risen}, from + Vec3{.z = next})) {
-            break;
+        if (risesTo(near, body, from + Vec3{.z = risen}, from + Vec3{.z = next})) {
+            risen = next;
+            continue;
         }
-        risen = next;
+        float stopped = next;
+        for (int halving = 0; halving < kContactHalvings; ++halving) {
+            const float half = (risen + stopped) * 0.5F;
+            (risesTo(near, body, from + Vec3{.z = risen}, from + Vec3{.z = half}) ? risen : stopped) = half;
+        }
+        break;
     }
     return HammerUnits{risen};
 }
 
 /// How a body crosses between the floor at `high` and the floor at `low`, no more than a step above it: of
 /// the kind Jump, both ways, when standing it jumps back up, and down over a gap where it comes down jumping;
-/// CrouchedJump, the same ducking in the air, for the height or for the room there; else Drop, down only;
-/// none when it does not come down on it.
+/// CrouchedJump, the same ducking in the air, for the height or for the room there, its feet lifted at once
+/// from where it stood (detail::leapOf); else Drop, down only; none when it does not come down on it.
 [[nodiscard]] auto kindOfFlight(const TileInput& input, std::span<const NearTriangle> near, Vec3 high,
                                 Vec3 low) -> std::optional<Flight> {
     const AgentProfile& profile = input.profile;
@@ -918,34 +1098,36 @@ constexpr Seconds kLongestFlight{3.0F};
     const ProfileBody standing = standingBodyOf(input);
     const ProfileBody ducked = duckedBodyOf(input);
     const bool spansGap = gapAcross(high, low, profile.radius) > 0.0F;
-    // A way over a gap, from `start`, where a body stands upright or not: one that does not come down on the
-    // other end goes none.
-    const auto wayOf = [&](bool flies, const ProfileBody& body, Vec3 start, bool standsAtStart, float jump) {
-        return spansGap && flies ? std::optional{FlightWay{.rise = headroomAt(input, near, body, start, jump),
-                                                           .isCrouched = !standsAtStart}}
-                                 : std::nullopt;
+    // A way over a gap, from `start`, where a body stands upright or not, its feet as high as `leap` takes
+    // them at most: one that does not come down on the other end goes none.
+    const auto wayOf = [&](bool flies, const ProfileBody& body, Vec3 start, bool standsAtStart,
+                           const detail::Leap& leap) {
+        const float reach = leap.lift.value() + leap.jump.value();
+        return spansGap && flies
+                   ? std::optional{FlightWay{.rise = headroomAt(input, near, body, start, reach),
+                                             .isCrouched = !standsAtStart}}
+                   : std::nullopt;
     };
-    // Up, and down over a gap, each way flown of its own.
-    const auto jumpsBetween = [&](AreaKind kind, const ProfileBody& body,
-                                  float jump) -> std::optional<Flight> {
-        if (!bodyFlies(input, near, body, low, high, jump)) {
+    // Up, and down over a gap, each way flown of its own, leaving its start as a body there does.
+    const auto jumpsBetween = [&](AreaKind kind, const ProfileBody& body) -> std::optional<Flight> {
+        const detail::Leap up = detail::leapOf(kind, profile, !standsBelow);
+        if (!bodyFlies(input, near, body, low, high, up)) {
             return std::nullopt;
         }
+        const detail::Leap down = detail::leapOf(kind, profile, !standsAbove);
         return Flight{.kind = kind,
-                      .down = wayOf(spansGap && bodyFlies(input, near, body, high, low, jump), body, high,
-                                    standsAbove, jump),
-                      .up = wayOf(true, body, low, standsBelow, jump)};
+                      .down = wayOf(spansGap && bodyFlies(input, near, body, high, low, down), body, high,
+                                    standsAbove, down),
+                      .up = wayOf(true, body, low, standsBelow, up)};
     };
     if (standsAbove && standsBelow && height <= profile.jumpHeight.value()) {
-        if (std::optional<Flight> flight =
-                jumpsBetween(AreaKind::Jump, standing, profile.jumpHeight.value())) {
+        if (std::optional<Flight> flight = jumpsBetween(AreaKind::Jump, standing)) {
             return flight;
         }
     }
     if (profile.crouchedJumpHeight && ducksAbove && ducksBelow &&
         height <= profile.crouchedJumpHeight->value()) {
-        if (std::optional<Flight> flight =
-                jumpsBetween(AreaKind::CrouchedJump, ducked, profile.crouchedJumpHeight->value())) {
+        if (std::optional<Flight> flight = jumpsBetween(AreaKind::CrouchedJump, ducked)) {
             return flight;
         }
     }
@@ -953,7 +1135,7 @@ constexpr Seconds kLongestFlight{3.0F};
         return std::nullopt;
     }
     // Off the edge of a ledge it walks; only across a gap does it jump.
-    const float hop = spansGap ? profile.jumpHeight.value() : profile.stepHeight.value();
+    const detail::Leap hop{.jump = spansGap ? profile.jumpHeight : profile.stepHeight};
     for (const auto& [fits, body] :
          {std::pair{standsAbove && standsBelow, standing}, std::pair{ducksAbove && ducksBelow, ducked}}) {
         if (fits && bodyFlies(input, near, body, high, low, hop)) {
@@ -1514,7 +1696,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 12;
+constexpr std::uint32_t kTilesVersion = 13;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.

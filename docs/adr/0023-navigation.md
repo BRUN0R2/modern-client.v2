@@ -47,15 +47,25 @@ convex polygons, through Recast and Detour.
   ledges as each tile is built: along each edge of a polygon that no other shares, one every two widths of the
   profile, and along the side of a tile, where no floor goes on past it. From each it looks outward as far as a
   leap flies, for the nearest floor of each height a body comes down on: one lower once its box is past the edge,
-  one level past a gap. Whether it does is flown as the game moves a body, under the profile's `gravity` at its
-  `leapSpeed`, the fastest of those that walk the mesh: stopped by what stops a body, which its hulls and the
-  surfaces at its knees and head tell, rising along a wall and falling from a ceiling, the kinds tried in turn:
+  one level past a gap. Whether it does is flown as the game moves a body (PM_FlyMove), under the profile's
+  `gravity`, leaving at its `leapSpeed`, the fastest of those that walk the mesh, or barely moving across, at
+  `airSpeed`, since one that jumps beside a ledge under a lip rises past the lip where one running at it passes
+  under it; from where the floor holds it up to where it holds it up at the end, a slope or a curb say. What
+  stops it its hulls and the surfaces at its knees and head tell: it goes on along a floor or a ceiling it meets,
+  up along a floor it stands on that rises across its way or down a ceiling that comes down across it, and
+  against any other face from where it meets it, the face taking its speed across and the air giving back no
+  more than `airSpeed` (PM_AirAccelerate's cap) as it slides up or down it. It lands once it comes down to the
+  end's height from above with its box over the end's floor, which goes on to the end (PM_CategorizePosition
+  finds the ground under its box), and falls on short of it from below. Flying on at its leap's speed once over
+  what stopped it, a body leapt cs_italy's rail at a pit's edge, where a bot stood on the rail under the
+  ceiling. The kinds are tried in turn:
   `jump` both ways within its jump height, `crouchedJump` both ways within its crouched one, or where only a
   ducked body fits, and else `drop`, down only. Over a gap each way is a link of its own, a flight of its own: the
   one back starts where the other lands, in whichever tile that is, so that a build hands each tile the links
   that start in it from the tiles about it before Detour takes any, Detour keeping a link in the tile it starts
   in alone. Each keeps the ground its start is (`Takeoff`): how high a body rises there before its head meets
-  anything, straight up as a body that leaves it slowly rises, and whether only a crouched body stands there, in
+  anything, straight up as a body that leaves it slowly rises, to within a fraction of a unit by its own middle
+  and top, since near the top of its jump a body is slowest, and whether only a crouched body stands there, in
   the link's id; and how far the floor goes on behind it, away from its end, which a walk on the mesh tells as
   Detour takes the tiles. A brain crosses one from its start, jumping once for a link up or
   across a gap, from the ground, a body in the air, flying from step to step down stairs, waiting to land, ducking in the air over a crouched jump up or across a gap, having slowed down for what the link's
@@ -134,10 +144,12 @@ convex polygons, through Recast and Detour.
   body ducked at the top of a ladder walks to it at a third of its speed. It gains speed slowly ducked, 83 units
   a second each second, and a jump's cost for a second takes all of it: its stuck watch holds it to a third of
   the stuck speed, and draws no jump. A ledge higher than its jump and within its crouched one is linked both
-  ways by the kind `CrouchedJump`, 62.5 units, just under the 63 the movement reaches ducking in the air, its feet
-  lifted by as much as its box is shorter, whenever from the jump to its top it presses the key, against 45
-  jumping; every ledge a player gets onto being one an agent must, a Condition Zero bot's 58 left some out. A brain
-  holds the key from the jump until it lands.
+  ways by the kind `CrouchedJump`, 62.5 units, just under the 63 the movement reaches ducking in the air, whenever
+  from the jump to its top it presses the key: it jumps 45 as it does standing, and in the air PM_Duck changes its
+  box and leaves its middle where it is, so that its feet rise at once by half of what its box is shorter, 18; a
+  body ducked already jumps 45 alone. The build flies it so, which clears a step right ahead of the jump, and a
+  way takes its speed across so (`leastLeapSpeedOf`); every ledge a player gets onto being one an agent must, a
+  Condition Zero bot's 58 left some out. A brain holds the key from the jump until it lands.
 - **Queries.** `findPath` (A* over the polygons, then the funnel that straightens the path),
   `nearestPoint`, `raycast` (whether a straight walk is possible), `randomPoint` within a radius,
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it

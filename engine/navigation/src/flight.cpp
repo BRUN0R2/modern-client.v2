@@ -11,12 +11,9 @@ namespace nx::navigation {
 
 namespace {
 
-/// How high a body of `profile` jumps over a link of the kind `kind`: ducking in the air over one it jumps
-/// crouched, standing over the others.
-[[nodiscard]] auto jumpOf(AreaKind kind, const AgentProfile& profile) noexcept -> float {
-    return kind == AreaKind::CrouchedJump && profile.crouchedJumpHeight ? profile.crouchedJumpHeight->value()
-                                                                        : profile.jumpHeight.value();
-}
+/// The share of what a body is shorter ducked by which its feet rise as it ducks in the air: its box shrinks
+/// about its middle, as much from below as from above.
+constexpr float kDuckedLiftShare = 0.5F;
 
 /// Whether `profile` flies as leastLeapSpeedOf requires: its gravity and jump heights finite and more than
 /// none.
@@ -51,10 +48,14 @@ auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerU
     if (!fliesAsGiven(profile)) {
         return UnitsPerSecond{std::numeric_limits<float>::infinity()}; // under observe: no body takes it
     }
-    const float jump = jumpOf(link.kind, profile);
-    const float rise = link.takeoff ? std::min(link.takeoff->rise.value(), jump) : jump;
-    const std::optional<Seconds> inTheAir = detail::airTimeOf(
-        HammerUnits{jump}, HammerUnits{rise}, HammerUnits{link.start.z - link.end.z}, profile.gravity);
+    // From where its feet are once it ducks in the air, as high as its speed up takes it from there.
+    const detail::Leap leap = detail::leapOf(link.kind, profile, link.takeoff && link.takeoff->isCrouched);
+    const float lift = leap.lift.value();
+    const float reach = lift + leap.jump.value();
+    const float rise = link.takeoff ? std::min(link.takeoff->rise.value(), reach) : reach;
+    const std::optional<Seconds> inTheAir =
+        detail::airTimeOf(leap.jump, HammerUnits{std::max(rise - lift, 0.0F)},
+                          HammerUnits{link.start.z - link.end.z + lift}, profile.gravity);
     if (!inTheAir) {
         return UnitsPerSecond{std::numeric_limits<float>::infinity()};
     }
@@ -104,6 +105,15 @@ auto runUpOf(const MeshLink& link, const AgentProfile& profile, const BodyMotion
 } // namespace nx::navigation
 
 namespace nx::navigation::detail {
+
+auto leapOf(AreaKind kind, const AgentProfile& profile, bool isCrouched) noexcept -> Leap {
+    if (kind != AreaKind::CrouchedJump || !profile.crouchedJumpHeight) {
+        return Leap{.jump = profile.jumpHeight};
+    }
+    const float lift = (profile.standingHeight.value() - profile.crouchedHeight.value()) * kDuckedLiftShare;
+    return Leap{.jump = HammerUnits{std::max(profile.crouchedJumpHeight->value() - lift, 0.0F)},
+                .lift = HammerUnits{isCrouched ? 0.0F : lift}};
+}
 
 auto airTimeOf(HammerUnits jump, HammerUnits rise, HammerUnits drop, UnitsPerSecondSquared gravity) noexcept
     -> std::optional<Seconds> {
