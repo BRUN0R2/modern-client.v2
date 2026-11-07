@@ -14,7 +14,8 @@
 # is looked for, which its links of the kind "drop" span, dropped down only; `leapSpeed`, how fast the
 # fastest of those that walk its mesh leaves a ledge to jump across a gap, and `gravity`, sv_gravity, by
 # which its links span no gap such a flight falls short of, a slower body's ways going over none whose gap
-# takes more than it leaves a ledge at; `minGroundNormalZ`, the least upward share of a floor's unit
+# takes more than it leaves a ledge at; `airSpeed`, what it gains across in the air, a gap whose flight
+# takes no more taking no run at it; `minGroundNormalZ`, the least upward share of a floor's unit
 # normal it stands on; and `areaCosts`, the kinds of area ("floor", "crouch", "water", "edge", "jump",
 # "drop", "ladder", "crouchedJump", "door") that cost it more than their length, each 1 or more.
 #
@@ -24,10 +25,11 @@
 # in the air just under its 63, every ledge a player gets onto being one an agent must, and the drop of
 # playerHarm.toml's `fall.safeSpeed`, 500 units a second, reached falling 500² / (2 × 800) units at
 # sv_gravity 800; it leaps as fast as a player runs at most, 260 units a second with the Schmidt Scout
-# (the original's SCOUT_MAX_SPEED; GPL, consulted: docs/20 section 3), the others' weapons slower; a kind
-# of area costs it as many times its length as it is slower there: crouched a third of its speed (0.333),
-# in water four fifths (0.8); a jump twice its length, crouched or not, as a Condition Zero bot's path
-# weighs a jump area (CSBot's PathCost, its jumpPenalty), a drop it takes unhurt its length, and a ladder
+# (the original's SCOUT_MAX_SPEED; GPL, consulted: docs/20 section 3), the others' weapons slower; in the
+# air it gains no more than 30 units a second across, PM_AirAccelerate's cap on the speed it wishes
+# there; a kind of area costs it as many times its length as it is slower there: crouched a third of its
+# speed (0.333), in water four fifths (0.8); a jump twice its length, crouched or not, as a Condition
+# Zero bot's path weighs a jump area (CSBot's PathCost, its jumpPenalty), a drop it takes unhurt its length, and a ladder
 # as many times as it climbs slower than it runs (200 units a second, 250); a door its length, a body running
 # through one open as over floor, what one that is not open makes it lose added by how it stands, the time it
 # takes to open and the walk to what opens it (nx::navigation::Gate). Its square box reaches 22.6
@@ -47,6 +49,7 @@ crouchedJumpHeight = 62.5
 dropHeight = 156.25
 leapSpeed = 260.0
 gravity = 800.0
+airSpeed = 30.0
 minGroundNormalZ = 0.7
 areaCosts = [
     { area = "crouch", cost = 3.0 },

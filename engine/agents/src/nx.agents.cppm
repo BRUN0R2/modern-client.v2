@@ -79,9 +79,6 @@ struct Rules {
     /// The share of its run its body moves at crouched (PM_Duck's PLAYER_DUCKING_MULTIPLIER, 0.333): it
     /// leaves a ledge it stands on only crouched no faster. 1, as fast as standing.
     float crouchedShare = 1.0F;
-    /// What its body gains across in the air, wishing for no more speed there (PM_AirAccelerate's cap, 30): a
-    /// gap whose flight takes no more takes no run at it. None, nothing.
-    UnitsPerSecond airSpeed{};
 };
 
 /// A sensed fact: where a target was seen, touched, or roughly where it was heard (Brain::sense), never a
@@ -262,13 +259,12 @@ public:
     /// The middle of the door it goes to open; none while it does not.
     [[nodiscard]] auto gateItOpens() const noexcept -> std::optional<Vec3>;
     /// How its body moves running at `maxSpeed` at most (navigation::BodyMotion): crouched at its share of
-    /// that, gaining what the air and its run give it by its rules, and losing what its friction takes. Its
-    /// ways go over no gap that takes more than it leaves the start at (navigation::fastestTakeoffOf,
-    /// navigation::PathRequest::body).
+    /// that, gaining what its run gives it by its rules, and losing what its friction takes; what the air
+    /// gives it is its mesh's profile's (navigation::AgentProfile::airSpeed). Its ways go over no gap that
+    /// takes more than it leaves the start at (navigation::fastestTakeoffOf, navigation::PathRequest::body).
     [[nodiscard]] inline auto bodyMotion(UnitsPerSecond maxSpeed) const noexcept -> navigation::BodyMotion {
         return navigation::BodyMotion{.runSpeed = maxSpeed,
                                       .crouchedSpeed = maxSpeed * rules.crouchedShare,
-                                      .airSpeed = rules.airSpeed,
                                       .acceleration = rules.acceleration,
                                       .braking = rules.braking};
     }

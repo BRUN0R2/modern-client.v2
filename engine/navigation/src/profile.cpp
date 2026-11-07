@@ -117,6 +117,9 @@ auto checkProfile(const AgentProfile& profile, const BuildSettings& settings)
         !std::isfinite(profile.gravity.value()) || profile.gravity <= UnitsPerSecondSquared{}) {
         return invalidProfile(profile, "a leap's speed and gravity must be finite and positive");
     }
+    if (!std::isfinite(profile.airSpeed.value()) || profile.airSpeed < UnitsPerSecond{}) {
+        return invalidProfile(profile, "what the air gives a body must be finite and none or more");
+    }
     if (!std::isfinite(profile.wallClearance.value()) || profile.wallClearance < HammerUnits{}) {
         return invalidProfile(profile, "a wall clearance must be finite and none or more");
     }

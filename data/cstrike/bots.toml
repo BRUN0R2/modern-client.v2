@@ -33,12 +33,10 @@ stopSpeed = 75.0
 # a second its friction takes 300 a second, so that a walk under 60 gains it nothing; it walks at 120 at
 # least, which it gains as fast as friction would stop it from, but to stop where its way ends.
 acceleration = 5.0
-# How fast a bot moves crouched, a share of its run (PM_Duck's PLAYER_DUCKING_MULTIPLIER 0.333), and what it
-# gains across in the air (PM_AirAccelerate's cap on the speed it wishes there, 30 units a second): it leaves
-# a ledge it only fits on crouched no faster than it walks crouched, and a gap whose flight takes no more than
-# the air gives takes no run at it.
+# How fast a bot moves crouched, a share of its run (PM_Duck's PLAYER_DUCKING_MULTIPLIER 0.333): it leaves a
+# ledge it only fits on crouched no faster than it walks crouched. What it gains across in the air is its
+# navigation profile's (navigation.toml's `airSpeed`).
 crouchedShare = 0.333
-airSpeed = 30.0
 # How long where a bot placed an enemy holds against an estimate of it less salient, or as salient and
 # heard no nearer (OnEvent's short-term memory of a noise, 3 seconds): a step heard does not move where
 # it heard a shot, nor a farther step a nearer one, so that its way and its eyes keep still.

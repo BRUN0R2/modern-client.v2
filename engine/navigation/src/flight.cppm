@@ -15,14 +15,13 @@ import :mesh;
 
 export namespace nx::navigation {
 
-/// How a body moves across, as its game moves it: how fast it runs at most, standing and crouched; what it
-/// gains across in the air, wishing for no more speed there (PM_AirAccelerate's cap); how fast a run gains it
-/// speed, in shares of the run a second (sv_accelerate), none for a body at its full speed at once; and how
-/// fast its friction takes speed, in shares of its speed a second (sv_friction), none for none.
+/// How a body moves across on the ground, as its game moves it: how fast it runs at most, standing and
+/// crouched; how fast a run gains it speed, in shares of the run a second (sv_accelerate), none for a body at
+/// its full speed at once; and how fast its friction takes speed, in shares of its speed a second
+/// (sv_friction), none for none. What the air gives it is its profile's (AgentProfile::airSpeed).
 struct BodyMotion {
     UnitsPerSecond runSpeed{};
     UnitsPerSecond crouchedSpeed{};
-    UnitsPerSecond airSpeed{};
     float acceleration = 0.0F;
     float braking = 0.0F;
 
@@ -44,9 +43,9 @@ struct BodyMotion {
 
 /// How fast across a body of `motion`, of `profile`'s size, leaves the start of `link` at most: as fast as it
 /// gains running at it from rest over the floor behind it (Takeoff::room) but for its radius, at its run
-/// there, its crouched one where only a crouched body stands (Takeoff::isCrouched), or what the air gives it,
-/// if more. From open ground, as a link that tells nothing of its start is left, its run or what the air
-/// gives it. Requires a valid motion (isValidMotion).
+/// there, its crouched one where only a crouched body stands (Takeoff::isCrouched), or what the air gives it
+/// (AgentProfile::airSpeed), if more. From open ground, as a link that tells nothing of its start is left,
+/// its run or what the air gives it. Requires a valid motion (isValidMotion).
 [[nodiscard]] auto fastestTakeoffOf(const MeshLink& link, const AgentProfile& profile,
                                     const BodyMotion& motion) noexcept -> UnitsPerSecond;
 

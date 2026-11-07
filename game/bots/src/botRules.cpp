@@ -100,14 +100,13 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
         isPositive(rules->quotaInterval.count()) && isNoneOrMore(rules->replanShare) &&
         isNoneOrMore(rules->braking) && isNoneOrMore(rules->stopSpeed.value()) &&
         isNoneOrMore(rules->acceleration) && isPositive(rules->crouchedShare) &&
-        rules->crouchedShare <= 1.0F && isNoneOrMore(rules->airSpeed.value()) &&
-        isNoneOrMore(rules->shortTermMemory.count());
+        rules->crouchedShare <= 1.0F && isNoneOrMore(rules->shortTermMemory.count());
     if (!isValidRules) {
         return nx::fail(
             BotError::InvalidData,
-            std::format("{}: every distance, time and budget more than none, the replan share, the "
-                        "short-term memory and the air's speed none or more, a crouched share of more than "
-                        "none to one, and a field of view of a whole turn at most, are required",
+            std::format("{}: every distance, time and budget more than none, the replan share and the "
+                        "short-term memory none or more, a crouched share of more than none to one, and a "
+                        "field of view of a whole turn at most, are required",
                         sourceName));
     }
     const BotCombatRules& combat = rules->combat;
@@ -182,8 +181,7 @@ auto brainRulesOf(const BotRules& rules, nx::Seconds reactionTime) noexcept -> n
                              .braking = rules.braking,
                              .stopSpeed = rules.stopSpeed,
                              .acceleration = rules.acceleration,
-                             .crouchedShare = rules.crouchedShare,
-                             .airSpeed = rules.airSpeed};
+                             .crouchedShare = rules.crouchedShare};
 }
 
 } // namespace cs
