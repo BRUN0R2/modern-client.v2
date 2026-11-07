@@ -115,6 +115,12 @@ readers expected, and the readers now follow them
   is created.
 - **Windows:** the window tests run on SDL's offscreen video driver (`ENVIRONMENT` of
   `nxAddTest`): real windows without a display, in CI and on a developer's desktop alike.
+- **Local probes:** a measurement a developer runs by hand and never commits, a sweep of bots over
+  every link of a map say, goes in a `local` folder beside the test's `CMakeLists.txt`
+  (`game/bots/tests/local/gapProbe.cpp`), which git ignores: `nxAddTest` builds the sources it finds
+  there into that test's executable, with the test's folder on their include path, and finds them
+  again at each build, so that a probe needs no edit of a tracked file and the checkout stays clean.
+  Its cases are `DISABLED_`, run with `--gtest_also_run_disabled_tests`, so that CTest skips them.
 - **Files:** a test that reads the file system writes its input into a
   `TemporaryDirectory`, removed at the end of the test. A test whose subject depends on a
   property of the file system (case sensitivity) checks the property at run time and skips

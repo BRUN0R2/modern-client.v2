@@ -211,7 +211,10 @@ endfunction()
 # nxAddTest(<target> SOURCES <files>... DEPENDS <targets>... [ENVIRONMENT <NAME=value>...])
 #
 # Creates a GoogleTest executable and registers each test case with CTest, run with ENVIRONMENT.
-# The helpers shared by all tests (engine/testSupport, nx::testSupport) are always linked.
+# The helpers shared by all tests (engine/testSupport, nx::testSupport) are always linked. A developer's
+# own probes, which are never committed, go in a `local` folder beside the CMakeLists.txt that calls it,
+# which git ignores: their sources are built into the same executable when they are there, so that
+# using one edits no tracked file (docs/18-testing-and-quality.md).
 function(nxAddTest target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS;ENVIRONMENT")
 
@@ -219,7 +222,13 @@ function(nxAddTest target)
         message(FATAL_ERROR "nxAddTest(${target}): SOURCES is required")
     endif()
 
-    add_executable(${target} ${arg_SOURCES})
+    # Looked for again at each build, so that a probe added or removed needs no configure by hand.
+    file(GLOB localSources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/local/*.cpp")
+    add_executable(${target} ${arg_SOURCES} ${localSources})
+    if(localSources)
+        # A probe reaches the helpers of its test's folder as the test's own sources do.
+        target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
     target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS} nx::testSupport GTest::gtest GTest::gtest_main)
     nxTargetDefaults(${target})
     # Listing the tests runs the executable before the first test: a CI runner scanning a freshly
