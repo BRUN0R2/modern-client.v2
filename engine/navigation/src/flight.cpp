@@ -37,7 +37,7 @@ namespace {
 
 auto isValidMotion(const BodyMotion& motion) noexcept -> bool {
     return std::ranges::all_of(std::array{motion.runSpeed.value(), motion.crouchedSpeed.value(),
-                                          motion.airSpeed.value(), motion.acceleration, motion.braking},
+                                          motion.acceleration, motion.braking},
                                [](float value) { return std::isfinite(value) && value >= 0.0F; });
 }
 
@@ -77,7 +77,7 @@ auto fastestTakeoffOf(const MeshLink& link, const AgentProfile& profile, const B
         const float gaining = 2.0F * motion.acceleration * run * room;
         ground = std::min(std::sqrt((slowing * slowing) + gaining) - slowing, run);
     }
-    return UnitsPerSecond{std::max(ground, motion.airSpeed.value())};
+    return UnitsPerSecond{std::max(ground, profile.airSpeed.value())};
 }
 
 auto runUpOf(const MeshLink& link, const AgentProfile& profile, const BodyMotion& motion,

@@ -75,6 +75,7 @@ TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     EXPECT_EQ(player.dropHeight, nx::HammerUnits{156.25F});
     EXPECT_EQ(player.leapSpeed, nx::UnitsPerSecond{260.0F});
     EXPECT_EQ(player.gravity, nx::UnitsPerSecondSquared{800.0F});
+    EXPECT_EQ(player.airSpeed, nx::UnitsPerSecond{30.0F});
     const nx::navigation::AreaCosts costs = nx::navigation::areaCostsOf(player);
     EXPECT_EQ(costs[AreaKind::Floor], 1.0F);
     EXPECT_EQ(costs[AreaKind::Crouch], 3.0F);
@@ -114,6 +115,7 @@ jumpHeight = 41.8
 dropHeight = 156.25
 leapSpeed = 230.0
 gravity = 800.0
+airSpeed = 30.0
 minGroundNormalZ = 0.7
 areaCosts = []
 )";
@@ -129,6 +131,7 @@ jumpHeight = 41.8
 dropHeight = 156.25
 leapSpeed = 230.0
 gravity = 800.0
+airSpeed = 30.0
 minGroundNormalZ = 0.7
 areaCosts = [{ area = "water", cost = 0.5 }]
 )";

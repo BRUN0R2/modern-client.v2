@@ -72,9 +72,10 @@ convex polygons, through Recast and Detour.
   round it. What a gap takes is how fast across a body covers what its box does not span in the time it is in the
   air (`leastLeapSpeedOf`), each way by its own flight, rising as high as the ground at its start lets it: a body's
   way goes over no link that takes more than it leaves the start at (`fastestTakeoffOf`), as fast as its run gains
-  it over the floor behind the start, crouched where only a crouched body stands, or what the air gives it, by how
-  it moves (`PathRequest::body`, `BodyMotion`: its run and crouched speeds, what the air gives it, its
-  acceleration and its friction, a brain's from its rules, `Brain::bodyMotion`), and is searched anew as that
+  it over the floor behind the start, crouched where only a crouched body stands, or what the air gives it
+  (`AgentProfile::airSpeed`, PM_AirAccelerate's 30 units a second), by how it moves on the ground
+  (`PathRequest::body`, `BodyMotion`: its run and crouched speeds, its acceleration and its friction, a brain's
+  from its rules, `Brain::bodyMotion`), and is searched anew as that
   changes, so that a zombie slower than a gap takes goes round it, a bot frozen at a round's start searches again
   once it may run, and a bot on a sill too shallow for a run at a gap goes round it. Over a gap it needs the speed
   the flight takes, and a margin: too slow, it backs off along the way across it for a run at it

@@ -534,7 +534,6 @@ TEST(NavigationMeshTest, ABodyLeavesAGapsStartAsFastAsItsGroundLetsIt) {
     const float radius = profile.radius.value();
     const nx::navigation::BodyMotion body{.runSpeed = nx::UnitsPerSecond{250.0F},
                                           .crouchedSpeed = nx::UnitsPerSecond{83.0F},
-                                          .airSpeed = nx::UnitsPerSecond{30.0F},
                                           .acceleration = 5.0F,
                                           .braking = 4.0F};
     const MeshLink open{.start = {}, .end = {.x = 6.0F * radius, .z = -40.0F}, .kind = AreaKind::Jump};
@@ -542,12 +541,12 @@ TEST(NavigationMeshTest, ABodyLeavesAGapsStartAsFastAsItsGroundLetsIt) {
     // No floor behind it but what its radius keeps: what the air gives it.
     MeshLink sill = open;
     sill.takeoff = nx::navigation::Takeoff{.room = profile.radius, .rise = profile.jumpHeight};
-    EXPECT_EQ(nx::navigation::fastestTakeoffOf(sill, profile, body), body.airSpeed);
+    EXPECT_EQ(nx::navigation::fastestTakeoffOf(sill, profile, body), profile.airSpeed);
     // As fast as it gets over the floor it runs at the gap from, which is as far as that speed takes.
     MeshLink floor = open;
     floor.takeoff = nx::navigation::Takeoff{.room = nx::HammerUnits{60.0F}, .rise = profile.jumpHeight};
     const nx::UnitsPerSecond reached = nx::navigation::fastestTakeoffOf(floor, profile, body);
-    EXPECT_GT(reached, body.airSpeed);
+    EXPECT_GT(reached, profile.airSpeed);
     EXPECT_LT(reached, body.runSpeed);
     const std::optional<nx::HammerUnits> runUp = nx::navigation::runUpOf(floor, profile, body, reached);
     ASSERT_TRUE(runUp.has_value());
@@ -603,7 +602,6 @@ TEST(NavigationMeshTest, NoWayGoesOverAGapFromASillItHasNoRoomToRunAtItOn) {
     EXPECT_LE(down->takeoff->room.value(), mesh.profile().radius.value() + kCell) << "the sill's floor";
     const nx::navigation::BodyMotion body{.runSpeed = nx::UnitsPerSecond{250.0F},
                                           .crouchedSpeed = nx::UnitsPerSecond{83.0F},
-                                          .airSpeed = nx::UnitsPerSecond{30.0F},
                                           .acceleration = 5.0F,
                                           .braking = 4.0F};
     nx::navigation::NavigationQuery query{mesh};

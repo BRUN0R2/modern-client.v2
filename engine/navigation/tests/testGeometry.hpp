@@ -22,6 +22,7 @@ namespace nx::test {
         .dropHeight = nx::HammerUnits{156.25F},
         .leapSpeed = nx::UnitsPerSecond{260.0F},
         .gravity = nx::UnitsPerSecondSquared{800.0F},
+        .airSpeed = nx::UnitsPerSecond{30.0F},
         .minGroundNormalZ = 0.7F,
         .areaCosts = {{.area = nx::navigation::AreaKind::Crouch, .cost = 3.0F}}};
 }
@@ -35,7 +36,7 @@ namespace nx::test {
 }
 
 /// A body that leaves a ledge at `speed` from wherever it stands: at its full speed at once, as fast
-/// crouched, with nothing from the air.
+/// crouched.
 [[nodiscard]] inline auto bodyLeavingAt(nx::UnitsPerSecond speed) -> nx::navigation::BodyMotion {
     return nx::navigation::BodyMotion{.runSpeed = speed, .crouchedSpeed = speed};
 }

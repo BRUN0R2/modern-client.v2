@@ -51,6 +51,7 @@ constexpr float kRoofHeight = 512.0F;
                         .dropHeight = nx::HammerUnits{156.25F},
                         .leapSpeed = nx::UnitsPerSecond{260.0F},
                         .gravity = nx::UnitsPerSecondSquared{800.0F},
+                        .airSpeed = nx::UnitsPerSecond{30.0F},
                         .minGroundNormalZ = 0.7F,
                         .areaCosts = {}};
 }

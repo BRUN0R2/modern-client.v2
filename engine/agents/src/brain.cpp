@@ -266,11 +266,10 @@ Brain::Brain(Rules settings) : rules{settings} {
             std::isfinite(rules.braking) && rules.braking >= 0.0F && std::isfinite(rules.stopSpeed.value()) &&
             rules.stopSpeed >= UnitsPerSecond{} && std::isfinite(rules.acceleration) &&
             rules.acceleration >= 0.0F && std::isfinite(rules.crouchedShare) && rules.crouchedShare > 0.0F &&
-            rules.crouchedShare <= 1.0F && std::isfinite(rules.airSpeed.value()) &&
-            rules.airSpeed >= UnitsPerSecond{},
+            rules.crouchedShare <= 1.0F,
         "Brain: positive rules, a memory budget, and a reaction time, a replan share, a short-term "
-        "memory, a threat's recency and margin, a braking, a stop speed, an acceleration and an air speed of "
-        "none or more, and a crouched share of more than none to one");
+        "memory, a threat's recency and margin, a braking, a stop speed and an acceleration of none or more, "
+        "and a crouched share of more than none to one");
 }
 
 void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate rate) {
@@ -629,7 +628,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
         if (crossing->kind == navigation::AreaKind::Ladder) {
             climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());
         } else {
-            flyFor(decision.intent, feet, crossing->end, velocity, rules.airSpeed);
+            flyFor(decision.intent, feet, crossing->end, velocity, profile.airSpeed);
         }
         decision.intent.crouches = crouchesAcross();
         return decision;
@@ -797,9 +796,9 @@ void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
                 corner == lastCorner && next
                     ? takeoffSpeedOf(*next, profile, rules.arrivalDistance, bodyMotion(maxSpeed))
                     : 0.0F;
-            const float passShare = takeoff > rules.airSpeed.value() ? takeoff / maxSpeed.value()
-                                    : jumpsThere                     ? jumpShareOf(into, beyond)
-                                                                     : passShareOf(into, beyond);
+            const float passShare = takeoff > profile.airSpeed.value() ? takeoff / maxSpeed.value()
+                                    : jumpsThere                       ? jumpShareOf(into, beyond)
+                                                                       : passShareOf(into, beyond);
             intent.approaches[intent.approachCount++] = {.distance = HammerUnits{along},
                                                          .passShare = passShare};
         }
@@ -825,14 +824,14 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, bool isOnGround, Vec3 v
     const float takeoff = takeoffSpeedOf(*next, linkProfile, rules.arrivalDistance, body);
     // A link up it jumps once, from its start, and one over a gap; one down it walks off.
     const bool jumps = next->kind != navigation::AreaKind::Ladder &&
-                       (next->end.z > next->start.z || takeoff > rules.airSpeed.value());
+                       (next->end.z > next->start.z || takeoff > linkProfile.airSpeed.value());
     if (jumps && !isOnGround) {
         // In the air, as a body running down stairs flies from step to step, a jump is nothing, and it would
         // spend the one it has for the link: it walked off the step it was to leap from into the gap.
         return false;
     }
     const Vec3 across = wayAcross(next->end - next->start, Vec3{.x = 1.0F});
-    if (takeoff > rules.airSpeed.value() && !hasRunUp &&
+    if (takeoff > linkProfile.airSpeed.value() && !hasRunUp &&
         dot(acrossOf(velocity), across) < takeoff * kEnoughTakeoff) {
         // Too slow for the gap, it backs off along the way across it for a run at it, as far as its run gains
         // it the speed, no farther than the floor behind the start goes, straight back from it on the mesh:
@@ -858,7 +857,7 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, bool isOnGround, Vec3 v
         return true;
     }
     decision.intent.jumps = jumps;
-    flyFor(decision.intent, feet, crossing->end, velocity, rules.airSpeed);
+    flyFor(decision.intent, feet, crossing->end, velocity, linkProfile.airSpeed);
     return true;
 }
 

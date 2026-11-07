@@ -74,6 +74,9 @@ struct AgentProfile {
     UnitsPerSecond leapSpeed{};
     /// What pulls it down in the air.
     UnitsPerSecondSquared gravity{};
+    /// What it gains across in the air, wishing for no more speed there (PM_AirAccelerate's cap): a gap
+    /// whose flight takes no more takes no run at it (fastestTakeoffOf); none, nothing.
+    UnitsPerSecond airSpeed{};
     /// The least upward share of a floor's unit normal it stands on: a steeper floor is a wall.
     float minGroundNormalZ = 0.0F;
     /// The kinds of area that do not cost their length, each once and at least 1: A* finds the cheapest
@@ -118,8 +121,8 @@ enum class MeshBuildError : std::uint8_t {
 [[nodiscard]] auto checkSettings(const BuildSettings& settings) -> Result<void, MeshBuildError>;
 
 /// Whether `profile` can be built by `settings`, which must pass checkSettings: a name; a radius, heights
-/// and a step positive, a wall clearance of none or more, crouched no taller than standing, the jump no
-/// lower than the step; a floor's
+/// and a step positive, a wall clearance and what the air gives of none or more, crouched no taller than
+/// standing, the jump no lower than the step; a floor's
 /// normal from just above 0 to 1; each kind's cost once and at least 1; and its heights within the
 /// voxels a span counts. Errors: InvalidProfile.
 [[nodiscard]] auto checkProfile(const AgentProfile& profile, const BuildSettings& settings)
@@ -151,6 +154,7 @@ struct nx::meta::Description<nx::navigation::AgentProfile> {
         nx::meta::field<&nx::navigation::AgentProfile::dropHeight>("dropHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::leapSpeed>("leapSpeed"),
         nx::meta::field<&nx::navigation::AgentProfile::gravity>("gravity"),
+        nx::meta::field<&nx::navigation::AgentProfile::airSpeed>("airSpeed"),
         nx::meta::field<&nx::navigation::AgentProfile::minGroundNormalZ>("minGroundNormalZ"),
         nx::meta::field<&nx::navigation::AgentProfile::areaCosts>("areaCosts"),
     };
