@@ -171,6 +171,17 @@ void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
         intent.ahead = intent.direction;
     }
 }
+/// Heads `intent` over a link for `end`, its body at `feet` moving at `velocity`, as headFor does, driven
+/// (Intent::drive) the way its velocity must change for it to go there at the speed it has across, or at
+/// `airSpeed` if more. In the air a GoldSrc body gains nothing along the way it flies faster than its air
+/// speed already (PM_AirAccelerate's cap), and across that way as much as it wishes for: wishing for the end
+/// alone, a body that took off at an angle flew on beside the floor it was to land on.
+void flyFor(Intent& intent, Vec3 feet, Vec3 end, Vec3 velocity, UnitsPerSecond airSpeed) noexcept {
+    headFor(intent, feet, end);
+    const Vec3 steered = intent.direction * std::max(length(acrossOf(velocity)), airSpeed.value());
+    intent.steered = steered;
+    intent.drive = driveToward(steered, velocity);
+}
 /// How far across into a volume a body goes to be in it: the game finds it in by the volume's hull, which a
 /// box that only meets its side may stay out of, a body standing for good at a door it never opened.
 constexpr HammerUnits kEntryDepth{4.0F};
@@ -618,7 +629,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, UnitsPerSecond
         if (crossing->kind == navigation::AreaKind::Ladder) {
             climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());
         } else {
-            headFor(decision.intent, feet, crossing->end);
+            flyFor(decision.intent, feet, crossing->end, velocity, rules.airSpeed);
         }
         decision.intent.crouches = crouchesAcross();
         return decision;
@@ -841,7 +852,7 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, Vec3 velocity, UnitsPer
     decision.intent.jumps =
         crossing->end.z > crossing->start.z ||
         takeoffSpeedOf(*crossing, linkProfile, rules.arrivalDistance, body) > rules.airSpeed.value();
-    headFor(decision.intent, feet, crossing->end);
+    flyFor(decision.intent, feet, crossing->end, velocity, rules.airSpeed);
     return true;
 }
 

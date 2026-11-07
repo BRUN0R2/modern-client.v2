@@ -1387,6 +1387,68 @@ TEST(AgentBrain, ABodyTooSlowForAGapBacksOffForARunAtItAndJumpsItAtSpeed) {
     EXPECT_GT(leaping.intent.direction.x, 0.0F) << "on across";
 }
 
+/// How a GoldSrc body gains speed in the air (PM_AirAccelerate): along the way it is driven, by
+/// sv_airaccelerate times the speed it wishes for a second, up to no more than 30 units a second along that
+/// way.
+struct AirBody {
+    static constexpr float kAirAccelerate = 10.0F;
+    static constexpr float kAirWishSpeed = 30.0F;
+
+    nx::Vec3 feet{};
+    nx::Vec3 velocity{};
+
+    void fly(const nx::agents::Intent& intent, float maxSpeed, float seconds) {
+        const nx::Vec3 driven = intent.drivenWay();
+        const float wished = nx::length(driven) > 0.0F ? maxSpeed * intent.speedShare : 0.0F;
+        const float gained = std::min(wished, kAirWishSpeed) - nx::dot(velocity, driven);
+        if (wished > 0.0F && gained > 0.0F) {
+            velocity = velocity + (driven * std::min(kAirAccelerate * wished * seconds, gained));
+        }
+        feet = feet + (velocity * seconds);
+    }
+};
+
+TEST(AgentBrain, ABodyThatLeapsAGapAtAnAngleTakesBackItsDriftAcrossItsWayInTheAir) {
+    const auto mesh = gapMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    const nx::Vec3 goal{.x = 900, .y = 256};
+    auto planned = nx::navigation::Corridor::plan(query, {.from = {.x = 400, .y = 256}, .to = goal});
+    ASSERT_TRUE(planned.has_value());
+    const auto link = planned->nextLink(query);
+    ASSERT_TRUE(link.has_value());
+    ASSERT_NEAR(link->end.y, link->start.y, 1.0F) << "a way straight across the gap";
+
+    // Come at the gap's edge at an angle, a third of its speed across the way over the gap, it leaps, and
+    // flies, decided each tick, until it is as far across as the link's end, within the 0.646 s a leap is in
+    // the air.
+    constexpr nx::Vec3 kAtAnAngle{.x = 220.0F, .y = -80.0F};
+    constexpr float kTick = 0.01F;
+    constexpr int kMostTicksInTheAir = 65;
+    const auto leap = [&](bool isDriven) {
+        nx::agents::Brain brain{brakingRules()};
+        brain.setGoal(goal);
+        AirBody body{.feet = link->start - nx::Vec3{.x = 2.0F}, .velocity = kAtAnAngle};
+        for (int tick = 0; tick < kMostTicksInTheAir && body.feet.x < link->end.x; ++tick) {
+            nx::agents::Decision decision =
+                brain.decide(body.feet, query, kRunSpeed, tick == 0, body.velocity);
+            EXPECT_EQ(decision.intent.jumps, tick == 0);
+            if (!isDriven) {
+                decision.intent.drive.reset(); // wishing for the end alone
+            }
+            body.fly(decision.intent, kRunSpeed.value(), kTick);
+        }
+        return body;
+    };
+    const float radius = mesh.profile().radius.value();
+    const AirBody driven = leap(true);
+    EXPECT_GE(driven.feet.x, link->end.x) << "over the far floor in time";
+    EXPECT_LT(std::abs(driven.feet.y - link->end.y), radius) << "its box over the way it lands on";
+    EXPECT_GT(driven.velocity.x, 0.9F * kAtAnAngle.x) << "on across at the speed it leapt at";
+    // Driven along the way it flies, the air gives a body nothing: it flew on beside the floor.
+    const AirBody undriven = leap(false);
+    EXPECT_GT(std::abs(undriven.feet.y - link->end.y), 2.0F * radius);
+}
+
 TEST(AgentBrain, ABodyThatRunsTooSlowlyForAGapSearchesNoWayOverItAndOneFastEnoughDoes) {
     const auto mesh = gapMesh();
     nx::navigation::NavigationQuery query{mesh};

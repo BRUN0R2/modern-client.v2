@@ -59,8 +59,11 @@ convex polygons, through Recast and Detour.
   the link's id; and how far the floor goes on behind it, away from its end, which a walk on the mesh tells as
   Detour takes the tiles. A brain crosses one from its start, jumping once for a link up or
   across a gap, ducking in the air over a crouched jump up or across a gap, having slowed down for what the link's
-  way turns across its own, since in the air a body flies on, and heads for its end without steering, as
-  DetourCrowd moves an agent over a link. It has crossed only on the
+  way turns across its own, since in the air a body flies on, and heads for its end round nothing, as
+  DetourCrowd moves an agent over a link, driven the way its velocity must change to go there (`Intent::drive`):
+  in the air a GoldSrc body gains nothing along the way it flies faster than the air gives it, and across that
+  way as much as it wishes for, so that a body come at a link at an angle takes back its drift across the link's
+  way rather than fly on beside the floor it was to land on. It has crossed only on the
   ground, at the height of the end and as far from the start; back on the ground below that height it fell short,
   and searches its way anew from where it stands. Back short of one link twice in a row, its ways keep off that
   link (`PathRequest::shunned`) for as long as they have another: a link is flown at the fastest body's speed, and
