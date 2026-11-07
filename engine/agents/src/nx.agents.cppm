@@ -148,7 +148,8 @@ struct Intent {
     /// rather than circle round what it heads for; none to drive it along direction.
     std::optional<Vec3> drive{};
     /// The velocity it steered to, across, what drive is worked out from (driveToward): for who holds its
-    /// intent over ticks, its velocity changing meanwhile; none when it did not steer, or wiggles.
+    /// intent over ticks, its velocity changing meanwhile; over a link, toward the link's end at the speed it
+    /// has; none when it did neither, or wiggles.
     std::optional<Vec3> steered{};
 
     /// The way to drive a body that gains speed only along the way it is driven: drive, else direction.
@@ -234,7 +235,8 @@ public:
     /// (noteStuck). Its feet within arrivalDistance of the start of
     /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up or over a
     /// gap, from the ground, as one in the air, flying down stairs, cannot jump and waits to land, and heads
-    /// for the link's end, which its corridor goes on from, until it stands on the ground, `isOnGround`,
+    /// for the link's end, which its corridor goes on from, driven the way its velocity must change to go
+    /// there at the speed it has across (Intent::drive), until it stands on the ground, `isOnGround`,
     /// within a step of the end's height as far from the start as the end is; back on it below that height,
     /// as it fell off a ledge it jumped at, it searches its way anew from there; at that height, it walks on
     /// to the end. Across it, it searches no way, as DetourCrowd plans none for an agent over a link, the
@@ -283,7 +285,7 @@ public:
     /// a body that gains speed only along the way it is driven is to be driven (Intent::drive) the way its
     /// velocity must change to become the steered one, as DetourCrowd integrates an agent's velocity toward
     /// its desired one, unless it goes within a tenth of how it steers. Across a link, it heads for the
-    /// link's end as it decided, off the mesh, as DetourCrowd moves an agent over a link without steering.
+    /// link's end as it decided, off the mesh, round nothing, as DetourCrowd moves an agent over a link.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
     /// Its body is stuck (StuckWatch), which draws it away from its way: it forgets the corner it last
