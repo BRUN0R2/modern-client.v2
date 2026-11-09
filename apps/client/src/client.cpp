@@ -46,8 +46,6 @@ constexpr std::chrono::milliseconds kMinimizedWait{50};
 /// of the time it is behind, and plays slower, rather than its frames each take as long as all the ticks they
 /// fell behind by, which fall further behind and end at a few frames a second.
 constexpr std::chrono::milliseconds kMostTickingInAFrame{33};
-/// A sound that could not be played is reported once in this long, with how many others were not.
-constexpr std::chrono::seconds kSoundFailureInterval{5};
 /// The stream of random numbers that chooses which decal a bullet leaves when its mark has several, as
 /// the original's game chooses it among them.
 constexpr std::string_view kBulletHoleStream = "bulletHoles";
@@ -82,15 +80,6 @@ public:
 /// The most decals on faces the video cvars keep: `r_decals`, never negative.
 [[nodiscard]] auto decalLimitOf(const nx::settings::VideoCvars& video) -> std::size_t {
     return nx::narrow<std::size_t>(video.decals.value());
-}
-
-/// `name` as the original's `play` reads it: a WAV file's when it has no extension.
-[[nodiscard]] auto soundFileOf(std::string_view name) -> std::string {
-    const std::size_t dot = name.rfind('.');
-    const std::size_t separator = name.find_last_of("/\\");
-    const bool hasExtension =
-        dot != std::string_view::npos && (separator == std::string_view::npos || dot > separator);
-    return hasExtension ? std::string{name} : std::format("{}.wav", name);
 }
 
 /// Turns `view` by the mouse's `moved` as the original's mouse does: sensitivity times m_yaw degrees
@@ -149,13 +138,6 @@ private:
     [[nodiscard]] auto playedSession() const noexcept -> Session*;
     /// The navigation profiles of data/cstrike/navigation.toml. Errors: CommandFailed.
     [[nodiscard]] auto readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError>;
-    [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
-    /// Prints the names of the sound outputs, which s_device takes. Errors: CommandFailed.
-    [[nodiscard]] auto listSoundOutputs() -> nx::Result<void, ConsoleError>;
-    [[nodiscard]] auto playVolumeCommand(const nx::console::CommandLine& line)
-        -> nx::Result<void, ConsoleError>;
-    /// Plays the sound `name` names at `volume`, heard everywhere, as `play` and `playvol` do.
-    [[nodiscard]] auto playSound(std::string_view name, float volume) -> nx::Result<void, ConsoleError>;
     void noclipCommand();
     void lastWeaponCommand();
     /// Opens the console's window, or closes it.
@@ -174,9 +156,6 @@ private:
     /// Plays the map the console asked for, if any: its scene is made with the next frame, and
     /// r_decals is held as entering a game of more than one player holds it.
     void startNextSession();
-    /// Plays the sound on the output s_device names, when it names one: the system's default stays
-    /// when none has that name, logged.
-    void openNamedSoundOutput();
     /// Plays `elapsed` of the session's game, as a listen server plays it: each tick due, the command the
     /// player's input makes is the server's game's tick, whose snapshot the client's game takes.
     void playSession(nx::Seconds elapsed);
@@ -186,15 +165,6 @@ private:
     /// Reads, before the session plays the frame, the view models of the weapons made or changed since
     /// (cs::Level::updateViewModels), which upload puts on the GPU, and their sounds.
     void updateWeapons();
-    /// Reads the sounds the player hears of `weapons` in hand (cs::soundFilesOf), so that no frame
-    /// waits on a file of one it plays: those of every weapon as a session starts, those of a weapon
-    /// as it is made or changed. One that cannot be read is logged, and the game plays on.
-    void readWeaponSounds(std::span<const cs::WeaponIndex> weapons);
-    /// Reads the sounds of the player's feet, breath, pain, death, use and purchases
-    /// (cs::FootstepRules::soundFiles, cs::BreathRules::soundFiles, cs::PlayerHarmRules::soundFiles,
-    /// cs::UseRules::soundFiles, cs::BuyingRules::soundFiles) as a session starts, so that none waits on its
-    /// file. One that cannot be read is logged, and the game plays on.
-    void readPlayerSounds();
     /// What tells the player what happened in the frame played.
     [[nodiscard]] auto frameNotices() noexcept -> FrameNotices;
     /// Records the frame begun in `list`, and hands it to the GPU to show.
@@ -231,14 +201,13 @@ private:
     std::unique_ptr<nx::jobs::JobSystem> m_jobs;
     std::optional<ClientBots> bots; ///< Their rules read as the client starts, so that a frame reads nothing.
     std::vector<cs::ShownEntity> shownEntities;
-    std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
+    std::optional<ClientSounds> sounds; ///< On the system's sound output, once the content is open.
     std::optional<cs::SceneShaders> m_shaders;
     std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
     std::unique_ptr<Session> m_session;             ///< The map played.
     std::unique_ptr<Session> m_nextSession;         ///< The map `map` loaded, played from the next frame.
     /// Made or changed since the scene put their view models on the GPU.
     std::vector<cs::WeaponIndex> m_changedWeapons;
-    nx::log::RateLimit m_soundFailures{kSoundFailureInterval};
     nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
     std::optional<cs::Scene> m_scene;          ///< Of the session's level, made with the first image of it.
@@ -358,17 +327,16 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(frameShaders.error()));
     }
     m_frameShaders = std::move(*frameShaders);
-    if (auto audio = cs::ClientAudio::open(m_content->vfs, settings->client.audio.volume); audio) {
-        m_audio = std::move(*audio);
-    } else {
-        nx::log::warning(kLog, "no sound: {}", nx::describe(audio.error()));
+    sounds.emplace(m_content->vfs, settings->client.audio);
+    if (auto registered = sounds->registerCommands(m_console); !registered) {
+        return registered;
     }
     // The player's files, then the command line's commands, as the original's valve.rc runs them; the
     // output s_device names is opened once they ran, the default's sounds heard until then.
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
-    openNamedSoundOutput();
+    sounds->openNamedOutput();
     auto video = openVideo(*m_options, settings->client.video.vsync.value(), readPipelineCache());
     if (!video) {
         return std::unexpected{std::move(video.error())};
@@ -401,14 +369,6 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
                .description = "Builds the agents' navigation mesh of the map again, the cache's left "
                               "aside, and plays the map again on it."},
               [this](Console&, const CommandLine& line) { return generateNavigationCommand(line); }),
-          add({.name = "play", .description = "Plays a sound heard everywhere: play <sound>."},
-              [this](Console&, const CommandLine& line) { return playCommand(line); }),
-          add({.name = "playvol",
-               .description =
-                   "Plays a sound heard everywhere at a volume from 0 to 1: playvol <sound> <volume>."},
-              [this](Console&, const CommandLine& line) { return playVolumeCommand(line); }),
-          add({.name = "s_devices", .description = "Lists the sound outputs s_device can name."},
-              [this](Console&, const CommandLine&) { return listSoundOutputs(); }),
           add({.name = "noclip", .description = "Flies through everything, or walks again."},
               [this](Console&, const CommandLine&) {
                   noclipCommand();
@@ -519,50 +479,6 @@ auto Client::generateNavigationCommand(const nx::console::CommandLine& line)
         return std::unexpected{std::move(session.error())};
     }
     m_nextSession = std::move(*session);
-    return {};
-}
-
-auto Client::listSoundOutputs() -> nx::Result<void, ConsoleError> {
-    auto names = nx::platform::audioOutputNames();
-    if (!names) {
-        return nx::fail(ConsoleError::CommandFailed, "s_devices", std::move(names.error()));
-    }
-    for (const std::string& name : *names) {
-        m_console.print(std::format("\"{}\"", name));
-    }
-    return {};
-}
-
-auto Client::playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
-    if (line.arguments().size() != 1) {
-        return nx::fail(ConsoleError::InvalidArguments, "usage: play <sound>");
-    }
-    return playSound(line.arguments().front(), kFullVolume);
-}
-
-auto Client::playVolumeCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
-    constexpr std::string_view kUsage = "usage: playvol <sound> <volume>";
-    if (line.arguments().size() != 2) {
-        return nx::fail(ConsoleError::InvalidArguments, std::string{kUsage});
-    }
-    const std::string& text = line.arguments()[1];
-    float volume = 0.0F;
-    if (const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), volume);
-        error != std::errc{} || end != text.data() + text.size()) {
-        return nx::fail(ConsoleError::InvalidArguments, std::string{kUsage});
-    }
-    return playSound(line.arguments().front(), volume);
-}
-
-auto Client::playSound(std::string_view name, float volume) -> nx::Result<void, ConsoleError> {
-    if (m_audio == nullptr) {
-        m_console.print("Can't play a sound, no sound output");
-        return {};
-    }
-    const std::string file = soundFileOf(name);
-    if (auto played = m_audio->playLocal(file, volume); !played) {
-        return nx::fail(ConsoleError::CommandFailed, std::format("play {}", file), std::move(played.error()));
-    }
     return {};
 }
 
@@ -701,12 +617,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         std::ignore = m_console.execute();
         buyMenu->update();
         showCursorAsNeeded();
-        if (m_audio != nullptr) {
-            // The original is silent while its window is not focused.
-            const bool isHeard = m_isFocused || settings->client.audio.playUnfocused.value();
-            m_audio->setMuting(isHeard ? cs::Muting::Off : cs::Muting::On);
-            m_audio->update();
-        }
+        sounds->update(m_isFocused);
         startNextSession();
         updateWeapons();
         const nx::Seconds elapsed = m_frameClock.restart();
@@ -722,7 +633,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_camera.position = m_session->client.eye();
             m_session->client.updatePlayers(elapsed, settings->corpses.stayTime(), m_players);
             turnAsTheGameDid();
-            hearSession(*m_session, m_audio.get(), hearing, m_soundFailures);
+            sounds->hear(*m_session, hearing);
             // r_decals as it is now, as the original reads it at each decal.
             m_scene->setDecalLimit(decalLimitOf(settings->client.video));
             stampMarks(*m_session, *m_scene, *m_content, m_bulletHoles);
@@ -768,19 +679,6 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
     return {};
 }
 
-void Client::openNamedSoundOutput() {
-    const std::string& name = settings->client.audio.device.value();
-    if (name.empty()) {
-        return;
-    }
-    auto audio = cs::ClientAudio::open(m_content->vfs, settings->client.audio.volume, name);
-    if (!audio) {
-        nx::log::warning(kLog, "s_device {:?}: {}; the default plays", name, nx::describe(audio.error()));
-        return;
-    }
-    m_audio = std::move(*audio);
-}
-
 void Client::startNextSession() {
     if (!m_nextSession) {
         return;
@@ -804,8 +702,8 @@ void Client::startNextSession() {
     }
     buyMenu->reset();
     m_changedWeapons.clear(); // the new level read every weapon's view model
-    readWeaponSounds(m_session->level->weapons());
-    readPlayerSounds();
+    sounds->readWeapons(m_content->weapons, *m_session->level, m_session->level->weapons());
+    sounds->readPlayer(*m_content);
     m_camera.position = m_session->client.eye();
     turnAsTheGameDid();
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
@@ -842,44 +740,8 @@ void Client::updateWeapons() {
     }
     const std::vector<cs::WeaponIndex> changed =
         m_session->level->updateViewModels(m_content->vfs, m_content->weapons);
-    readWeaponSounds(changed);
+    sounds->readWeapons(m_content->weapons, *m_session->level, changed);
     m_changedWeapons.insert(m_changedWeapons.end(), changed.begin(), changed.end());
-}
-
-void Client::readWeaponSounds(std::span<const cs::WeaponIndex> weapons) {
-    if (m_audio == nullptr) {
-        return;
-    }
-    for (const cs::WeaponIndex weapon : weapons) {
-        if (!m_content->weapons.isComplete(weapon)) {
-            continue; // it makes no sound until its values make a weapon, which changes it again
-        }
-        const cs::Weapon& made = m_content->weapons.weapon(weapon);
-        for (const std::string_view file : cs::soundFilesOf(made, m_session->level->viewModel(weapon))) {
-            if (auto read = m_audio->preload(file); !read) {
-                nx::log::warning(kLog, "a sound of {} cannot be read: {}", made.id,
-                                 nx::describe(read.error()));
-            }
-        }
-    }
-}
-
-void Client::readPlayerSounds() {
-    if (m_audio == nullptr) {
-        return;
-    }
-    for (const auto& [what, files] : {std::pair{"footsteps", m_content->footsteps.soundFiles()},
-                                      std::pair{"breath", m_content->breath.soundFiles()},
-                                      std::pair{"harm", m_content->playerHarm.soundFiles()},
-                                      std::pair{"use", m_content->use.soundFiles()},
-                                      std::pair{"purchases", m_content->buying.soundFiles()}}) {
-        for (const std::string_view file : files) {
-            if (auto read = m_audio->preload(file); !read) {
-                nx::log::warning(kLog, "a sound of the {} cannot be read: {}", what,
-                                 nx::describe(read.error()));
-            }
-        }
-    }
 }
 
 auto Client::frameNotices() noexcept -> FrameNotices {

@@ -14,6 +14,7 @@ export import :settings;
 export import :buyMenu;
 export import :bots;
 export import :navigationView;
+export import :sounds;
 export import :video;
 export import :agentMeshes;
 export import :session;
