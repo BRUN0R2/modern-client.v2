@@ -67,10 +67,16 @@ jobs:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\build\vcpkgCache
       LLVM_VERSION: "23.1.4"
       LLVM_SHA256: "15E49ACA3540991A6F28A0E57BABAB67DA82155C4F73F79DD5E8666A851F9127"
+      # LLVM's script that runs clang-tidy on the lines a diff changes, of the same release.
+      CLANG_TIDY_DIFF_SHA256: "A73491B43E3A819531AA6B7EADE262B8FC49824A1E1A97FF550764E8FCE41CE9"
       VULKAN_SDK_VERSION: "1.4.363.0"
       VULKAN_SDK_SHA256: "94A82D378F7A5E3E54C9DB7D2FB7016AF136E14AC0A18DBF0F2F67A36352D141"
     steps:
+      # Two commits deep: a pull request's merge commit and, as its first parent, the base it is
+      # analyzed against.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
 
       - uses: actions/setup-python@v7
         with:
@@ -150,6 +156,29 @@ jobs:
           "vcpkgBuilt=$((Get-ChildItem $env:VCPKG_DEFAULT_BINARY_CACHE -Recurse -File).Count -ne $cachedBinaries)" >> $env:GITHUB_OUTPUT
           cmake --build --preset ${{ matrix.preset }}
           ctest --preset ${{ matrix.preset }}
+
+      - name: Download clang-tidy-diff
+        if: matrix.compiler == 'Clang' && github.event_name == 'pull_request'
+        uses: ./.github/actions/cachedDownload
+        with:
+          url: https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-${{ env.LLVM_VERSION }}/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py
+          sha256: ${{ env.CLANG_TIDY_DIFF_SHA256 }}
+          path: ${{ runner.temp }}\clang-tidy-diff.py
+
+      # The repository's profile (.clang-tidy) on the lines the pull request changes, against the
+      # Clang modules the build made (docs/18, "Sanitizers and analysis"): what it makes errors (no magic
+      # numbers, the naming, bugprone-*, concurrency-*) fails the job.
+      - name: Static analysis of the changed lines
+        if: matrix.compiler == 'Clang' && github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          . ./scripts/devShell.ps1
+          $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
+          clang-tidy --version
+          git diff --ignore-all-space --unified=0 HEAD^1 HEAD -- '*.cpp' '*.cppm' |
+              python "$env:RUNNER_TEMP\clang-tidy-diff.py" -p1 -regex '.*\.(cpp|cppm)' `
+                  -path build/dev-windows-clang -clang-tidy-binary clang-tidy -j 4
 
       # Only main writes caches: pull requests read main's, and their own would crowd main's out of
       # the repository's cache quota.
