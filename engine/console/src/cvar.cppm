@@ -363,6 +363,13 @@ public:
     [[nodiscard]] auto set(Type newValue) const -> Result<void, CvarError> {
         return m_cvar->set(std::move(newValue));
     }
+    /// Sets `newValue`, which the caller knows the cvar accepts: a value TypedCvar::set takes, as a
+    /// rule holding a value back within its bounds writes one. A value it refuses breaks the
+    /// precondition; it is no expected failure.
+    void setAccepted(Type newValue) const {
+        const bool isSet = m_cvar->set(std::move(newValue)).has_value();
+        expects(isSet, "Cvar::setAccepted: a value the cvar accepts");
+    }
 
     /// The cvar's name, flags and revision, as CvarBase gives them.
     [[nodiscard]] auto name() const noexcept -> std::string_view { return m_cvar->name(); }

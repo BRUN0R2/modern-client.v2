@@ -89,8 +89,17 @@ TEST_F(CatalogTest, AFoldersFontFilesAreItsFaces) {
     FontCatalog catalog;
     const auto added = catalog.addFolder(directory.path());
     ASSERT_TRUE(added.has_value()) << nx::describe(added.error());
-    EXPECT_EQ(*added, 4U) << "the text and the broken file left out";
+    EXPECT_EQ(added->faces, 4U) << "the text and the broken file left out";
     EXPECT_EQ(catalog.faces().size(), 4U);
+}
+
+TEST_F(CatalogTest, AFontFileLeftOutTellsWhy) {
+    FontCatalog catalog;
+    const auto added = catalog.addFolder(directory.path());
+    ASSERT_TRUE(added.has_value()) << nx::describe(added.error());
+    ASSERT_EQ(added->leftOut.size(), 1U) << "the broken file; the text is no font file";
+    EXPECT_EQ(added->leftOut[0].code, nx::ui::FontError::NotAFont);
+    EXPECT_TRUE(added->leftOut[0].detail.contains("broken.ttf")) << added->leftOut[0].detail;
 }
 
 TEST_F(CatalogTest, AFolderThatCannotBeListedIsUnreadable) {

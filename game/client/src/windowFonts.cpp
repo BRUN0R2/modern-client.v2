@@ -51,8 +51,13 @@ auto WindowFonts::open(const nx::assets::Vfs& vfs, nx::ui::FontCatalog& catalog)
         return std::unexpected{std::move(scheme.error())};
     }
     for (const std::filesystem::path& folder : nx::platform::fontFolders()) {
-        if (auto added = catalog.addFolder(folder); !added) {
+        auto added = catalog.addFolder(folder);
+        if (!added) {
             nx::log::warning(kLog, "the fonts of a folder are left out: {}", nx::describe(added.error()));
+            continue;
+        }
+        for (const nx::Failure<nx::ui::FontError>& leftOut : added->leftOut) {
+            nx::log::warning(kLog, "a font file is left out: {}", nx::describe(leftOut));
         }
     }
     return WindowFonts{std::move(*scheme), catalog};
