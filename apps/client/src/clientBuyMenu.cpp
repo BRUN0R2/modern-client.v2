@@ -22,12 +22,12 @@ constexpr nx::log::Category kLog{"client"};
 
 } // namespace
 
-ClientBuyMenu::ClientBuyMenu(const cs::GameContent& content, PlayedSession played,
-                             const nx::platform::Stopwatch& mapClock)
-    : played{std::move(played)}, mapClock{&mapClock}, content{.weapons = &content.weapons,
-                                                              .armorPrices = &content.buying.armor,
-                                                              .look = &content.buyMenu,
-                                                              .armorRatio = content.playerHarm.armor.ratio},
+ClientBuyMenu::ClientBuyMenu(const cs::GameContent& sold, PlayedSession session,
+                             const nx::platform::Stopwatch& clock)
+    : played{std::move(session)}, mapClock{&clock}, content{.weapons = &sold.weapons,
+                                                            .armorPrices = &sold.buying.armor,
+                                                            .look = &sold.buyMenu,
+                                                            .armorRatio = sold.playerHarm.armor.ratio},
       menu{this->content, buyActions()}, panel{std::in_place, this->content} {}
 
 auto ClientBuyMenu::buyActions() -> cs::BuyActions {

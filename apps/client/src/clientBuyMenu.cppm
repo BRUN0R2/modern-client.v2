@@ -24,10 +24,9 @@ namespace app {
 /// what was refused. It stays where it is made: its commands point into it.
 class ClientBuyMenu {
 public:
-    /// The menu of what `content` sells to the player of the session `played` gives, its notices timed by
-    /// `mapClock`; both must outlive it.
-    ClientBuyMenu(const cs::GameContent& content, PlayedSession played,
-                  const nx::platform::Stopwatch& mapClock);
+    /// The menu of what `sold` sells to the player of the session `session` gives, its notices timed by
+    /// `clock`, the map's; `sold` and `clock` must outlive it.
+    ClientBuyMenu(const cs::GameContent& sold, PlayedSession session, const nx::platform::Stopwatch& clock);
 
     ClientBuyMenu(const ClientBuyMenu&) = delete;
     auto operator=(const ClientBuyMenu&) -> ClientBuyMenu& = delete;
