@@ -130,7 +130,9 @@ such sizes.
 folders and `~/.fonts`) and of the files a scheme brings (`CustomFontFiles`), each described by
 reading only its tables: its family (name ID 1, in each language the file gives it), style, weight
 and italics; a name longer than the 31 characters GDI's LOGFONT holds is no family a scheme can ask
-for, and a collection gives at most 64 faces, so that no file makes the scan run long. GDI was asked for each weight from 0 to 1000 in Tahoma, Verdana, Arial, Trebuchet MS,
+for, and a collection gives at most 64 faces, so that no file makes the scan run long. A font file
+of a folder that cannot be added is left out, and why is told to the caller (`AddedFonts::leftOut`),
+which logs it. GDI was asked for each weight from 0 to 1000 in Tahoma, Verdana, Arial, Trebuchet MS,
 Segoe UI and Marlett, and `choose` reproduces what it gave:
 
 - the family by its name ID 1 only, in any case: "Verdana Bold", which `cstrike`'s
@@ -609,7 +611,9 @@ views over an `nx::console::Console`, which writes replies and failures to a
 | `ServerProtected` | The value comes from the server: the console never changes it (`ServerProtected`), only the code does. On the client, this is the case of the movement cvars replicated for prediction |
 
 The code reads and writes through the typed handle (`Cvar<float>`), which validates the
-type and range, but not the flags. The `Console` belongs to one thread (the main one,
+type and range, but not the flags: `set` returns the refusal, and `setAccepted` takes a value the
+code knows the cvar accepts (a rule holding a value back within its bounds), a refused one breaking
+its precondition. The `Console` belongs to one thread (the main one,
 between frames), and the simulation copies the values it needs at the start of the tick
 (`MovementSettings`).
 

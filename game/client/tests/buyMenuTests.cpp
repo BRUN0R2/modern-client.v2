@@ -595,7 +595,8 @@ TEST(BuyMenuDataTest, ItsFontsAreTheProjectsOwnAndWriteAllItSays) {
     nx::ui::FontCatalog fonts;
     const auto added = fonts.addFolder(std::filesystem::path{NX_DATA_DIRECTORY} / "fonts");
     ASSERT_TRUE(added.has_value());
-    EXPECT_EQ(*added, 2U);
+    EXPECT_EQ(added->faces, 2U);
+    EXPECT_TRUE(added->leftOut.empty());
     constexpr std::array kWritten{U'$', U',', U':', U'/', U'%', U'|',     U'+',
                                   U'.', U'0', U'9', U'A', U'z', U'\u00B7'};
     for (const auto& [family, weight] : {std::pair{std::string_view{game->buyMenu.font.regular}, 400},

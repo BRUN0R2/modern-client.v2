@@ -8,6 +8,7 @@ import nx.core;
 import nx.console;
 
 #include "consoleFixtures.hpp"
+#include "contractRecorder.hpp"
 
 namespace {
 
@@ -92,6 +93,22 @@ TEST_F(CvarRegistrationTest, SettingFromCodeChecksTheRangeAndCountsChanges) {
     EXPECT_EQ(refused.error().code, CvarError::OutOfRange);
     EXPECT_EQ(refused.error().detail, R"(mp_freezetime: expected a whole number in [0, 60], got "61")");
     EXPECT_EQ(freezeTime->value(), 10);
+}
+
+TEST_F(CvarRegistrationTest, AValueCodeKnowsTheCvarAcceptsIsSetAndOneItRefusesBreaksTheContract) {
+    const auto freezeTime = console.registerCvar(
+        CvarDesc<std::int32_t>{.name = "mp_freezetime", .defaultValue = 6, .minimum = 0, .maximum = 60});
+    ASSERT_TRUE(freezeTime.has_value());
+    const nx::test::ContractRecorder recorder;
+
+    freezeTime->setAccepted(60);
+    EXPECT_EQ(freezeTime->value(), 60);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 0);
+
+    freezeTime->setAccepted(61);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::last().kind, nx::ContractKind::Precondition);
+    EXPECT_EQ(freezeTime->value(), 60) << "the value refused is not set";
 }
 
 TEST(CvarTextTest, BoolsAreZeroOrOne) {

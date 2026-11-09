@@ -24,8 +24,9 @@ auto main(int argumentCount, char** argumentValues) -> int {
         std::print("{}", app::kClientUsage);
         return EXIT_SUCCESS;
     }
-    const std::optional<app::ClientOptions> options = app::parseClientOptions(arguments);
+    const nx::Result<app::ClientOptions, app::CommandLineError> options = app::parseClientOptions(arguments);
     if (!options) {
+        std::println(stderr, "next: {}", nx::describe(options.error()));
         std::print(stderr, "{}", app::kClientUsage);
         return kExitUnusable;
     }

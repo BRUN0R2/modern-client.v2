@@ -885,6 +885,10 @@ void Client::lastWeaponCommand() {
 void Client::openWindowText(std::uint32_t screenHeight) {
     if (auto added = m_fonts.addFolder(dataFolder / kFontsFolder); !added) {
         nx::log::warning(kLog, "the project's fonts cannot be read: {}", nx::describe(added.error()));
+    } else {
+        for (const nx::Failure<nx::ui::FontError>& leftOut : added->leftOut) {
+            nx::log::warning(kLog, "a font file of the project's is left out: {}", nx::describe(leftOut));
+        }
     }
     auto fonts = cs::WindowFonts::open(m_content->vfs, m_fonts);
     if (!fonts) {
