@@ -15,6 +15,7 @@ import nx.render;
 import nx.ui;
 
 #include "gpuScreen.hpp"
+#include "pixelGeometry.hpp"
 
 namespace {
 
@@ -34,7 +35,7 @@ protected:
     RichTextTest() { text.setFace({.atlas = &atlas}); }
 
     nx::ui::GlyphAtlas atlas = nx::test::squareAtlas();
-    RichText text{"Output", {.wide = 50, .tall = 60}};
+    RichText text{"Output", nx::test::rectOf(0, 0, 50, 60)};
 };
 
 TEST_F(RichTextTest, LinesWrapAtTheirLastSpaceThatFits) {
@@ -64,7 +65,7 @@ TEST_F(RichTextTest, ScrollsWithinItsRows) {
 }
 
 TEST(RichTextCapacityTest, TheOldestLinesGoFirst) {
-    RichText text{"Output", {.wide = 50, .tall = 60}, 2};
+    RichText text{"Output", nx::test::rectOf(0, 0, 50, 60), 2};
     for (const std::string_view line : {"one", "two", "three"}) {
         text.append({.text = std::string{line}});
     }
@@ -79,7 +80,7 @@ TEST(RichTextDrawTest, TheNewestRowsUpFromItsBottom) {
     if (!screen.isReady()) {
         GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
     }
-    RichText text{"Output", {.x = 0, .y = 0, .wide = 50, .tall = 45}};
+    RichText text{"Output", nx::test::rectOf(0, 0, 50, 45)};
     text.setFace(screen.face());
     text.append({.text = "B"});
     text.append({.text = "A", .color = kRed});

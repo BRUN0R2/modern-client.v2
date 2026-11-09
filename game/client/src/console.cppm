@@ -25,7 +25,7 @@ inline constexpr std::string_view kConsoleFont = "Default";
 
 /// Where the console's window goes on a screen of `size`: in its middle, three quarters of it each
 /// way, until the original's place is measured.
-[[nodiscard]] auto consoleBounds(nx::rhi::Extent2d size) -> nx::ui::PanelBounds;
+[[nodiscard]] auto consoleBounds(nx::rhi::Extent2d size) -> nx::ui::PixelRect;
 
 /// The console's window over a console: its font at a screen's height, the atlas of its characters, put
 /// on the GPU with the screen's pictures, and the dialog it shows them in, painted while it is open. It

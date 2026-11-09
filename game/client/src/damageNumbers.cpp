@@ -164,11 +164,12 @@ void DamageNumbers::append(std::vector<nx::render::ScreenQuad>& quads, const nx:
     }
     const auto width = static_cast<float>(size.width);
     const auto height = static_cast<float>(size.height);
-    const nx::ui::FontMetrics& metrics = m_atlas.metrics();
-    const auto line = static_cast<float>(metrics.height());
+    // Drawn in fractions of a pixel, as it grows and rises.
+    const auto line = static_cast<float>(m_atlas.lineHeight().value());
     // Its digits stand on its baseline, below its line's middle by as much as its ascent passes half the
     // line.
-    const float footBelowMiddle = (static_cast<float>(metrics.ascent) - (line * 0.5F)) * m_wholeHeight / line;
+    const float footBelowMiddle =
+        (static_cast<float>(m_atlas.ascent().value()) - (line * 0.5F)) * m_wholeHeight / line;
     for (const Number& number : m_numbers) {
         const std::optional<DamageNumberPose> pose = damageNumberPoseAt(look, now - number.bornAt);
         const std::optional<nx::render::ScreenPoint> head =
@@ -182,7 +183,7 @@ void DamageNumbers::append(std::vector<nx::render::ScreenQuad>& quads, const nx:
         const float centerY = middle.y;
         // The atlas's glyphs, drawn at the pose's share of the whole size, about the number's middle.
         const float shrink = pose->scale * m_wholeHeight / line;
-        const float textWidth = static_cast<float>(nx::ui::widthOf(m_atlas, number.text));
+        const float textWidth = static_cast<float>(nx::ui::widthOf(m_atlas, number.text).value());
         const std::vector<nx::ui::PlacedGlyph> glyphs = nx::ui::layoutText(m_atlas, number.text, 0.0F, 0.0F);
         const auto quadOf = [&](const nx::ui::PlacedGlyph& glyph, float offsetX, float offsetY,
                                 nx::render::ScreenColor color) {

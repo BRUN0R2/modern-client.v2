@@ -23,8 +23,9 @@
 > VGUI2's model of widgets, layouts and schemes, so that the original's own schemes, `.res`
 > layouts and strings are read as they are; RmlUi was weighed and not chosen.
 
-**Today** (`nx.ui:panel`): retained panels, each in its parent, its children over it in their order.
-`applySettings` reads a panel's block of a layout (`.res`) by VGUI2's names in any case: `xpos` and
+**Today** (`nx.ui:panel`): retained panels, each in its parent, its children over it in their order,
+placed by a `PixelRect` from its parent's top left (`nx.ui:geometry`: points, sizes and rectangles in
+`nx::Pixels`, [02 §4.1](02-coding-standards.md#41-strong-types-and-units)). `applySettings` reads a panel's block of a layout (`.res`) by VGUI2's names in any case: `xpos` and
 `ypos`, from the parent's right or bottom with `r` and from its middle with `c` (`"r80"`,
 `"c-175"`, as the installation's layouts write them), `wide`, `tall`, `visible`, `enabled`,
 `tabPosition`, `pinCorner` and `autoResize`; `applyLayout` applies a layout's blocks to the children

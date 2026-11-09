@@ -11,6 +11,7 @@ import nx.core;
 import nx.platform;
 import nx.ui;
 
+#include "pixelGeometry.hpp"
 #include "squareFont.hpp"
 
 namespace {
@@ -73,15 +74,15 @@ TEST(TextEntryTest, ScrollsSoThatTheCursorShows) {
     ASSERT_TRUE(font.has_value());
     auto atlas = nx::ui::GlyphAtlas::build(*font, U"A");
     ASSERT_TRUE(atlas.has_value());
-    TextEntry entry{"Input", {.wide = 30, .tall = 24}};
+    TextEntry entry{"Input", nx::test::rectOf(0, 0, 30, 24)};
     entry.setFace({.atlas = &*atlas});
-    entry.setTextInset(2);
+    entry.setTextInset(nx::Pixels{2});
     entry.setText("AA");
-    EXPECT_EQ(entry.scroll(), 0) << "the cursor at 2 + 20, within 30";
+    EXPECT_EQ(entry.scroll(), nx::Pixels{0}) << "the cursor at 2 + 20, within 30";
     entry.setText("AAAA");
-    EXPECT_EQ(entry.scroll(), 13) << "the cursor's pixel at 2 + 40 - 13, the entry's last";
+    EXPECT_EQ(entry.scroll(), nx::Pixels{13}) << "the cursor's pixel at 2 + 40 - 13, the entry's last";
     std::ignore = entry.pressKey(Key::Home);
-    EXPECT_EQ(entry.scroll(), 0);
+    EXPECT_EQ(entry.scroll(), nx::Pixels{0});
 }
 
 } // namespace

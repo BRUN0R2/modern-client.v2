@@ -13,8 +13,12 @@ namespace nx::ui {
 
 namespace {
 
-/// The pixels between the window's edges and its parts, and between its parts.
-constexpr std::int32_t kSpacing = 4;
+/// Between the window's edges and its parts, and between its parts.
+constexpr Pixels kSpacing{4};
+/// Between a line and its band's edges: half kSpacing.
+constexpr Pixels kHalfSpacing{2};
+/// A spacing on each side of a part: left and right, top and bottom.
+constexpr std::int32_t kSpacedSides = 2;
 /// What the console shows before a line typed in it, as the original's does.
 constexpr std::string_view kTypedMark = "] ";
 
@@ -32,19 +36,20 @@ protected:
         if (m_face->atlas == nullptr) {
             return;
         }
-        const std::int32_t height = m_face->atlas->metrics().height();
+        const Pixels height = m_face->atlas->lineHeight();
         for (std::size_t index = 0; index < m_offered->size(); ++index) {
             const console::Completion& name = (*m_offered)[index];
-            const std::int32_t top = kSpacing / 2 + (narrow<std::int32_t>(index) * height);
+            const Pixels top = kHalfSpacing + (height * narrow<std::int32_t>(index));
             if (*m_chosen == index) {
-                painter.fill(0, top, bounds().wide, height, m_colors->chosen);
+                painter.fill({.y = top, .wide = bounds().wide, .tall = height}, m_colors->chosen);
             }
-            const std::int32_t end = painter.text(*m_face, name.name, kSpacing, top, m_colors->offered);
+            const Pixels end = painter.text(*m_face, name.name, {.x = kSpacing, .y = top}, m_colors->offered);
             const std::string_view told =
                 !name.value.empty() ? std::string_view{name.value} : name.description;
             const std::string detail =
                 name.expectation.empty() ? std::string{told} : std::format("{} ({})", told, name.expectation);
-            std::ignore = painter.text(*m_face, detail, end + (2 * kSpacing), top, m_colors->detail);
+            std::ignore = painter.text(*m_face, detail, {.x = end + (kSpacing * kSpacedSides), .y = top},
+                                       m_colors->detail); // the last on its row
         }
     }
 
@@ -57,7 +62,7 @@ private:
 
 } // namespace
 
-ConsoleDialog::ConsoleDialog(console::Console& console, PanelBounds bounds)
+ConsoleDialog::ConsoleDialog(console::Console& console, PixelRect bounds)
     : Panel{"ConsoleDialog", bounds}, m_console{&console} {
     m_output = &static_cast<RichText&>(add(std::make_unique<RichText>("ConsoleHistory")));
     m_input = &static_cast<TextEntry&>(add(std::make_unique<TextEntry>("ConsoleEntry")));
@@ -85,14 +90,15 @@ void ConsoleDialog::setColors(const ConsoleColors& colors) {
 }
 
 void ConsoleDialog::layOut() {
-    const std::int32_t line = m_face.atlas != nullptr ? m_face.atlas->metrics().height() : 0;
-    const std::int32_t inputTall = line + kSpacing;
-    const std::int32_t wide = bounds().wide - (2 * kSpacing);
-    const std::int32_t inputTop = bounds().tall - kSpacing - inputTall;
+    const Pixels line = m_face.atlas != nullptr ? m_face.atlas->lineHeight() : Pixels{};
+    const Pixels inputTall = line + kSpacing;
+    const Pixels wide = bounds().wide - (kSpacing * kSpacedSides);
+    const Pixels inputTop = bounds().tall - kSpacing - inputTall;
     m_input->setBounds({.x = kSpacing, .y = inputTop, .wide = wide, .tall = inputTall});
-    m_input->setTextInset(kSpacing / 2);
-    m_output->setBounds({.x = kSpacing, .y = kSpacing, .wide = wide, .tall = inputTop - (2 * kSpacing)});
-    const std::int32_t namesTall = (narrow<std::int32_t>(m_offered.size()) * line) + kSpacing;
+    m_input->setTextInset(kHalfSpacing);
+    m_output->setBounds(
+        {.x = kSpacing, .y = kSpacing, .wide = wide, .tall = inputTop - (kSpacing * kSpacedSides)});
+    const Pixels namesTall = (line * narrow<std::int32_t>(m_offered.size())) + kSpacing;
     m_names->setBounds({.x = kSpacing, .y = inputTop - namesTall, .wide = wide, .tall = namesTall});
     m_names->setVisible(!m_offered.empty());
 }
