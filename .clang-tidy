@@ -23,7 +23,8 @@ Checks: >
   readability-*,
   -readability-identifier-length
 
-# No magic numbers: enforced, not suggested.
+# No magic numbers: enforced, not suggested, on the lines each pull request changes (CI's
+# dev-windows-clang job, docs/18).
 WarningsAsErrors: >
   bugprone-*,
   concurrency-*,

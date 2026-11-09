@@ -296,7 +296,7 @@ and on demand. **Running today:**
 | Job | Contents | Blocking? |
 |-----|----------|-----------|
 | `checks` | `reuse lint` (license and copyright in every file), `clang-format --dry-run --Werror` and line endings (nothing but LF in the repository) | Yes |
-| `windows` | `dev-windows-msvc`, `release-windows-msvc` and `dev-windows-clang`: configure, build and tests, through the same `scripts/devShell.ps1` used for development; Clang is pinned to LLVM 23.1.4. The Vulkan SDK supplies validation layers; GPU tests skip only without a suitable adapter or Vulkan backend | Yes |
+| `windows` | `dev-windows-msvc`, `release-windows-msvc` and `dev-windows-clang`: configure, build and tests, through the same `scripts/devShell.ps1` used for development; Clang is pinned to LLVM 23.1.4. The Vulkan SDK supplies validation layers; GPU tests skip only without a suitable adapter or Vulkan backend. On a pull request, `dev-windows-clang` then runs `clang-tidy` with the repository's profile on the lines it changes, against the Clang modules the build made, and fails on what the profile makes errors ([18](18-testing-and-quality.md#sanitizers-and-analysis)) | Yes |
 | `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure with `NX_REFLECTION_BACKEND=native`, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run | Yes |
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
@@ -317,7 +317,7 @@ depend on what comes preinstalled on the runner image, nor on a download server 
   save it, and only when they built a package, under a key of their own: pull requests read
   `main`'s cache instead of crowding it out of the repository's quota, and a new compiler on
   the runner image costs one rebuild instead of one per run.
-- **Installers** (the Vulkan SDK, LLVM) are pinned by SHA-256 and downloaded once
+- **Installers** (the Vulkan SDK, LLVM) and LLVM's `clang-tidy-diff.py` are pinned by SHA-256 and downloaded once
   (`.github/actions/cachedDownload`); later runs restore them from the cache.
 - **Every job has a time limit**, so a stalled download or test fails it within the hour.
 
@@ -326,7 +326,7 @@ depend on what comes preinstalled on the runner image, nor on a download server 
 | Job | Trigger | Contents |
 |-----|---------|----------|
 | `linux-clang` | Every PR | Clang on Linux, in addition to GCC |
-| `lint` | Every PR | `clang-tidy` (with modules), `rook format --check`, `rook lint` |
+| `lint` | Every PR | `rook format --check`, `rook lint` (`clang-tidy` already runs in `windows`) |
 | `sanitizers` | Every PR | ASan + UBSan on the tests, with Clang (TSan already runs with GCC) |
 | `api-compat` | Every PR | Diff of the `.rookd` files against the last release ([15 §10](15-mod-api.md#10-versioning-and-stability)) |
 | `determinism` | Every PR | The same demo with 0, 1, 3 and 15 workers and an identical hash |

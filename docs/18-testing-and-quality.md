@@ -217,23 +217,27 @@ does not change: so a change meant to leave behavior alone is proved to, a tick 
   preset). Its suppressions (`tests/tsan.supp`) name only code that is not the project's, each
   with why: today Mesa's lavapipe, whose uninstrumented threads TSan sees through their pthread
   calls only, and the LLVM its llvmpipe threads compile shaders through. Planned: ASan + UBSan on every pull request and a nightly MSan, when Clang joins CI.
-- `clang-tidy` runs locally against `build/dev-windows-clang/compile_commands.json` and the Clang
-  modules produced by a complete build. Use LLVM 23.1.4's `clang-tidy-diff.py` with a zero-context
-  Git diff and `-p1 -path build/dev-windows-clang`; the full repository profile applies to changed
-  lines. Existing private `m_` declarations remain naming inconsistencies under [02 §3.1](02-coding-standards.md#31-project-rule-camelcase),
-  recorded in `TODO.md`, without unrelated renames or disabled naming checks. An automated
-  analysis gate remains planned; the Clang build and tests already run in CI.
-  A header is analyzed through a translation unit that includes it after the required module
-  imports; headers that depend on their consumer's imports are not standalone translation units.
+- `clang-tidy` runs against `build/dev-windows-clang/compile_commands.json` and the Clang modules
+  produced by a complete build: LLVM 23.1.4's `clang-tidy-diff.py` with a zero-context Git diff and
+  `-p1 -path build/dev-windows-clang`, the full repository profile applied to the changed lines. CI
+  runs it on every pull request, after the `dev-windows-clang` build, against the pull request's
+  base, and what the profile makes errors (no magic numbers, the naming, `bugprone-*`,
+  `concurrency-*`) fails the job ([17 §7](17-build-and-tools.md#7-continuous-integration)). A
+  private `m_` declaration a change touches takes the project's naming
+  ([02 §3.1](02-coding-standards.md#31-project-rule-camelcase)); those left untouched remain known
+  inconsistencies, without unrelated renames or disabled naming checks.
+  A header is analyzed through the translation units that include it after the required module
+  imports, when they change too; headers that depend on their consumer's imports are not standalone
+  translation units, so the diff's filter takes `.cpp` and `.cppm` files alone.
 
-  With LLVM on `PATH`, set `$reviewBase` to the commit before the changes being reviewed. The explicit
-  filter includes `.cppm` module interfaces, which the script's default filter omits:
+  Locally, with LLVM on `PATH`, set `$reviewBase` to the commit before the changes being reviewed. The
+  explicit filter includes `.cppm` module interfaces, which the script's default filter omits:
 
   ```powershell
   $tidyDiff = Join-Path $env:TEMP 'clang-tidy-diff.py'
   Invoke-WebRequest 'https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.4/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py' -OutFile $tidyDiff
-  git diff --ignore-all-space --unified=0 $reviewBase -- '*.cpp' '*.cppm' '*.hpp' |
-      python $tidyDiff -p1 -regex '.*\.(cpp|cppm|hpp)' -path build/dev-windows-clang -clang-tidy-binary clang-tidy -j 4
+  git diff --ignore-all-space --unified=0 $reviewBase -- '*.cpp' '*.cppm' |
+      python $tidyDiff -p1 -regex '.*\.(cpp|cppm)' -path build/dev-windows-clang -clang-tidy-binary clang-tidy -j 4
   ```
 
 - Fuzzing of the parsers of external data (`tests/fuzz`, libFuzzer with AddressSanitizer): every
