@@ -47,6 +47,9 @@ struct Session {
     std::unique_ptr<cs::Bots> bots{};
 };
 
+/// The session a command acts on; none without one.
+using PlayedSession = std::function<Session*()>;
+
 /// Whether the game draws a weapon given heavier than the one held, as `_cl_autowepswitch` says.
 [[nodiscard]] auto autoSwitchOf(const nx::settings::PlayerCvars& player) -> cs::AutoSwitch;
 

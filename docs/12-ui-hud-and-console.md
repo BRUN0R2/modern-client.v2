@@ -433,7 +433,8 @@ It is not a screen of its own: where the player may not buy (outside a buy zone,
 does not open, and closes as it comes to that. `cs::PlayerSnapshot::buying` tells the client so, and how long is
 left, and the client weighs what the player can afford by the rules the game buys by (`cs.shared:buying`). A
 refusal, of the menu or of a buy command, is told for two seconds over the game, or over the menu while it is
-open, as well as printed on the console.
+open, as well as printed on the console. `next` runs it for the map played as one part (`app.client:buyMenu`,
+`ClientBuyMenu`): the commands, the events it takes, what draws it and the notices.
 
 What it sells is data: a weapon shows by its file's `purchase.menu`, a weapon made as the game runs too once it is
 complete, and the armor and the families it writes in by `data/cstrike/buyMenu.toml`. Its pictures are TGA files

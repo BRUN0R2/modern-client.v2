@@ -13,9 +13,6 @@ import :session;
 
 namespace app {
 
-/// The session a command acts on; none without one.
-using PlayedSession = std::function<Session*()>;
-
 /// Registers in `console` the commands that add test zombies to the session `played` says, and remove them:
 /// what they are is read, as the first is asked for, from the project's file in `dataFolder` and a user's in
 /// `content` over it, their type added to its entities, and each session's horde decides in jobs of `jobs`.
