@@ -33,14 +33,15 @@ auto consoleCharacters() -> std::u32string {
     return characters;
 }
 
-auto consoleBounds(nx::rhi::Extent2d size) -> nx::ui::PanelBounds {
-    constexpr std::int32_t kMargin = 8; // an eighth of the screen on each side
-    const auto wide = nx::narrow<std::int32_t>(size.width);
-    const auto tall = nx::narrow<std::int32_t>(size.height);
-    return {.x = wide / kMargin,
-            .y = tall / kMargin,
-            .wide = wide - (2 * (wide / kMargin)),
-            .tall = tall - (2 * (tall / kMargin))};
+auto consoleBounds(nx::rhi::Extent2d size) -> nx::ui::PixelRect {
+    constexpr std::int32_t kMarginDivisor = 8; // an eighth of the screen on each side
+    constexpr std::int32_t kMarginSides = 2;   // left and right, top and bottom
+    const nx::Pixels wide{nx::narrow<std::int32_t>(size.width)};
+    const nx::Pixels tall{nx::narrow<std::int32_t>(size.height)};
+    const nx::Pixels across = wide / kMarginDivisor;
+    const nx::Pixels down = tall / kMarginDivisor;
+    return {
+        .x = across, .y = down, .wide = wide - (across * kMarginSides), .tall = tall - (down * kMarginSides)};
 }
 
 auto ConsoleWindow::open(const WindowFonts& fonts, nx::console::Console& console, std::uint32_t screenHeight)

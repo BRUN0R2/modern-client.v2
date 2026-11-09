@@ -7,6 +7,7 @@ nxAddModuleLibrary(nxUi
     LAYER 3
     MODULES
         src/nx.ui.cppm
+        src/geometry.cppm
         src/panel.cppm
         src/painter.cppm
         src/label.cppm

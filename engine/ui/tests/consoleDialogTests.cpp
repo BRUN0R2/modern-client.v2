@@ -15,6 +15,7 @@ import nx.render;
 import nx.ui;
 
 #include "consoleFixtures.hpp"
+#include "pixelGeometry.hpp"
 #include "squareFont.hpp"
 
 namespace {
@@ -54,7 +55,7 @@ protected:
     nx::test::RecordingOutput output;
     nx::test::MemoryFiles files;
     Console console{output, files};
-    ConsoleDialog dialog{console, {.wide = 400, .tall = 300}};
+    ConsoleDialog dialog{console, nx::test::rectOf(0, 0, 400, 300)};
     ConsoleColors colors{};
 };
 

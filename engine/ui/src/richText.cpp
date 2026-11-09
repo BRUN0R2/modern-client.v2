@@ -11,9 +11,12 @@ namespace nx::ui {
 
 namespace {
 
-/// The rows `line` makes `width` pixels wide with `atlas`'s glyphs (wrapText); without an atlas, the
+/// An inset on each side of the text: left and right, top and bottom.
+constexpr std::int32_t kInsetSides = 2;
+
+/// The rows `line` makes `width` wide with `atlas`'s glyphs (wrapText); without an atlas, the
 /// line is one row.
-[[nodiscard]] auto wrapped(const RichTextLine& line, const GlyphAtlas* atlas, std::int32_t width)
+[[nodiscard]] auto wrapped(const RichTextLine& line, const GlyphAtlas* atlas, Pixels width)
     -> std::vector<RichTextLine> {
     if (atlas == nullptr) {
         return {line};
@@ -27,11 +30,11 @@ namespace {
 
 } // namespace
 
-RichText::RichText(std::string name, PanelBounds bounds, std::size_t capacity)
+RichText::RichText(std::string name, PixelRect bounds, std::size_t capacity)
     : Panel{std::move(name), bounds}, m_capacity{std::max<std::size_t>(capacity, 1)} {}
 
 void RichText::append(RichTextLine line) {
-    const std::int32_t width = bounds().wide - (2 * m_inset);
+    const Pixels width = bounds().wide - (textInset * kInsetSides);
     if (m_scrolled > 0) {
         m_scrolled += wrapped(line, m_face.atlas, width).size(); // the rows shown stay put
     }
@@ -48,7 +51,7 @@ void RichText::clear() noexcept {
 }
 
 auto RichText::rows() const -> std::vector<RichTextLine> {
-    const std::int32_t width = bounds().wide - (2 * m_inset);
+    const Pixels width = bounds().wide - (textInset * kInsetSides);
     std::vector<RichTextLine> all;
     for (const RichTextLine& line : m_lines) {
         std::ranges::move(wrapped(line, m_face.atlas, width), std::back_inserter(all));
@@ -57,11 +60,11 @@ auto RichText::rows() const -> std::vector<RichTextLine> {
 }
 
 auto RichText::visibleRows() const -> std::size_t {
-    if (m_face.atlas == nullptr || m_face.atlas->metrics().height() <= 0) {
+    if (m_face.atlas == nullptr || m_face.atlas->lineHeight() <= Pixels{}) {
         return 0;
     }
     return narrow<std::size_t>(
-        std::max(0, (bounds().tall - (2 * m_inset)) / m_face.atlas->metrics().height()));
+        std::max(0, (bounds().tall - (textInset * kInsetSides)) / m_face.atlas->lineHeight()));
 }
 
 void RichText::scrollBy(std::int64_t rows) {
@@ -78,18 +81,19 @@ void RichText::paint(PanelPainter& painter) const {
         return;
     }
     // The newest lines' rows, back to the oldest row shown.
-    const std::int32_t width = bounds().wide - (2 * m_inset);
+    const Pixels width = bounds().wide - (textInset * kInsetSides);
     const std::size_t needed = m_scrolled + shown;
     std::vector<RichTextLine> newest; // newest row first
     for (auto line = m_lines.rbegin(); line != m_lines.rend() && newest.size() < needed; ++line) {
         std::vector<RichTextLine> lineRows = wrapped(*line, m_face.atlas, width);
         std::ranges::move(lineRows | std::views::reverse, std::back_inserter(newest));
     }
-    const std::int32_t height = m_face.atlas->metrics().height();
+    const Pixels height = m_face.atlas->lineHeight();
     for (std::size_t row = m_scrolled; row < std::min(needed, newest.size()); ++row) {
         const auto fromBottom = narrow<std::int32_t>(row - m_scrolled + 1);
-        std::ignore = painter.text(m_face, newest[row].text, m_inset,
-                                   bounds().tall - m_inset - (fromBottom * height), newest[row].color);
+        std::ignore = painter.text(m_face, newest[row].text,
+                                   {.x = textInset, .y = bounds().tall - textInset - (height * fromBottom)},
+                                   newest[row].color); // where its pen ends is no matter
     }
 }
 

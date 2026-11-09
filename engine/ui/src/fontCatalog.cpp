@@ -265,18 +265,23 @@ auto FontCatalog::addFile(const std::filesystem::path& path) -> Result<void, Fon
     return {};
 }
 
-auto FontCatalog::addFolder(const std::filesystem::path& folder) -> Result<std::size_t, FontError> {
+auto FontCatalog::addFolder(const std::filesystem::path& folder) -> Result<AddedFonts, FontError> {
     const std::size_t before = m_faces.size();
     auto files = platform::listFiles(folder);
     if (!files) {
         return fail(FontError::Unreadable, platform::toUtf8(folder), std::move(files.error()));
     }
+    AddedFonts added;
     for (const std::filesystem::path& file : *files) {
-        if (isFontFile(file)) {
-            std::ignore = addFile(folder / file); // a file that cannot be read is left out
+        if (!isFontFile(file)) {
+            continue;
+        }
+        if (auto read = addFile(folder / file); !read) {
+            added.leftOut.push_back(std::move(read.error()));
         }
     }
-    return m_faces.size() - before;
+    added.faces = m_faces.size() - before;
+    return added;
 }
 
 auto FontCatalog::choose(const FontQuery& query) const -> std::optional<FontChoice> {

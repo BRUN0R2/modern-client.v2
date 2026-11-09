@@ -15,11 +15,13 @@ namespace {
 constexpr std::array<std::string_view, std::to_underlying(TextAlignment::Count)> kAlignmentNames{
     "north-west", "north", "north-east", "west", "center", "east", "south-west", "south", "south-east"};
 
+/// What the room left is divided by to put a thing halfway into a length.
+constexpr std::int32_t kMiddleDivisor = 2;
+
 /// How far into a length `room` a thing `size` long starts: at its start, halfway, or at its end
 /// (`side` 0, 1 or 2).
-[[nodiscard]] constexpr auto placed(std::int32_t room, std::int32_t size, std::size_t side) noexcept
-    -> std::int32_t {
-    return side == 0 ? 0 : side == 1 ? (room - size) / 2 : room - size;
+[[nodiscard]] constexpr auto placed(Pixels room, Pixels size, std::size_t side) noexcept -> Pixels {
+    return side == 0 ? Pixels{} : side == 1 ? (room - size) / kMiddleDivisor : room - size;
 }
 
 } // namespace
@@ -32,15 +34,16 @@ auto textAlignmentNamed(std::string_view name) noexcept -> std::optional<TextAli
                : std::nullopt;
 }
 
-Label::Label(std::string name, PanelBounds bounds) : Panel{std::move(name), bounds} {}
+Label::Label(std::string name, PixelRect bounds) : Panel{std::move(name), bounds} {}
 
-auto Label::textPosition() const -> std::pair<std::int32_t, std::int32_t> {
-    const std::int32_t width = m_face.atlas != nullptr ? widthOf(*m_face.atlas, m_text) : 0;
-    const std::int32_t height = m_face.atlas != nullptr ? m_face.atlas->metrics().height() : 0;
+auto Label::textPosition() const -> PixelPoint {
+    const Pixels width = m_face.atlas != nullptr ? widthOf(*m_face.atlas, m_text) : Pixels{};
+    const Pixels height = m_face.atlas != nullptr ? m_face.atlas->lineHeight() : Pixels{};
     // The alignments run west to east in each of three rows, north to south.
     const auto index = static_cast<std::size_t>(std::to_underlying(m_alignment));
     constexpr std::size_t kColumns = 3;
-    return {placed(bounds().wide, width, index % kColumns), placed(bounds().tall, height, index / kColumns)};
+    return {.x = placed(bounds().wide, width, index % kColumns),
+            .y = placed(bounds().tall, height, index / kColumns)};
 }
 
 void Label::paint(PanelPainter& painter) const {
@@ -48,8 +51,7 @@ void Label::paint(PanelPainter& painter) const {
     if (m_face.atlas == nullptr || m_text.empty()) {
         return;
     }
-    const auto [x, y] = textPosition();
-    std::ignore = painter.text(m_face, m_text, x, y, m_color);
+    std::ignore = painter.text(m_face, m_text, textPosition(), m_color); // where its pen ends is no matter
 }
 
 } // namespace nx::ui
