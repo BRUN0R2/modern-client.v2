@@ -46,16 +46,22 @@ struct FontChoice {
     bool isEmboldened = false;
 };
 
+/// What the font files of a folder gave a catalog.
+struct AddedFonts {
+    std::size_t faces = 0;                   ///< How many faces were added.
+    std::vector<Failure<FontError>> leftOut; ///< Why each font file left out could not be added.
+};
+
 /// The fonts to choose from.
 class FontCatalog {
 public:
     /// Adds the faces of the font file at `path`, reading only its tables. Errors: Unreadable (cause:
     /// the file system's), NotAFont (no face names a family).
     [[nodiscard]] auto addFile(const std::filesystem::path& path) -> Result<void, FontError>;
-    /// Adds the faces of each font file (.ttf, .ttc, .otf) in `folder` and its subfolders, leaving out
-    /// those that cannot be read; returns how many faces were added. Errors: Unreadable (the folder
-    /// cannot be listed; cause: the file system's).
-    [[nodiscard]] auto addFolder(const std::filesystem::path& folder) -> Result<std::size_t, FontError>;
+    /// Adds the faces of each font file (.ttf, .ttc, .otf) in `folder` and its subfolders; a file that
+    /// cannot be added is left out, and why is told among what it returns. Errors: Unreadable (the
+    /// folder cannot be listed; cause: the file system's).
+    [[nodiscard]] auto addFolder(const std::filesystem::path& folder) -> Result<AddedFonts, FontError>;
 
     [[nodiscard]] inline auto faces() const noexcept -> std::span<const FontFace> { return m_faces; }
 

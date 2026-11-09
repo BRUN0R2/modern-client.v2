@@ -120,8 +120,8 @@ auto BotCvars::difficultyLevel() const noexcept -> BotDifficulty {
 }
 
 void BotCvars::setQuota(std::uint32_t count) const {
-    // bot_quota has no range and is neither read-only nor a cheat: the set holds.
-    std::ignore = quota.set(static_cast<float>(count));
+    // bot_quota has no range: the set holds.
+    quota.setAccepted(static_cast<float>(count));
 }
 
 auto registerBotCommands(Console& console, BotCvars cvars, BotActions actions)
