@@ -136,6 +136,9 @@ private:
         -> nx::Result<void, ConsoleError>;
     /// The map loaded last, as the commands that follow `map` on a line act on it; none before the first.
     [[nodiscard]] auto playedSession() const noexcept -> Session*;
+    /// Leaves the map played, or the one `map` loaded, from the next frame (disconnect), as the original
+    /// leaves a game; nothing without one.
+    void disconnectCommand();
     /// The navigation profiles of data/cstrike/navigation.toml. Errors: CommandFailed.
     [[nodiscard]] auto readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError>;
     void noclipCommand();
@@ -154,7 +157,8 @@ private:
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
     /// Plays the map the console asked for, if any: its scene is made with the next frame, and
-    /// r_decals is held as entering a game of more than one player holds it.
+    /// r_decals is held as entering a game of more than one player holds it. Plays none once the console
+    /// asked to leave the map played.
     void startNextSession();
     /// Plays `elapsed` of the session's game, as a listen server plays it: each tick due, the command the
     /// player's input makes is the server's game's tick, whose snapshot the client's game takes.
@@ -204,6 +208,7 @@ private:
     std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
     std::unique_ptr<Session> m_session;             ///< The map played.
     std::unique_ptr<Session> m_nextSession;         ///< The map `map` loaded, played from the next frame.
+    bool isLeavingMap = false;                      ///< `disconnect` asked: no map from the next frame.
     /// Made or changed since the scene put their view models on the GPU.
     std::vector<cs::WeaponIndex> m_changedWeapons;
     nx::Random m_bulletHoles{0, kBulletHoleStream};
@@ -362,6 +367,11 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
                .description = "Builds the agents' navigation mesh of the map again, the cache's left "
                               "aside, and plays the map again on it."},
               [this](Console&, const CommandLine& line) { return generateNavigationCommand(line); }),
+          add({.name = "disconnect", .description = "Leaves the map played."},
+              [this](Console&, const CommandLine&) {
+                  disconnectCommand();
+                  return nx::Result<void, ConsoleError>{};
+              }),
           add({.name = "noclip", .description = "Flies through everything, or walks again."},
               [this](Console&, const CommandLine&) {
                   noclipCommand();
@@ -428,7 +438,18 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
 }
 
 auto Client::playedSession() const noexcept -> Session* {
+    if (isLeavingMap) {
+        return nullptr;
+    }
     return m_nextSession ? m_nextSession.get() : m_session.get();
+}
+
+void Client::disconnectCommand() {
+    if (playedSession() == nullptr) {
+        return;
+    }
+    m_nextSession.reset();
+    isLeavingMap = true;
 }
 
 auto Client::readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError> {
@@ -455,6 +476,7 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return std::unexpected{std::move(session.error())};
     }
     m_nextSession = std::move(*session);
+    isLeavingMap = false;
     return {};
 }
 
@@ -472,6 +494,7 @@ auto Client::generateNavigationCommand(const nx::console::CommandLine& line)
         return std::unexpected{std::move(session.error())};
     }
     m_nextSession = std::move(*session);
+    isLeavingMap = false;
     return {};
 }
 
@@ -653,20 +676,24 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
 }
 
 void Client::startNextSession() {
-    if (!m_nextSession) {
+    if (!m_nextSession && !isLeavingMap) {
         return;
     }
     m_video->device->waitIdle(); // the old scene may still be drawing
     m_scene.reset();
     m_session = std::exchange(m_nextSession, nullptr);
+    isLeavingMap = false;
+    hud.clear();
+    buyMenu->reset();
+    m_changedWeapons.clear(); // the new level read every weapon's view model
+    if (!m_session) {
+        return; // the map was left: none is played
+    }
     // The local game is one of more than one player, as a Counter-Strike server's: r_decals is held
     // to mp_decals as the original's client holds it when it enters one.
     if (auto held = nx::settings::enterMultiplayerGame(settings->client.video); !held) {
         nx::log::warning(kLog, "r_decals not held to mp_decals: {}", nx::describe(held.error()));
     }
-    hud.clear();
-    buyMenu->reset();
-    m_changedWeapons.clear(); // the new level read every weapon's view model
     sounds->readWeapons(m_content->weapons, *m_session->level, m_session->level->weapons());
     sounds->readPlayer(*m_content);
     m_camera.position = m_session->client.eye();
