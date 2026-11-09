@@ -9,6 +9,7 @@ nxAddModuleLibrary(appClient
         src/app.client.cppm
         src/commandLine.cppm
         src/client.cppm
+        src/clientSettings.cppm
         src/video.cppm
         src/agentMeshes.cppm
         src/session.cppm
@@ -21,6 +22,7 @@ nxAddModuleLibrary(appClient
         src/session.cpp
         src/zombieCommands.cpp
         src/sessionFrame.cpp
+        src/clientSettings.cpp
         src/client.cpp
     DEPENDS
         nx::core
