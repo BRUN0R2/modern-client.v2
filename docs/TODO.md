@@ -127,7 +127,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Native P2996 reflection in Linux GCC and TSan CI: compile-time capability detection, required `NX_REFLECTION_BACKEND=native` and all native-path tests passing
 - [ ] Linux job with Clang
 - [x] Formatting (`clang-format --dry-run --Werror`) in the `checks` job
-- [ ] `clang-tidy` in CI with a baseline for existing naming inconsistencies; local changed-line analysis is validated
+- [x] `clang-tidy` in CI: the repository's profile on the lines each pull request changes, after the `dev-windows-clang` build, failing on what it makes errors ([18](18-testing-and-quality.md#sanitizers-and-analysis))
 - [x] Dependency graph check: every module declares its layer and CMake refuses a dependency on the same or a higher layer once every module exists, an import of a project module `DEPENDS` does not declare, and a `DEPENDS` no source imports, in every build ([01 §1.1](01-architecture.md#11-module-catalog)), with `LayerCheck.*` regression tests
 - [x] ThreadSanitizer on all tests (`tsan-linux-gcc` preset in the `linux-gcc` job)
 - [ ] ASan + UBSan jobs (with Clang)
