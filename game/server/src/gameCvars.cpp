@@ -56,16 +56,15 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                      .buyTime = *buyTime};
 }
 
-// The values set back are finite, and the cvars have no range and are neither read-only nor cheats:
-// the sets hold.
+// The values set back are finite, and the cvars have no range: each set holds.
 
 auto GameCvars::roundLengths() const -> RoundLengths {
     const RoundCvars read = readRoundCvars(freezeTime.value(), roundTime.value());
     if (read.freezeSeconds) {
-        std::ignore = freezeTime.set(*read.freezeSeconds);
+        freezeTime.setAccepted(*read.freezeSeconds);
     }
     if (read.roundMinutes) {
-        std::ignore = roundTime.set(*read.roundMinutes);
+        roundTime.setAccepted(*read.roundMinutes);
     }
     return read.lengths;
 }
@@ -73,7 +72,7 @@ auto GameCvars::roundLengths() const -> RoundLengths {
 auto GameCvars::startingMoney() const -> nx::Money {
     const StartMoney read = readStartMoney(startMoney.value());
     if (read.setTo) {
-        std::ignore = startMoney.set(*read.setTo);
+        startMoney.setAccepted(*read.setTo);
     }
     return read.money;
 }
@@ -81,7 +80,7 @@ auto GameCvars::startingMoney() const -> nx::Money {
 auto GameCvars::buyingTime() const -> nx::Seconds {
     const BuyTime read = readBuyTime(buyTime.value());
     if (read.setToMinutes) {
-        std::ignore = buyTime.set(*read.setToMinutes);
+        buyTime.setAccepted(*read.setToMinutes);
     }
     return read.length;
 }
@@ -90,7 +89,7 @@ auto GameCvars::takeRestart() const -> std::optional<nx::Seconds> {
     const std::optional<nx::Seconds> delay = restartDelayOf(restartRound.value(), restart.value());
     if (delay) {
         for (const nx::console::Cvar<float>& asked : {restartRound, restart}) {
-            std::ignore = asked.set(0.0F);
+            asked.setAccepted(0.0F);
         }
     }
     return delay;

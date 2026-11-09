@@ -6,13 +6,27 @@
 #include <gtest/gtest.h>
 
 import std;
+import nx.core;
 import app.client;
 
 namespace {
 
-[[nodiscard]] auto parse(std::initializer_list<std::string_view> words) -> std::optional<app::ClientOptions> {
+[[nodiscard]] auto parse(std::initializer_list<std::string_view> words)
+    -> nx::Result<app::ClientOptions, app::CommandLineError> {
     const std::vector<std::string_view> arguments{words};
     return app::parseClientOptions(arguments);
+}
+
+/// Why a command line was refused, and the word at fault.
+using Refusal = std::pair<app::CommandLineError, std::string>;
+
+/// The refusal of `words`; none when they are valid options.
+[[nodiscard]] auto refusalOf(std::initializer_list<std::string_view> words) -> std::optional<Refusal> {
+    auto options = parse(words);
+    if (options) {
+        return std::nullopt;
+    }
+    return Refusal{options.error().code, std::move(options.error().detail)};
 }
 
 TEST(ClientCommandLineTest, PlusWordsAreCommandsAsTheOriginalReadsThem) {
@@ -37,13 +51,19 @@ TEST(ClientCommandLineTest, OptionsEndTheCommandBeforeThem) {
     EXPECT_EQ(parse({"--content-config", "mine.toml"})->contentConfig, std::filesystem::path{"mine.toml"});
 }
 
-TEST(ClientCommandLineTest, WhatIsNotAnOptionIsRefused) {
-    EXPECT_FALSE(parse({"de_dust2"}).has_value()) << "a word outside a command";
-    EXPECT_FALSE(parse({"-game"}).has_value());
-    EXPECT_FALSE(parse({"-basedir"}).has_value()) << "without its folder";
-    EXPECT_FALSE(parse({"--content-config"}).has_value()) << "without its file";
-    EXPECT_FALSE(parse({"--validation", "--validation"}).has_value()) << "twice";
-    EXPECT_FALSE(parse({"+sensitivity", "-1"}).has_value()) << "`-1` ends the command, as in the original";
+TEST(ClientCommandLineTest, WhatIsNotAnOptionIsRefusedWithTheWordAtFault) {
+    using app::CommandLineError;
+    EXPECT_EQ(refusalOf({"de_dust2"}), (Refusal{CommandLineError::UnknownOption, "de_dust2"}))
+        << "a word outside a command";
+    EXPECT_EQ(refusalOf({"-game"}), (Refusal{CommandLineError::UnknownOption, "-game"}));
+    EXPECT_EQ(refusalOf({"-basedir"}), (Refusal{CommandLineError::MissingValue, "-basedir"}))
+        << "without its folder";
+    EXPECT_EQ(refusalOf({"--content-config"}), (Refusal{CommandLineError::MissingValue, "--content-config"}))
+        << "without its file";
+    EXPECT_EQ(refusalOf({"--validation", "--validation"}),
+              (Refusal{CommandLineError::RepeatedOption, "--validation"}));
+    EXPECT_EQ(refusalOf({"+sensitivity", "-1"}), (Refusal{CommandLineError::UnknownOption, "-1"}))
+        << "`-1` ends the command, as in the original";
 }
 
 TEST(ClientCommandLineTest, ALocalUserFolderIsExplicitAndDoesNotBecomeABootCommand) {
@@ -52,8 +72,9 @@ TEST(ClientCommandLineTest, ALocalUserFolderIsExplicitAndDoesNotBecomeABootComma
     EXPECT_EQ(options->userFolder, std::filesystem::path{"offline test/user"});
     EXPECT_EQ(options->bootCommands, "map de_dust2\n");
     EXPECT_FALSE(parse({})->userFolder.has_value());
-    EXPECT_FALSE(parse({"--user-folder"}).has_value());
-    EXPECT_FALSE(parse({"--user-folder", "one", "--user-folder", "two"}).has_value());
+    EXPECT_EQ(refusalOf({"--user-folder"}), (Refusal{app::CommandLineError::MissingValue, "--user-folder"}));
+    EXPECT_EQ(refusalOf({"--user-folder", "one", "--user-folder", "two"}),
+              (Refusal{app::CommandLineError::RepeatedOption, "--user-folder"}));
 }
 
 } // namespace
