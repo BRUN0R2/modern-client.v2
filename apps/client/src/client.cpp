@@ -38,8 +38,6 @@ using nx::console::ConsoleError;
 
 constexpr nx::log::Category kLog{"client"};
 
-/// The key `next` binds `noclip` to, which Counter-Strike leaves free.
-constexpr std::string_view kNoclipKey = "v";
 /// The folder of the data that holds the project's own fonts.
 constexpr std::string_view kFontsFolder = "fonts";
 /// How long a minimized window waits before it looks for events again.
@@ -138,7 +136,6 @@ public:
     [[nodiscard]] auto run() -> nx::Result<void, ClientError>;
 
 private:
-    [[nodiscard]] auto registerSettings() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
@@ -250,19 +247,9 @@ private:
     nx::console::Console m_console;
     nx::settings::KeyBindings m_bindings;
     nx::settings::BoundInput m_keys;
-    std::optional<nx::settings::ClientCvars> m_cvars;
-    std::optional<cs::PlayerInput> m_input;
-    std::optional<cs::HudCvars> m_hudCvars;
-    std::optional<cs::FogCvars> m_fogCvars;
-    cs::FogControl m_fog; ///< The fog the frames show, as the fog's cvars ask for it.
-    std::optional<cs::CorpseCvars> m_corpseCvars;
-    std::optional<cs::DamageNumberCvars> m_damageNumberCvars;
-    std::optional<cs::StepIndicatorCvars> m_stepIndicatorCvars;
-    std::optional<cs::KillFeedCvars> killFeedCvars;
-    std::optional<cs::ScoreboardControls> scoreboardControls;
-    std::optional<cs::GameCvars> m_gameCvars;
-    std::optional<cs::BotCvars> botCvars;
-    bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
+    std::optional<ClientSettings> settings; ///< Registered as the client starts.
+    cs::FogControl m_fog;                   ///< The fog the frames show, as the fog's cvars ask for it.
+    bool drawsNavigation = false;           ///< nav_draw's: the agents' mesh and their ways over the scene.
     /// navigationOverlay's, kept for their room: the bodies of the agents, and those living that it shows.
     std::vector<std::pair<nx::ecs::Entity, const nx::agents::Agent*>> agentBodies;
     std::vector<cs::ShownAgent> shownAgents;
@@ -347,9 +334,11 @@ private:
 }
 
 auto Client::start() -> nx::Result<void, ClientError> {
-    if (auto registered = registerSettings(); !registered) {
-        return registered;
+    auto clientSettings = registerClientSettings(m_console, m_bindings);
+    if (!clientSettings) {
+        return std::unexpected{std::move(clientSettings.error())};
     }
+    settings.emplace(std::move(*clientSettings));
     if (auto registered = registerCommands(); !registered) {
         return registered;
     }
@@ -397,7 +386,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(frameShaders.error()));
     }
     m_frameShaders = std::move(*frameShaders);
-    if (auto audio = cs::ClientAudio::open(m_content->vfs, m_cvars->audio.volume); audio) {
+    if (auto audio = cs::ClientAudio::open(m_content->vfs, settings->client.audio.volume); audio) {
         m_audio = std::move(*audio);
     } else {
         nx::log::warning(kLog, "no sound: {}", nx::describe(audio.error()));
@@ -408,7 +397,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     m_console.addText(m_options->bootCommands);
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
     openNamedSoundOutput();
-    auto video = openVideo(*m_options, m_cvars->video.vsync.value(), readPipelineCache());
+    auto video = openVideo(*m_options, settings->client.video.vsync.value(), readPipelineCache());
     if (!video) {
         return std::unexpected{std::move(video.error())};
     }
@@ -418,72 +407,6 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
     }
     openWindowText(size->height);
-    return {};
-}
-
-auto Client::registerSettings() -> nx::Result<void, ClientError> {
-    auto cvars = nx::settings::registerClientCvars(m_console);
-    if (!cvars) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(cvars.error()));
-    }
-    m_cvars = std::move(*cvars);
-    auto input = cs::PlayerInput::registerIn(m_console);
-    if (!input) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(input.error()));
-    }
-    m_input = std::move(*input);
-    auto hudCvars = cs::HudCvars::registerIn(m_console);
-    if (!hudCvars) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(hudCvars.error()));
-    }
-    m_hudCvars = std::move(*hudCvars);
-    auto fogCvars = cs::FogCvars::registerIn(m_console);
-    if (!fogCvars) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(fogCvars.error()));
-    }
-    m_fogCvars = std::move(*fogCvars);
-    auto corpseCvars = cs::CorpseCvars::registerIn(m_console);
-    if (!corpseCvars) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(corpseCvars.error()));
-    }
-    m_corpseCvars = std::move(*corpseCvars);
-    auto damageNumberCvars = cs::DamageNumberCvars::registerIn(m_console);
-    if (!damageNumberCvars) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(damageNumberCvars.error()));
-    }
-    m_damageNumberCvars = std::move(*damageNumberCvars);
-    auto stepIndicatorCvars = cs::StepIndicatorCvars::registerIn(m_console);
-    if (!stepIndicatorCvars) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(stepIndicatorCvars.error()));
-    }
-    m_stepIndicatorCvars = std::move(*stepIndicatorCvars);
-    auto killFeedRegistered = cs::KillFeedCvars::registerIn(m_console);
-    if (!killFeedRegistered) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(killFeedRegistered.error()));
-    }
-    killFeedCvars = std::move(*killFeedRegistered);
-    auto scoreboardRegistered = cs::ScoreboardControls::registerIn(m_console);
-    if (!scoreboardRegistered) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(scoreboardRegistered.error()));
-    }
-    scoreboardControls = std::move(*scoreboardRegistered);
-    auto gameCvars = cs::GameCvars::registerIn(m_console);
-    if (!gameCvars) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
-    }
-    m_gameCvars = std::move(*gameCvars);
-    auto registeredBotCvars = cs::BotCvars::registerIn(m_console);
-    if (!registeredBotCvars) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(registeredBotCvars.error()));
-    }
-    botCvars = std::move(*registeredBotCvars);
-    // Counter-Strike's binds, and noclip on a key it leaves free, until config.cfg says otherwise.
-    const std::optional<nx::console::KeyId> noclipKey = nx::settings::keyNamed(kNoclipKey);
-    nx::invariant(noclipKey.has_value(), "Client: the noclip key has a name");
-    m_bindings.bind(*noclipKey, "noclip");
-    if (auto registered = nx::settings::registerBindCommands(m_console, m_bindings); !registered) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
-    }
     return {};
 }
 
@@ -641,7 +564,7 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
             if (!m_session) {
                 return nx::fail(cs::WeaponActionError::NoMap);
             }
-            m_input->selectWeapon(weapon);
+            settings->input.selectWeapon(weapon);
             return {};
         },
         .give = [this](cs::WeaponIndex weapon) -> nx::Result<void, cs::WeaponActionError> {
@@ -712,7 +635,8 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
             }
             return {};
         }};
-    if (auto registered = cs::registerBotCommands(m_console, *botCvars, std::move(actions)); !registered) {
+    if (auto registered = cs::registerBotCommands(m_console, settings->bots, std::move(actions));
+        !registered) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }
     return {};
@@ -763,16 +687,16 @@ auto Client::botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionErro
 }
 
 void Client::keepBotQuota(Session& session) {
-    const std::uint32_t quota = botCvars->quotaCount();
+    const std::uint32_t quota = settings->bots.quotaCount();
     if (quota > 0 && !session.bots) {
         if (auto bots = botsOf(session); !bots) {
             nx::log::warning(kLog, "bot_quota set back to 0: {}", nx::describe(bots.error()));
-            botCvars->setQuota(0);
+            settings->bots.setQuota(0);
             return;
         }
     }
     if (session.bots) {
-        session.bots->keepQuota(quota, botCvars->difficultyLevel(), botCvars->prefix.value());
+        session.bots->keepQuota(quota, settings->bots.difficultyLevel(), settings->bots.prefix.value());
     }
 }
 
@@ -781,8 +705,8 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name, m_cvars->player, *m_gameCvars, *m_jobs, navigationData,
-                                KeptMesh::Read);
+    auto session = startSession(*m_content, name, settings->client.player, settings->game, *m_jobs,
+                                navigationData, KeptMesh::Read);
     if (!session) {
         return std::unexpected{std::move(session.error())};
     }
@@ -811,8 +735,8 @@ auto Client::generateNavigationCommand(const nx::console::CommandLine& line)
     if (!m_session) {
         return nx::fail(ConsoleError::CommandFailed, "nav_generate: load a map first");
     }
-    auto session = startSession(*m_content, m_session->map->name(), m_cvars->player, *m_gameCvars, *m_jobs,
-                                navigationData, KeptMesh::Ignored);
+    auto session = startSession(*m_content, m_session->map->name(), settings->client.player, settings->game,
+                                *m_jobs, navigationData, KeptMesh::Ignored);
     if (!session) {
         return std::unexpected{std::move(session.error())};
     }
@@ -878,7 +802,7 @@ void Client::lastWeaponCommand() {
         return;
     }
     if (const std::optional<cs::WeaponIndex> last = m_session->client.inventory().lastWeapon()) {
-        m_input->selectWeapon(*last);
+        settings->input.selectWeapon(*last);
     }
 }
 
@@ -981,7 +905,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         // Counter-Strike server's.
         const nx::settings::GamePlayers players =
             m_session ? nx::settings::GamePlayers::MoreThanOne : nx::settings::GamePlayers::One;
-        const nx::Seconds interval = nx::settings::frameIntervalOf(m_cvars->video, players);
+        const nx::Seconds interval = nx::settings::frameIntervalOf(settings->client.video, players);
         m_video->sleepTimer.sleepUntil(
             m_frameStart + std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(interval));
         m_frameStart = nx::platform::MonotonicClock::now();
@@ -1003,28 +927,28 @@ auto Client::run() -> nx::Result<void, ClientError> {
         showCursorAsNeeded();
         if (m_audio != nullptr) {
             // The original is silent while its window is not focused.
-            const bool isHeard = m_isFocused || m_cvars->audio.playUnfocused.value();
+            const bool isHeard = m_isFocused || settings->client.audio.playUnfocused.value();
             m_audio->setMuting(isHeard ? cs::Muting::Off : cs::Muting::On);
             m_audio->update();
         }
         startNextSession();
         updateWeapons();
         const nx::Seconds elapsed = m_frameClock.restart();
-        m_input->turn(m_camera.angles, elapsed);
-        m_fog.update(*m_fogCvars, elapsed);
+        settings->input.turn(m_camera.angles, elapsed);
+        m_fog.update(settings->fog, elapsed);
         // A session plays once its scene is made, from the frame after the first image of it: what the
         // player hears of it, they see.
         if (m_session && m_scene) {
             const cs::Hearing hearing = m_session->client.hearing(); // from what the last frame showed
             // The player's own setting, as its client tells the server of it.
-            m_session->game->setAutoSwitch(m_session->player, autoSwitchOf(m_cvars->player));
+            m_session->game->setAutoSwitch(m_session->player, autoSwitchOf(settings->client.player));
             playSession(elapsed);
             m_camera.position = m_session->client.eye();
-            m_session->client.updatePlayers(elapsed, m_corpseCvars->stayTime(), m_players);
+            m_session->client.updatePlayers(elapsed, settings->corpses.stayTime(), m_players);
             turnAsTheGameDid();
             hearSession(*m_session, m_audio.get(), hearing, m_soundFailures);
             // r_decals as it is now, as the original reads it at each decal.
-            m_scene->setDecalLimit(decalLimitOf(m_cvars->video));
+            m_scene->setDecalLimit(decalLimitOf(settings->client.video));
             stampMarks(*m_session, *m_scene, *m_content, m_bulletHoles);
             const nx::Seconds now{m_mapClock.elapsed()};
             showNotices(*m_session, frameNotices(), m_content->weapons, now);
@@ -1056,24 +980,24 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
                    (key != nullptr && key->key == nx::platform::Key::Escape && key->isDown)) {
             m_isRunning = false; // until the menus come, Escape ends the client, whatever is bound to it
         } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
-            look(m_camera.angles, *moved, m_cvars->mouse);
+            look(m_camera.angles, *moved, settings->client.mouse);
         } else if (const auto* resized = std::get_if<nx::platform::Resized>(&event)) {
             if (auto recreated = m_video->swapchain->resize(extentOf(resized->size)); !recreated) {
                 return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
             }
         } else {
-            m_keys.handle(event, m_cvars->keyboard.keymap.value());
+            m_keys.handle(event, settings->client.keyboard.keymap.value());
         }
     }
     return {};
 }
 
 void Client::openNamedSoundOutput() {
-    const std::string& name = m_cvars->audio.device.value();
+    const std::string& name = settings->client.audio.device.value();
     if (name.empty()) {
         return;
     }
-    auto audio = cs::ClientAudio::open(m_content->vfs, m_cvars->audio.volume, name);
+    auto audio = cs::ClientAudio::open(m_content->vfs, settings->client.audio.volume, name);
     if (!audio) {
         nx::log::warning(kLog, "s_device {:?}: {}; the default plays", name, nx::describe(audio.error()));
         return;
@@ -1090,7 +1014,7 @@ void Client::startNextSession() {
     m_session = std::exchange(m_nextSession, nullptr);
     // The local game is one of more than one player, as a Counter-Strike server's: r_decals is held
     // to mp_decals as the original's client holds it when it enters one.
-    if (auto held = nx::settings::enterMultiplayerGame(m_cvars->video); !held) {
+    if (auto held = nx::settings::enterMultiplayerGame(settings->client.video); !held) {
         nx::log::warning(kLog, "r_decals not held to mp_decals: {}", nx::describe(held.error()));
     }
     if (m_damageNumbers) {
@@ -1120,8 +1044,9 @@ void Client::playSession(nx::Seconds elapsed) {
     for (std::uint32_t due = session.client.ticksDue(elapsed, cs::CatchUp::Limited);
          due > 0 && ticking.elapsed() < kMostTickingInAFrame; --due) {
         keepBotQuota(session);
-        std::vector<cs::PlayerCommand> commands{cs::PlayerCommand{
-            .player = session.player, .command = session.client.nextCommand(*m_input, m_camera.angles)}};
+        std::vector<cs::PlayerCommand> commands{
+            cs::PlayerCommand{.player = session.player,
+                              .command = session.client.nextCommand(settings->input, m_camera.angles)}};
         if (session.bots) {
             std::ranges::move(session.bots->commands(), std::back_inserter(commands));
         }
@@ -1188,9 +1113,9 @@ auto Client::frameNotices() noexcept -> FrameNotices {
     return {.console = m_console,
             .killFeed = killFeed,
             .damageNumbers = m_damageNumbers,
-            .damageNumberCvars = *m_damageNumberCvars,
+            .damageNumberCvars = settings->damageNumbers,
             .stepIndicator = m_stepIndicator,
-            .stepIndicatorCvars = *m_stepIndicatorCvars};
+            .stepIndicatorCvars = settings->stepIndicator};
 }
 
 auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError> {
@@ -1238,7 +1163,7 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
     if (!m_frames) {
         auto frames = cs::FrameRenderer::create(*m_video->device,
                                                 std::move(*std::exchange(m_frameShaders, std::nullopt)),
-                                                format, gammaOf(m_cvars->video));
+                                                format, gammaOf(settings->client.video));
         if (!frames) {
             return nx::fail(ClientError::GpuFailed, std::move(frames.error()));
         }
@@ -1304,12 +1229,13 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
     if (m_session && !m_scene) {
         // r_fidelity, read as the map's scene is made.
         const nx::render::StudioLook look =
-            m_cvars->video.fidelity.value() == nx::settings::Fidelity::Enhanced
+            settings->client.video.fidelity.value() == nx::settings::Fidelity::Enhanced
                 ? nx::render::StudioLook::Enhanced
                 : nx::render::StudioLook::Legacy;
-        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders,
-                                       m_frames->sceneFormatOf(look), m_frames->effectsFormatOf(look),
-                                       gammaOf(m_cvars->video), look, decalLimitOf(m_cvars->video));
+        auto scene =
+            cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders,
+                              m_frames->sceneFormatOf(look), m_frames->effectsFormatOf(look),
+                              gammaOf(settings->client.video), look, decalLimitOf(settings->client.video));
         if (!scene) {
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }
@@ -1358,7 +1284,7 @@ auto Client::sessionView() -> cs::SceneView {
     const nx::render::Camera kicked = kickedCamera();
     m_session->client.writePlacements(m_placements);
     m_session->client.writeHostages(m_hostages);
-    m_session->client.writeCorpses(m_content->entities, m_corpseCvars->stayTime(), m_jobs.get(),
+    m_session->client.writeCorpses(m_content->entities, settings->corpses.stayTime(), m_jobs.get(),
                                    shownEntities);
     const nx::Seconds time{m_mapClock.elapsed()};
     return {.camera = kicked,
@@ -1375,7 +1301,7 @@ auto Client::sessionView() -> cs::SceneView {
             .streaks = m_session->particles.shownStreaks(),
             .blood = m_session->blood.shown(time, m_content->blood.enhancedLook),
             .clientEvents = m_session->clientEvents,
-            .hand = m_hudCvars->hand(),
+            .hand = settings->hud.hand(),
             .overlay = navigationOverlay(),
             .fog = m_fog.shown(),
             .jobs = m_jobs.get()};
@@ -1411,13 +1337,13 @@ auto Client::navigationOverlay() -> cs::SceneOverlay {
 
 void Client::appendScreen(nx::rhi::Extent2d size) {
     m_screenQuads.clear();
-    if (m_session && m_damageNumbers && m_cvars->video.hudDraw.value() && size.height > 0) {
+    if (m_session && m_damageNumbers && settings->client.video.hudDraw.value() && size.height > 0) {
         // Over the scene, walls and all, under the HUD; the view the scene is drawn from.
         const float aspect = static_cast<float>(size.width) / static_cast<float>(size.height);
         m_damageNumbers->append(m_screenQuads, nx::render::viewProjectionMatrix(kickedCamera(), aspect), size,
                                 nx::Seconds{m_mapClock.elapsed()});
     }
-    if (m_session && m_stepIndicator && m_cvars->video.hudDraw.value()) {
+    if (m_session && m_stepIndicator && settings->client.video.hudDraw.value()) {
         // About the middle of the screen, under the HUD, the way each body heard is from the view.
         const nx::render::Camera view = kickedCamera();
         m_stepIndicator->append(m_screenQuads, view.position, view.angles.yaw, size,
@@ -1427,7 +1353,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
     if (showsBuyMenu) {
         cs::BuyMenuPanel::appendBackdrop(m_screenQuads, size); // under the HUD, which stays as bright
     }
-    if (m_session && m_hud && m_cvars->video.hudDraw.value()) {
+    if (m_session && m_hud && settings->client.video.hudDraw.value()) {
         // The HUD, over the scene, the knife's crosshair in the middle but under the buy menu.
         const cs::PlayerStatus& status = m_session->client.status();
         m_hud->append(
@@ -1439,19 +1365,19 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
              .ammo = cs::hudAmmoOf(m_session->client.inventory(), m_content->weapons),
              .crosshairDistance = showsBuyMenu ? std::nullopt : std::optional{cs::kKnifeCrosshairDistance},
              .roundTime = m_session->client.roundTimeShown()},
-            m_hudCvars->crosshair(), size);
+            settings->hud.crosshair(), size);
     }
-    if (m_session && killFeed && m_cvars->video.hudDraw.value()) {
-        killFeed->append(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()}, killFeedCvars->shownFor(),
-                         !m_session->client.status().isAlive());
+    if (m_session && killFeed && settings->client.video.hudDraw.value()) {
+        killFeed->append(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()},
+                         settings->killFeed.shownFor(), !m_session->client.status().isAlive());
     }
     if (showsBuyMenu) {
         const cs::BuyerView view = buyerView();
         buyMenuPanel->append(m_screenQuads, buyMenu->frameOf(view), cs::buyTimeShareOf(view.buying), size);
     }
-    if (m_session && scoreboard && scoreboardControls->shown.isDown()) {
+    if (m_session && scoreboard && settings->scoreboard.shown.isDown()) {
         // One of the client's panels, over the HUD whether it is drawn or not.
-        const std::string hostname = scoreboardControls->hostname.value();
+        const std::string hostname = settings->scoreboard.hostname.value();
         scoreboard->append(m_screenQuads,
                            {.hostname = hostname,
                             .rows = m_session->client.scores(),
@@ -1462,7 +1388,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
     // cl_showfps, over the HUD whether it is drawn or not, as the original's engine writes it over its
     // client's HUD, while a map is played.
     const std::optional<double> framesPerSecond = m_frameRate.framesPerSecond();
-    if (m_session && m_fpsLabel && framesPerSecond && m_cvars->video.showFps.value()) {
+    if (m_session && m_fpsLabel && framesPerSecond && settings->client.video.showFps.value()) {
         m_fpsLabel->append(m_screenQuads, *framesPerSecond);
     }
     if (m_session && buyMenuPanel) {
