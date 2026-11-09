@@ -520,7 +520,8 @@ from 0, the gain of everything heard, [11 §8](11-audio.md#8-cvars)), `s_device`
 system's default sound output; else one `s_devices` lists, opened once the startup files and the
 command line ran), `s_play_unfocused` (0: silent while the window is not focused, as the original
 is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
-`next` reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
+`next` registers them, with the game's and the HUD's below, as one `ClientSettings` (`app.client:settings`),
+reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
 effect as soon as what reads it reads it again: `in_keymap` with the next key press, the mouse's
 as the mouse moves, `fps_max`,
 `fps_override`, `hud_draw`, `cl_showfps`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon

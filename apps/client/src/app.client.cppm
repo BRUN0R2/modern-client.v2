@@ -10,6 +10,7 @@ export module app.client;
 
 export import :commandLine;
 export import :client;
+export import :settings;
 export import :video;
 export import :agentMeshes;
 export import :session;
