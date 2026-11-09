@@ -139,8 +139,6 @@ private:
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
-    /// Registers the buy commands (cs::registerBuyCommands) over the game's content.
-    [[nodiscard]] auto registerBuyCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     /// Draws over the scene the agents' mesh of the map played and the way each of its agents follows on
     /// it, or stops (nav_draw). Errors: InvalidArguments, CommandFailed (the map has no mesh, the cause
@@ -180,14 +178,8 @@ private:
     void toggleConsole();
     /// The cursor shows while the console's window or the buy menu is open; else the mouse turns the view.
     void showCursorAsNeeded();
-    /// What the buy menu shows of the player of the map played, which there must be.
-    [[nodiscard]] auto buyerView() const -> cs::BuyerView;
-    /// Whether the buy menu shows, or can. Errors: NoMap, NoMenu.
-    [[nodiscard]] auto checkBuyMenu() const -> nx::Result<void, cs::BuyRefusal>;
     /// Whether the buy menu, open, takes `event`.
     [[nodiscard]] auto isTakenByBuyMenu(const nx::platform::WindowEvent& event) -> bool;
-    /// Tells the player on the screen of what was refused.
-    void tellRefusal(cs::BuyRefusal refusal);
     /// Opens the console's window and cl_showfps's label for a screen `screenHeight` pixels tall, in the
     /// fonts of the installation's windows; one that cannot be had is logged, and the client goes on
     /// without it.
@@ -284,10 +276,9 @@ private:
     std::optional<cs::FpsLabel> m_fpsLabel;             ///< None when its font could not be had.
     std::optional<cs::DamageNumbers> m_damageNumbers;   ///< None when its font could not be had.
     std::optional<cs::StepIndicator> m_stepIndicator;   ///< Once the window's text is open.
-    std::optional<cs::KillFeed> killFeed;         ///< None when its font or its pictures could not be had.
-    std::optional<cs::Scoreboard> scoreboard;     ///< None when its font could not be had.
-    std::optional<cs::BuyMenu> buyMenu;           ///< Made with the game's content.
-    std::optional<cs::BuyMenuPanel> buyMenuPanel; ///< None when its font could not be had.
+    std::optional<cs::KillFeed> killFeed;     ///< None when its font or its pictures could not be had.
+    std::optional<cs::Scoreboard> scoreboard; ///< None when its font could not be had.
+    std::optional<ClientBuyMenu> buyMenu;     ///< Made with the game's content.
     bool isCursorShown = false;
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
@@ -368,7 +359,9 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = registerWeaponCommands(); !registered) {
         return registered;
     }
-    if (auto registered = registerBuyCommands(); !registered) {
+    // The menu buys for the player of the map played; its notices are timed as the map is.
+    buyMenu.emplace(*m_content, [this] { return m_session.get(); }, m_mapClock);
+    if (auto registered = buyMenu->registerCommands(m_console, m_content->weapons); !registered) {
         return registered;
     }
     if (auto registered = registerZombieCommands(m_console, *m_content, dataFolder, *m_jobs,
@@ -462,100 +455,12 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
     return {};
 }
 
-auto Client::registerBuyCommands() -> nx::Result<void, ClientError> {
-    cs::BuyActions actions{
-        .weapon = [this](cs::WeaponIndex weapon) -> nx::Result<void, cs::BuyRefusal> {
-            if (!m_session) {
-                return nx::fail(cs::BuyRefusal::NoMap);
-            }
-            return m_session->game->buyWeapon(m_session->player, weapon);
-        },
-        .armor = [this](cs::ArmorKind kind) -> nx::Result<void, cs::BuyRefusal> {
-            if (!m_session) {
-                return nx::fail(cs::BuyRefusal::NoMap);
-            }
-            return m_session->game->buyArmor(m_session->player, kind);
-        },
-        .ammo = [this](cs::WeaponSlot slot, cs::AmmoPurchase purchase) -> nx::Result<void, cs::BuyRefusal> {
-            if (!m_session) {
-                return nx::fail(cs::BuyRefusal::NoMap);
-            }
-            return m_session->game->buyAmmo(m_session->player, slot, purchase);
-        },
-        .rebuy = [this]() -> nx::Result<void, cs::BuyRefusal> {
-            if (!m_session) {
-                return nx::fail(cs::BuyRefusal::NoMap);
-            }
-            return m_session->game->rebuy(m_session->player);
-        },
-        .refused = [this](cs::BuyRefusal refusal) { tellRefusal(refusal); }};
-    const cs::BuyMenuContent menuContent{.weapons = &m_content->weapons,
-                                         .armorPrices = &m_content->buying.armor,
-                                         .look = &m_content->buyMenu,
-                                         .armorRatio = m_content->playerHarm.armor.ratio};
-    buyMenu.emplace(menuContent, actions);
-    buyMenuPanel.emplace(menuContent);
-    if (auto registered = cs::registerBuyCommands(m_console, m_content->weapons, std::move(actions));
-        !registered) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
-    }
-    cs::BuyMenuCommands commands{.toggle = [this]() -> nx::Result<void, cs::BuyRefusal> {
-                                     if (auto shows = checkBuyMenu(); !shows) {
-                                         return shows;
-                                     }
-                                     return buyMenu->toggle(buyerView());
-                                 },
-                                 .openEquipment = [this]() -> nx::Result<void, cs::BuyRefusal> {
-                                     if (auto shows = checkBuyMenu(); !shows) {
-                                         return shows;
-                                     }
-                                     return buyMenu->openEquipment(buyerView());
-                                 },
-                                 .pressSlot =
-                                     [this](std::uint32_t slot) {
-                                         if (m_session) {
-                                             buyMenu->pressSlot(slot, buyerView());
-                                         }
-                                     },
-                                 .cancel = [this] { buyMenu->back(); },
-                                 .refused = [this](cs::BuyRefusal refusal) { tellRefusal(refusal); }};
-    if (auto registered = cs::registerBuyMenuCommands(m_console, std::move(commands)); !registered) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
-    }
-    return {};
-}
-
-auto Client::buyerView() const -> cs::BuyerView {
-    const cs::ClientGame& client = m_session->client;
-    return {.team = client.team(),
-            .status = client.status(),
-            .inventory = &client.inventory(),
-            .buying = client.buying(),
-            .lastPurchase = client.lastPurchase()};
-}
-
-auto Client::checkBuyMenu() const -> nx::Result<void, cs::BuyRefusal> {
-    if (!m_session) {
-        return nx::fail(cs::BuyRefusal::NoMap);
-    }
-    if (!buyMenuPanel) {
-        return nx::fail(cs::BuyRefusal::NoMenu);
-    }
-    return {};
-}
-
-void Client::tellRefusal(cs::BuyRefusal refusal) {
-    if (buyMenuPanel) {
-        buyMenuPanel->showNotice(cs::buyRefusalText(refusal), nx::Seconds{m_mapClock.elapsed()});
-    }
-}
-
 auto Client::isTakenByBuyMenu(const nx::platform::WindowEvent& event) -> bool {
-    if (!m_session || !buyMenu->isOpen()) {
+    if (!buyMenu->isOpen()) {
         return false;
     }
     const auto size = m_video->window.pixelSize();
-    return size && buyMenu->handle(event, m_video->window.mousePosition(), extentOf(*size), buyerView());
+    return size && buyMenu->handle(event, m_video->window.mousePosition(), extentOf(*size));
 }
 
 auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
@@ -921,9 +826,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         }
         // What the keys queued, and what a `wait` left, before the frame's commands are made.
         std::ignore = m_console.execute();
-        if (m_session) {
-            buyMenu->update(buyerView()); // what the player may no longer buy it stops offering
-        }
+        buyMenu->update();
         showCursorAsNeeded();
         if (m_audio != nullptr) {
             // The original is silent while its window is not focused.
@@ -1026,10 +929,7 @@ void Client::startNextSession() {
     if (killFeed) {
         killFeed->clear(); // the old game's deaths
     }
-    buyMenu->close();
-    if (buyMenuPanel) {
-        buyMenuPanel->clearNotice();
-    }
+    buyMenu->reset();
     m_changedWeapons.clear(); // the new level read every weapon's view model
     readWeaponSounds(m_session->level->weapons());
     readPlayerSounds();
@@ -1212,19 +1112,13 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             }
         }
     }
-    if (buyMenuPanel && (!buyMenuPanel->isLoaded() || buyMenu->isOpen())) {
+    if (buyMenu->needsLoading()) {
         // What it shows, read before it opens; a weapon made since, and another height, as it does.
         auto size = m_video->window.pixelSize();
         if (!size) {
             return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
         }
-        if (auto loaded =
-                buyMenuPanel->load(m_fonts, m_content->vfs, m_frames->screen(), list, extentOf(*size).height);
-            !loaded) {
-            nx::log::warning(kLog, "the buy menu cannot be shown: {}", nx::describe(loaded.error()));
-            buyMenuPanel.reset(); // the game plays on, as without the HUD
-            buyMenu->close();
-        }
+        buyMenu->load(m_fonts, m_content->vfs, m_frames->screen(), list, extentOf(*size).height);
     }
     if (m_session && !m_scene) {
         // r_fidelity, read as the map's scene is made.
@@ -1349,10 +1243,8 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         m_stepIndicator->append(m_screenQuads, view.position, view.angles.yaw, size,
                                 nx::Seconds{m_mapClock.elapsed()});
     }
-    const bool showsBuyMenu = m_session && buyMenuPanel && buyMenu->isOpen();
-    if (showsBuyMenu) {
-        cs::BuyMenuPanel::appendBackdrop(m_screenQuads, size); // under the HUD, which stays as bright
-    }
+    const bool showsBuyMenu = buyMenu->isShown();
+    buyMenu->appendBackdrop(m_screenQuads, size); // under the HUD, which stays as bright
     if (m_session && m_hud && settings->client.video.hudDraw.value()) {
         // The HUD, over the scene, the knife's crosshair in the middle but under the buy menu.
         const cs::PlayerStatus& status = m_session->client.status();
@@ -1371,10 +1263,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         killFeed->append(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()},
                          settings->killFeed.shownFor(), !m_session->client.status().isAlive());
     }
-    if (showsBuyMenu) {
-        const cs::BuyerView view = buyerView();
-        buyMenuPanel->append(m_screenQuads, buyMenu->frameOf(view), cs::buyTimeShareOf(view.buying), size);
-    }
+    buyMenu->append(m_screenQuads, size);
     if (m_session && scoreboard && settings->scoreboard.shown.isDown()) {
         // One of the client's panels, over the HUD whether it is drawn or not.
         const std::string hostname = settings->scoreboard.hostname.value();
@@ -1391,9 +1280,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
     if (m_session && m_fpsLabel && framesPerSecond && settings->client.video.showFps.value()) {
         m_fpsLabel->append(m_screenQuads, *framesPerSecond);
     }
-    if (m_session && buyMenuPanel) {
-        buyMenuPanel->appendNotice(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()}, showsBuyMenu);
-    }
+    buyMenu->appendNotice(m_screenQuads, size);
     if (m_consoleWindow != nullptr && m_consoleWindow->dialog() != nullptr) {
         m_logSink->showIn(*m_consoleWindow->dialog());
         m_consoleWindow->paint(m_screenQuads, size);
