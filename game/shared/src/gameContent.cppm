@@ -24,6 +24,7 @@ import :stepIndicator;
 import :playerHarm;
 import :use;
 import :buyMenuLook;
+import :mainMenuLook;
 import :characters;
 import :lightStyles;
 import :environment;
@@ -41,7 +42,7 @@ enum class GameContentError : std::uint8_t {
 /// data/cstrike/weapons/<id>.toml), what a player of each team spawns with
 /// (data/cstrike/loadouts.toml), the money of its rounds (data/cstrike/economy.toml), what buying costs
 /// (data/cstrike/buying.toml), what the buy menu shows besides the weapons' own (data/cstrike/buyMenu.toml),
-/// the sounds of a
+/// what the main menu lists (data/cstrike/mainMenu.toml), the sounds of a
 /// player's feet (data/cstrike/footsteps.toml) and of its breath in water (data/cstrike/breath.toml),
 /// what the hit groups make of an attack's damage (data/cstrike/hitGroups.toml), the blood a hit sheds
 /// (data/cstrike/blood.toml), how a player is hurt
@@ -60,6 +61,7 @@ struct GameContent {
     EconomyRules economy;
     BuyingRules buying;
     BuyMenuLook buyMenu;
+    MainMenuLook mainMenu;
     FootstepRules footsteps;
     BreathRules breath;
     HitGroupRules hitGroups;

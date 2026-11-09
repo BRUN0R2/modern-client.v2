@@ -193,6 +193,10 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
     if (!buyMenu) {
         return std::unexpected{std::move(buyMenu.error())};
     }
+    auto mainMenu = readDataFile(gameDataOf(data) / "mainMenu.toml", readMainMenuLook);
+    if (!mainMenu) {
+        return std::unexpected{std::move(mainMenu.error())};
+    }
     auto damageNumbers = readDataFile(gameDataOf(data) / "damageNumbers.toml", readDamageNumberLook);
     if (!damageNumbers) {
         return std::unexpected{std::move(damageNumbers.error())};
@@ -209,6 +213,7 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
                        .economy = std::move(*economy),
                        .buying = std::move(*buying),
                        .buyMenu = std::move(*buyMenu),
+                       .mainMenu = std::move(*mainMenu),
                        .footsteps = std::move(*footsteps),
                        .breath = std::move(*breath),
                        .hitGroups = std::move(*hitGroups),

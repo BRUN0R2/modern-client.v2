@@ -25,6 +25,7 @@ nxAddTest(csSharedTests
         studioTests.cpp
         useTests.cpp
         buyingTests.cpp
+        mainMenuLookTests.cpp
         weaponsTests.cpp
         weaponTypesTests.cpp
     DEPENDS

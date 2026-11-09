@@ -48,8 +48,7 @@ auto barFillOf(nx::Pixels wide, float share) noexcept -> BuyBarFill {
     return {.whole = nx::Pixels{static_cast<std::int32_t>(whole)}, .nextPixel = reached - whole};
 }
 
-BuyMenuLayout::BuyMenuLayout(nx::rhi::Extent2d size) noexcept
-    : scale{static_cast<float>(size.height) / kBuyMenuDesignHeight} {
+BuyMenuLayout::BuyMenuLayout(nx::rhi::Extent2d size) noexcept : scale{size.height} {
     const nx::Pixels screenWide{nx::narrow<std::int32_t>(size.width)};
     const nx::Pixels margin = pixels(kMarginUnits);
     const nx::Pixels wide = std::min(screenWide - (2 * margin), pixels(kMostContentUnits));
@@ -71,16 +70,6 @@ BuyMenuLayout::BuyMenuLayout(nx::rhi::Extent2d size) noexcept
                    .y = mainY + mainTall + pixels(kUnderMainUnits),
                    .wide = wide,
                    .tall = pixels(kCarriedTallUnits)};
-}
-
-auto BuyMenuLayout::pixels(std::int32_t units) const noexcept -> nx::Pixels {
-    // A part of the design of some size shows, however small the screen.
-    constexpr nx::Pixels kLeastShown{1};
-    return units > 0
-               ? std::max(
-                     nx::Pixels{nx::narrow<std::int32_t>(std::lround(static_cast<float>(units) * scale))},
-                     kLeastShown)
-               : nx::Pixels{};
 }
 
 auto BuyMenuLayout::timeBar() const noexcept -> nx::ui::PixelRect {
