@@ -139,11 +139,11 @@ protected:
         return menu.handle(event, cursor, kScreen, view());
     }
     /// The middle of `rect`.
-    [[nodiscard]] static auto middleOf(const cs::BuyRect& rect) -> nx::platform::MousePosition {
-        return {.x = static_cast<float>(rect.x) + (static_cast<float>(rect.wide) / 2.0F),
-                .y = static_cast<float>(rect.y) + (static_cast<float>(rect.tall) / 2.0F)};
+    [[nodiscard]] static auto middleOf(const nx::ui::PixelRect& rect) -> nx::platform::MousePosition {
+        return {.x = static_cast<float>(rect.x.value()) + (static_cast<float>(rect.wide.value()) / 2.0F),
+                .y = static_cast<float>(rect.y.value()) + (static_cast<float>(rect.tall.value()) / 2.0F)};
     }
-    void click(const cs::BuyRect& rect) {
+    void click(const nx::ui::PixelRect& rect) {
         EXPECT_TRUE(handle(MouseButtonChanged{.button = MouseButton::Left, .isDown = true}, middleOf(rect)));
     }
 
@@ -351,7 +351,7 @@ TEST_F(BuyMenuTest, TheMouseSelectsWhatItIsOverAndBuysWhatItClicks) {
     menu.pressSlot(1, view()); // the pistol, its first item selected
     menu.back();
     const cs::BuyMenuLayout layout{kScreen};
-    const cs::BuyRect cell = layout.cell(0, 1);
+    const nx::ui::PixelRect cell = layout.cell(0, 1);
     EXPECT_TRUE(handle(nx::platform::MouseMoved{.dx = 1.0F}, middleOf(cell)));
     EXPECT_EQ(menu.selected(), std::optional{cs::BuyItem{kGlock}});
     click(cell);
@@ -485,26 +485,27 @@ TEST(BuyMenuLayoutTest, TheTimesShareIsWithinNoneAndAllOfIt) {
 }
 
 TEST(BuyMenuLayoutTest, ABarsFillIsItsWholePixelsAndAShareOfTheNext) {
-    EXPECT_EQ(cs::barFillOf(100, 0.0F), (cs::BuyBarFill{}));
-    EXPECT_EQ(cs::barFillOf(100, 1.0F), (cs::BuyBarFill{.whole = 100}));
-    EXPECT_EQ(cs::barFillOf(100, 0.5F), (cs::BuyBarFill{.whole = 50}));
-    const cs::BuyBarFill between = cs::barFillOf(100, 0.505F);
-    EXPECT_EQ(between.whole, 50);
+    constexpr nx::Pixels kWide{100};
+    EXPECT_EQ(cs::barFillOf(kWide, 0.0F), (cs::BuyBarFill{}));
+    EXPECT_EQ(cs::barFillOf(kWide, 1.0F), (cs::BuyBarFill{.whole = nx::Pixels{100}}));
+    EXPECT_EQ(cs::barFillOf(kWide, 0.5F), (cs::BuyBarFill{.whole = nx::Pixels{50}}));
+    const cs::BuyBarFill between = cs::barFillOf(kWide, 0.505F);
+    EXPECT_EQ(between.whole, nx::Pixels{50});
     EXPECT_NEAR(between.nextPixel, 0.5F, 0.01F);
-    EXPECT_EQ(cs::barFillOf(100, 7.0F).whole, 100) << "never past its end";
+    EXPECT_EQ(cs::barFillOf(kWide, 7.0F).whole, kWide) << "never past its end";
 }
 
 TEST(BuyMenuLayoutTest, TheTimeBarRunsDownTickByTickWithoutAJump) {
     constexpr std::int32_t kTicks = 9000; // 90 seconds of 100 ticks
-    const cs::BuyRect bar = cs::BuyMenuLayout{kScreen}.timeBar();
+    const nx::ui::PixelRect bar = cs::BuyMenuLayout{kScreen}.timeBar();
     const auto reached = [&bar](std::int32_t tick) {
         const float share = 1.0F - (static_cast<float>(tick) / static_cast<float>(kTicks));
         const cs::BuyBarFill fill = cs::barFillOf(bar.wide, share);
-        return static_cast<float>(fill.whole) + fill.nextPixel;
+        return static_cast<float>(fill.whole.value()) + fill.nextPixel;
     };
     // A second a time, the line jumped by this many pixels; a tick's is a hundredth of it, within a float's
     // error.
-    const float aTick = static_cast<float>(bar.wide) / static_cast<float>(kTicks);
+    const float aTick = static_cast<float>(bar.wide.value()) / static_cast<float>(kTicks);
     for (std::int32_t tick = 1; tick <= kTicks; ++tick) {
         const float step = reached(tick - 1) - reached(tick);
         ASSERT_LT(step, aTick * 2.0F) << "at tick " << tick;
@@ -518,10 +519,11 @@ TEST(BuyMenuLayoutTest, EveryPartIsOnTheScreenWhateverItsSize) {
           nx::rhi::Extent2d{.width = 1920, .height = 1080}, nx::rhi::Extent2d{.width = 2560, .height = 1080},
           nx::rhi::Extent2d{.width = 3840, .height = 2160}}) {
         const cs::BuyMenuLayout layout{size};
-        const auto isOnScreen = [size](const cs::BuyRect& rect) {
-            return rect.x >= 0 && rect.y >= 0 && rect.wide > 0 && rect.tall > 0 &&
-                   rect.x + rect.wide <= nx::narrow<std::int32_t>(size.width) &&
-                   rect.y + rect.tall <= nx::narrow<std::int32_t>(size.height);
+        const auto isOnScreen = [size](const nx::ui::PixelRect& rect) {
+            return rect.x >= nx::Pixels{} && rect.y >= nx::Pixels{} && rect.wide > nx::Pixels{} &&
+                   rect.tall > nx::Pixels{} &&
+                   rect.x + rect.wide <= nx::Pixels{nx::narrow<std::int32_t>(size.width)} &&
+                   rect.y + rect.tall <= nx::Pixels{nx::narrow<std::int32_t>(size.height)};
         };
         EXPECT_TRUE(isOnScreen(layout.header()));
         EXPECT_TRUE(isOnScreen(layout.timeBar()));
@@ -545,12 +547,12 @@ TEST(BuyMenuLayoutTest, HoweverManyItemsATabHasTheyAllFitApart) {
     for (const std::size_t count :
          {std::size_t{1}, std::size_t{6}, std::size_t{9}, std::size_t{16}, std::size_t{64}}) {
         for (std::size_t index = 0; index < count; ++index) {
-            const cs::BuyRect cell = layout.cell(index, count);
+            const nx::ui::PixelRect cell = layout.cell(index, count);
             EXPECT_GE(cell.x, layout.grid().x);
             EXPECT_LE(cell.x + cell.wide, layout.grid().x + layout.grid().wide);
             EXPECT_LE(cell.y + cell.tall, layout.grid().y + layout.grid().tall);
             if (index > 0) {
-                const cs::BuyRect before = layout.cell(index - 1, count);
+                const nx::ui::PixelRect before = layout.cell(index - 1, count);
                 EXPECT_TRUE(before.y < cell.y || before.x + before.wide <= cell.x)
                     << count << " items, " << index;
             }
@@ -559,9 +561,11 @@ TEST(BuyMenuLayoutTest, HoweverManyItemsATabHasTheyAllFitApart) {
 }
 
 TEST(BuyMenuLayoutTest, AnItemsPriceTakesARowOfItsOwnWhenItDoesNotFitBesideItsName) {
-    EXPECT_FALSE(cs::isPriceApart(1, 100, 40, 10, 150));
-    EXPECT_TRUE(cs::isPriceApart(1, 100, 40, 10, 149)) << "a narrow screen's cell";
-    EXPECT_TRUE(cs::isPriceApart(2, 50, 40, 10, 150)) << "its name wrapped";
+    using nx::Pixels;
+    EXPECT_FALSE(cs::isPriceApart(1, Pixels{100}, Pixels{40}, Pixels{10}, Pixels{150}));
+    EXPECT_TRUE(cs::isPriceApart(1, Pixels{100}, Pixels{40}, Pixels{10}, Pixels{149}))
+        << "a narrow screen's cell";
+    EXPECT_TRUE(cs::isPriceApart(2, Pixels{50}, Pixels{40}, Pixels{10}, Pixels{150})) << "its name wrapped";
 }
 
 TEST(BuyMenuTextTest, MoneyIsWrittenWithItsThousands) {

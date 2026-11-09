@@ -51,20 +51,20 @@ TEST(GlyphAtlasTest, PacksEachGlyphOnceATexelApart) {
     const GlyphAtlas atlas = atlasOf(U"BAB A Z");
     EXPECT_EQ(atlas.width(), nx::ui::kAtlasWidth);
     EXPECT_EQ(atlas.height(), 10U) << "a row of glyphs 8 tall, a texel above and below";
-    EXPECT_EQ(atlas.metrics().ascent, 17);
+    EXPECT_EQ(atlas.ascent(), nx::Pixels{17});
 
     const auto* square = atlas.glyph(U'A');
     ASSERT_NE(square, nullptr);
     EXPECT_EQ(square->source, (SpriteRect{.x = 1, .y = 1, .width = 8, .height = 8}));
-    EXPECT_EQ(square->top, 8);
-    EXPECT_EQ(square->advance, 10);
+    EXPECT_EQ(square->top, nx::Pixels{8});
+    EXPECT_EQ(square->advance, nx::Pixels{10});
     const auto* shifted = atlas.glyph(U'B');
     ASSERT_NE(shifted, nullptr);
     EXPECT_EQ(shifted->source, (SpriteRect{.x = 10, .y = 1, .width = 8, .height = 8}));
     const auto* space = atlas.glyph(U' ');
     ASSERT_NE(space, nullptr);
     EXPECT_EQ(space->source, SpriteRect{}) << "nothing to draw";
-    EXPECT_EQ(space->advance, 4);
+    EXPECT_EQ(space->advance, nx::Pixels{4});
     EXPECT_EQ(atlas.glyph(U'Z'), nullptr) << "the font has none";
 
     EXPECT_EQ(alphaAt(atlas, 1, 1), 255);
@@ -98,7 +98,7 @@ TEST(TextLayoutTest, EachGlyphGoesWhereThePenPutsIt) {
     EXPECT_EQ(placed[1].x, 15.0F);
     EXPECT_EQ(placed[1].source, atlas.glyph(U'B')->source);
     EXPECT_EQ(placed[2].x, 29.0F) << "after the space's advance";
-    EXPECT_EQ(nx::ui::widthOf(atlas, "AB A"), 34);
+    EXPECT_EQ(nx::ui::widthOf(atlas, "AB A"), nx::Pixels{34});
 }
 
 TEST(TextLayoutTest, CharactersWithoutGlyphsAreLeftOut) {
@@ -109,7 +109,7 @@ TEST(TextLayoutTest, CharactersWithoutGlyphsAreLeftOut) {
                                                                0.0F, 0.0F);
     ASSERT_EQ(placed.size(), 2U);
     EXPECT_EQ(placed[1].x, 10.0F) << "nor do they move the pen";
-    EXPECT_EQ(nx::ui::widthOf(atlas, "AZ"), 10);
+    EXPECT_EQ(nx::ui::widthOf(atlas, "AZ"), nx::Pixels{10});
 }
 
 TEST(TextDrawTest, GlyphsAreDrawnInTheTextsColor) {

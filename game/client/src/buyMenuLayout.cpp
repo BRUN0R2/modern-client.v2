@@ -6,6 +6,7 @@ module cs.client;
 import std;
 import nx.core;
 import nx.rhi;
+import nx.ui;
 
 namespace cs {
 
@@ -41,22 +42,22 @@ constexpr std::int32_t kCarriedTiles = 3;
 
 } // namespace
 
-auto barFillOf(std::int32_t wide, float share) noexcept -> BuyBarFill {
-    const float reached = static_cast<float>(wide) * std::clamp(share, 0.0F, 1.0F);
+auto barFillOf(nx::Pixels wide, float share) noexcept -> BuyBarFill {
+    const float reached = static_cast<float>(wide.value()) * std::clamp(share, 0.0F, 1.0F);
     const float whole = std::floor(reached);
-    return {.whole = static_cast<std::int32_t>(whole), .nextPixel = reached - whole};
+    return {.whole = nx::Pixels{static_cast<std::int32_t>(whole)}, .nextPixel = reached - whole};
 }
 
 BuyMenuLayout::BuyMenuLayout(nx::rhi::Extent2d size) noexcept
     : scale{static_cast<float>(size.height) / kBuyMenuDesignHeight} {
-    const auto screenWide = nx::narrow<std::int32_t>(size.width);
-    const std::int32_t margin = pixels(kMarginUnits);
-    const std::int32_t wide = std::min(screenWide - (2 * margin), pixels(kMostContentUnits));
-    const std::int32_t left = (screenWide - wide) / 2;
+    const nx::Pixels screenWide{nx::narrow<std::int32_t>(size.width)};
+    const nx::Pixels margin = pixels(kMarginUnits);
+    const nx::Pixels wide = std::min(screenWide - (2 * margin), pixels(kMostContentUnits));
+    const nx::Pixels left = (screenWide - wide) / 2;
     headerRect = {.x = left, .y = pixels(kTopUnits), .wide = wide, .tall = pixels(kHeaderTallUnits)};
-    const std::int32_t mainY = headerRect.y + headerRect.tall + pixels(kUnderHeaderUnits);
-    const std::int32_t mainTall = pixels(kMainTallUnits);
-    const std::int32_t gap = pixels(kColumnGapUnits);
+    const nx::Pixels mainY = headerRect.y + headerRect.tall + pixels(kUnderHeaderUnits);
+    const nx::Pixels mainTall = pixels(kMainTallUnits);
+    const nx::Pixels gap = pixels(kColumnGapUnits);
     railRect = {.x = left, .y = mainY, .wide = pixels(kRailWideUnits), .tall = mainTall};
     detailRect = {.x = left + wide - pixels(kDetailWideUnits),
                   .y = mainY,
@@ -72,29 +73,34 @@ BuyMenuLayout::BuyMenuLayout(nx::rhi::Extent2d size) noexcept
                    .tall = pixels(kCarriedTallUnits)};
 }
 
-auto BuyMenuLayout::pixels(std::int32_t units) const noexcept -> std::int32_t {
-    return units > 0 ? std::max(nx::narrow<std::int32_t>(std::lround(static_cast<float>(units) * scale)), 1)
-                     : 0;
+auto BuyMenuLayout::pixels(std::int32_t units) const noexcept -> nx::Pixels {
+    // A part of the design of some size shows, however small the screen.
+    constexpr nx::Pixels kLeastShown{1};
+    return units > 0
+               ? std::max(
+                     nx::Pixels{nx::narrow<std::int32_t>(std::lround(static_cast<float>(units) * scale))},
+                     kLeastShown)
+               : nx::Pixels{};
 }
 
-auto BuyMenuLayout::timeBar() const noexcept -> BuyRect {
-    const std::int32_t tall = pixels(kTimeBarTallUnits);
+auto BuyMenuLayout::timeBar() const noexcept -> nx::ui::PixelRect {
+    const nx::Pixels tall = pixels(kTimeBarTallUnits);
     return {
         .x = headerRect.x, .y = headerRect.y + headerRect.tall - tall, .wide = headerRect.wide, .tall = tall};
 }
 
-auto BuyMenuLayout::tab(std::size_t index) const noexcept -> BuyRect {
-    const std::int32_t tall = pixels(kTabTallUnits);
+auto BuyMenuLayout::tab(std::size_t index) const noexcept -> nx::ui::PixelRect {
+    const nx::Pixels tall = pixels(kTabTallUnits);
     return {.x = railRect.x,
             .y = railRect.y + (nx::narrow<std::int32_t>(index) * (tall + pixels(kRowGapUnits))),
             .wide = railRect.wide,
             .tall = tall};
 }
 
-auto BuyMenuLayout::ammoRow(std::size_t index, std::size_t tabs) const noexcept -> BuyRect {
-    const std::int32_t pitch = pixels(kTabTallUnits) + pixels(kRowGapUnits);
-    const std::int32_t tall = pixels(kAmmoTallUnits);
-    const std::int32_t firstY =
+auto BuyMenuLayout::ammoRow(std::size_t index, std::size_t tabs) const noexcept -> nx::ui::PixelRect {
+    const nx::Pixels pitch = pixels(kTabTallUnits) + pixels(kRowGapUnits);
+    const nx::Pixels tall = pixels(kAmmoTallUnits);
+    const nx::Pixels firstY =
         railRect.y + (nx::narrow<std::int32_t>(tabs) * pitch) - pixels(kRowGapUnits) + pixels(kAmmoGapUnits);
     return {.x = railRect.x,
             .y = firstY + (nx::narrow<std::int32_t>(index) * (tall + pixels(kRowGapUnits))),
@@ -102,16 +108,16 @@ auto BuyMenuLayout::ammoRow(std::size_t index, std::size_t tabs) const noexcept 
             .tall = tall};
 }
 
-auto BuyMenuLayout::cell(std::size_t index, std::size_t count) const noexcept -> BuyRect {
+auto BuyMenuLayout::cell(std::size_t index, std::size_t count) const noexcept -> nx::ui::PixelRect {
     const auto columns = std::max(
         kLeastColumns,
         static_cast<std::size_t>(std::ceil(std::sqrt(static_cast<float>(std::max<std::size_t>(count, 1))))));
     const std::size_t rows = std::max<std::size_t>((count + columns - 1) / columns, 1);
-    const std::int32_t gap = pixels(kCellGapUnits);
+    const nx::Pixels gap = pixels(kCellGapUnits);
     const auto columnCount = nx::narrow<std::int32_t>(columns);
     const auto rowCount = nx::narrow<std::int32_t>(rows);
-    const std::int32_t wide = (gridRect.wide - ((columnCount - 1) * gap)) / columnCount;
-    const std::int32_t tall =
+    const nx::Pixels wide = (gridRect.wide - ((columnCount - 1) * gap)) / columnCount;
+    const nx::Pixels tall =
         std::min(pixels(kMostCellTallUnits), (gridRect.tall - ((rowCount - 1) * gap)) / rowCount);
     return {.x = gridRect.x + (nx::narrow<std::int32_t>(index % columns) * (wide + gap)),
             .y = gridRect.y + (nx::narrow<std::int32_t>(index / columns) * (tall + gap)),
@@ -119,30 +125,30 @@ auto BuyMenuLayout::cell(std::size_t index, std::size_t count) const noexcept ->
             .tall = tall};
 }
 
-auto BuyMenuLayout::buyButton() const noexcept -> BuyRect {
-    const std::int32_t inset = pixels(kDetailInsetUnits);
-    const std::int32_t tall = pixels(kButtonTallUnits);
+auto BuyMenuLayout::buyButton() const noexcept -> nx::ui::PixelRect {
+    const nx::Pixels inset = pixels(kDetailInsetUnits);
+    const nx::Pixels tall = pixels(kButtonTallUnits);
     return {.x = detailRect.x + inset,
             .y = detailRect.y + detailRect.tall - pixels(kDetailFootUnits) - tall,
             .wide = detailRect.wide - (2 * inset),
             .tall = tall};
 }
 
-auto BuyMenuLayout::carriedTile(std::size_t index) const noexcept -> BuyRect {
+auto BuyMenuLayout::carriedTile(std::size_t index) const noexcept -> nx::ui::PixelRect {
     // Of what the keys and the gaps leave, the tiles take a share each and the last half as much again.
     constexpr std::int32_t kSharesOfATile = 2;
     constexpr std::int32_t kAllShares = (2 * kCarriedTiles) + 3;
-    const std::int32_t room =
+    const nx::Pixels room =
         carriedRect.wide - pixels(kKeysWideUnits) - ((kCarriedTiles + 1) * pixels(kTileGapUnits));
-    const std::int32_t wide = room * kSharesOfATile / kAllShares;
+    const nx::Pixels wide = room * kSharesOfATile / kAllShares;
     return {.x = carriedRect.x + (nx::narrow<std::int32_t>(index) * (wide + pixels(kTileGapUnits))),
             .y = carriedRect.y,
             .wide = wide,
             .tall = carriedRect.tall};
 }
 
-auto BuyMenuLayout::againTile() const noexcept -> BuyRect {
-    const BuyRect after = carriedTile(kCarriedTiles);
+auto BuyMenuLayout::againTile() const noexcept -> nx::ui::PixelRect {
+    const nx::ui::PixelRect after = carriedTile(kCarriedTiles);
     return {.x = after.x, .y = after.y, .wide = after.wide + (after.wide / 2), .tall = after.tall};
 }
 

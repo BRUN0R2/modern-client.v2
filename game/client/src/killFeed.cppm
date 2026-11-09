@@ -65,22 +65,22 @@ private:
     HudSpritePicture headPicture;
 };
 
-/// How wide each part of a row is drawn, in pixels: its killer's name, none for a row of no killer; the
-/// picture of what killed; the head's, none but for a kill in the head; and its victim's name.
+/// How wide each part of a row is drawn: its killer's name, none for a row of no killer; the picture of what
+/// killed; the head's, none but for a kill in the head; and its victim's name.
 struct KillRowWidths {
-    std::optional<std::int32_t> killer{};
-    std::int32_t icon = 0;
-    std::optional<std::int32_t> head{};
-    std::int32_t victim = 0;
+    std::optional<nx::Pixels> killer{};
+    nx::Pixels icon{};
+    std::optional<nx::Pixels> head{};
+    nx::Pixels victim{};
 };
 
 /// Where each part of a row is drawn: from where it starts across, and from where they all start down.
 struct KillRowLayout {
-    std::optional<std::int32_t> killerX{};
-    std::int32_t iconX = 0;
-    std::optional<std::int32_t> headX{};
-    std::int32_t victimX = 0;
-    std::int32_t y = 0;
+    std::optional<nx::Pixels> killerX{};
+    nx::Pixels iconX{};
+    std::optional<nx::Pixels> headX{};
+    nx::Pixels victimX{};
+    nx::Pixels y{};
 
     [[nodiscard]] inline auto operator==(const KillRowLayout&) const noexcept -> bool = default;
 };

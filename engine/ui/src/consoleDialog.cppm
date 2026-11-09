@@ -12,6 +12,7 @@ import nx.core;
 import nx.console;
 import nx.platform;
 import nx.render;
+import :geometry;
 import :panel;
 import :painter;
 import :text;
@@ -44,7 +45,7 @@ struct ConsoleColors {
 class ConsoleDialog : public Panel, public console::ConsoleOutput {
 public:
     /// A console window at `bounds`; `console` outlives it.
-    ConsoleDialog(console::Console& console, PanelBounds bounds);
+    ConsoleDialog(console::Console& console, PixelRect bounds);
 
     /// The face its text is in; its parts are laid out by its line.
     void setFace(TextFace face);

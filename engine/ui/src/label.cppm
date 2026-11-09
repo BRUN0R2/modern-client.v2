@@ -8,6 +8,7 @@ export module nx.ui:label;
 import std;
 import nx.core;
 import nx.render;
+import :geometry;
 import :panel;
 import :painter;
 import :text;
@@ -36,7 +37,7 @@ enum class TextAlignment : std::uint8_t {
 /// alignment: against an edge, or halfway between two.
 class Label : public Panel {
 public:
-    explicit Label(std::string name, PanelBounds bounds = {});
+    explicit Label(std::string name, PixelRect bounds = {});
 
     [[nodiscard]] inline auto text() const noexcept -> std::string_view { return m_text; }
     [[nodiscard]] inline auto alignment() const noexcept -> TextAlignment { return m_alignment; }
@@ -46,7 +47,7 @@ public:
     inline void setAlignment(TextAlignment alignment) noexcept { m_alignment = alignment; }
 
     /// Where the text's line goes in the label: where its pen starts, and its top.
-    [[nodiscard]] auto textPosition() const -> std::pair<std::int32_t, std::int32_t>;
+    [[nodiscard]] auto textPosition() const -> PixelPoint;
 
 protected:
     /// Its background, then its text.

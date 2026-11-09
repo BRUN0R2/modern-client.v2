@@ -12,6 +12,11 @@ namespace nx::ui {
 
 namespace {
 
+/// How wide the cursor is drawn.
+constexpr Pixels kCursorWidth{1};
+/// What the room left is divided by to put the line halfway down the entry.
+constexpr std::int32_t kMiddleDivisor = 2;
+
 /// Whether `character` is a control character (C0, DEL or C1), which a line of text does not hold.
 [[nodiscard]] constexpr auto isControl(char32_t character) noexcept -> bool {
     constexpr char32_t kSpace = 0x20;
@@ -31,7 +36,7 @@ namespace {
 
 } // namespace
 
-TextEntry::TextEntry(std::string name, PanelBounds bounds) : Panel{std::move(name), bounds} {}
+TextEntry::TextEntry(std::string name, PixelRect bounds) : Panel{std::move(name), bounds} {}
 
 auto TextEntry::text() const -> std::string {
     return utf8Of(m_characters);
@@ -82,16 +87,16 @@ auto TextEntry::pressKey(platform::Key key) -> TextEntryAction {
     }
 }
 
-auto TextEntry::cursorPen() const -> std::int32_t {
+auto TextEntry::cursorPen() const -> Pixels {
     return m_face.atlas != nullptr
                ? widthOf(*m_face.atlas, utf8Of(std::u32string_view{m_characters}.substr(0, m_cursor)))
-               : 0;
+               : Pixels{};
 }
 
-auto TextEntry::scroll() const -> std::int32_t {
-    // The cursor is a pixel wide: it shows when its pixel is within the entry.
-    const std::int32_t room = bounds().wide - m_inset - 1;
-    return std::max(0, cursorPen() - room);
+auto TextEntry::scroll() const -> Pixels {
+    // The cursor shows when its pixel is within the entry.
+    const Pixels room = bounds().wide - m_inset - kCursorWidth;
+    return std::max(Pixels{}, cursorPen() - room);
 }
 
 void TextEntry::paint(PanelPainter& painter) const {
@@ -99,11 +104,12 @@ void TextEntry::paint(PanelPainter& painter) const {
     if (m_face.atlas == nullptr) {
         return;
     }
-    const std::int32_t height = m_face.atlas->metrics().height();
-    const std::int32_t top = (bounds().tall - height) / 2;
-    const std::int32_t start = m_inset - scroll();
-    std::ignore = painter.text(m_face, text(), start, top, m_textColor);
-    painter.fill(start + cursorPen(), top, 1, height, m_cursorColor);
+    const Pixels height = m_face.atlas->lineHeight();
+    const Pixels top = (bounds().tall - height) / kMiddleDivisor;
+    const Pixels start = m_inset - scroll();
+    std::ignore =
+        painter.text(m_face, text(), {.x = start, .y = top}, m_textColor); // the cursor's pen is known
+    painter.fill({.x = start + cursorPen(), .y = top, .wide = kCursorWidth, .tall = height}, m_cursorColor);
 }
 
 } // namespace nx::ui

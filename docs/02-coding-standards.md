@@ -234,6 +234,9 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
   `nx::kHalfTurnDegrees` or `nx::kFullTurnDegrees`, never a 90, 180 or 360 of a module's own.
 - IDs and handles: dedicated types (`Entity`, `AssetHandle<Model>`, `ClientSlot`),
   **never** raw indices.
+- The interface's places and sizes: `nx::Pixels`, whole pixels, grouped as `nx::ui::PixelPoint`,
+  `PixelSize` and `PixelRect`, so that no `x` is passed for a `wide`. What the GPU takes (`nx::rhi`'s
+  rectangles, a screen quad's fractions of a pixel) stays its own data, converted where it is handed over.
 
 ### 4.2 Enums
 

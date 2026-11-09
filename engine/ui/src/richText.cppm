@@ -8,6 +8,7 @@ export module nx.ui:richText;
 import std;
 import nx.core;
 import nx.render;
+import :geometry;
 import :panel;
 import :painter;
 import :text;
@@ -27,7 +28,7 @@ struct RichTextLine {
 /// width (anywhere when a word is wider), scrolled up from the newest by whole rows.
 class RichText : public Panel {
 public:
-    explicit RichText(std::string name, PanelBounds bounds = {}, std::size_t capacity = kRichTextLines);
+    explicit RichText(std::string name, PixelRect bounds = {}, std::size_t capacity = kRichTextLines);
 
     /// Adds `line` at the bottom; the oldest goes when there are more than the capacity. A text
     /// scrolled up stays on the rows it shows.
@@ -37,7 +38,7 @@ public:
 
     inline void setFace(TextFace face) noexcept { m_face = face; }
     /// The pixels between the panel's edges and its text, on each side.
-    inline void setTextInset(std::int32_t inset) noexcept { m_inset = inset; }
+    inline void setTextInset(Pixels inset) noexcept { m_inset = inset; }
 
     /// The rows the lines make at the panel's width, oldest first: each a line's text or a part of it.
     [[nodiscard]] auto rows() const -> std::vector<RichTextLine>;
@@ -57,7 +58,7 @@ private:
     std::size_t m_capacity;
     std::size_t m_scrolled = 0;
     TextFace m_face{};
-    std::int32_t m_inset = 0;
+    Pixels m_inset{};
 };
 
 } // namespace nx::ui

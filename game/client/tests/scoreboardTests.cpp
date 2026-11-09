@@ -80,22 +80,29 @@ TEST(ScoreboardLayoutTest, ThePanelAndItsRowsAreWhereTheOriginalDrawsThem) {
         MeasuredBoard{{.width = 1600, .height = 900}, 312, 131, 975, 637, 24, 53, 61, 772},
     };
     for (const MeasuredBoard& board : measured) {
-        const cs::ScoreboardMetrics metrics = cs::scoreboardMetricsOf(board.size, 16);
-        EXPECT_EQ(metrics.panelX, board.panelX) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.panelY, board.panelY) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.panelWide, board.panelWide) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.panelTall, board.panelTall) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.separatorY, board.separatorY) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.teamLineY, board.teamLineY) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.nameX, board.nameX) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.scoreEnd, board.scoreEnd) << board.size.width << "x" << board.size.height;
+        const cs::ScoreboardMetrics metrics = cs::scoreboardMetricsOf(board.size, nx::Pixels{16});
+        EXPECT_EQ(metrics.panel.x, nx::Pixels{board.panelX}) << board.size.width << "x" << board.size.height;
+        EXPECT_EQ(metrics.panel.y, nx::Pixels{board.panelY}) << board.size.width << "x" << board.size.height;
+        EXPECT_EQ(metrics.panel.wide, nx::Pixels{board.panelWide})
+            << board.size.width << "x" << board.size.height;
+        EXPECT_EQ(metrics.panel.tall, nx::Pixels{board.panelTall})
+            << board.size.width << "x" << board.size.height;
+        EXPECT_EQ(metrics.separatorY, nx::Pixels{board.separatorY})
+            << board.size.width << "x" << board.size.height;
+        EXPECT_EQ(metrics.teamLineY, nx::Pixels{board.teamLineY})
+            << board.size.width << "x" << board.size.height;
+        EXPECT_EQ(metrics.nameX, nx::Pixels{board.nameX}) << board.size.width << "x" << board.size.height;
+        EXPECT_EQ(metrics.scoreEnd, nx::Pixels{board.scoreEnd})
+            << board.size.width << "x" << board.size.height;
     }
 }
 
 TEST(ScoreboardLayoutTest, ARowsTextIsCenteredUnderItsTeamsLineAsTheOriginalPutsIt) {
     // A font of lines 16 tall, 12 units down at 1280x720: 18 less 8 and a pixel.
-    EXPECT_EQ(cs::scoreboardMetricsOf({.width = 1280, .height = 720}, 16).rowTextUnderLine, 9);
-    EXPECT_EQ(cs::scoreboardMetricsOf({.width = 1280, .height = 960}, 16).rowTextUnderLine, 15);
+    EXPECT_EQ(cs::scoreboardMetricsOf({.width = 1280, .height = 720}, nx::Pixels{16}).rowTextUnderLine,
+              nx::Pixels{9});
+    EXPECT_EQ(cs::scoreboardMetricsOf({.width = 1280, .height = 960}, nx::Pixels{16}).rowTextUnderLine,
+              nx::Pixels{15});
 }
 
 TEST(ScoreboardControlsTest, ShowscoresShowsTheBoardWhileHeld) {

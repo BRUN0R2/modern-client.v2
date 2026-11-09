@@ -9,6 +9,7 @@ import std;
 import nx.core;
 import nx.rhi;
 import nx.render;
+import :geometry;
 import :text;
 
 export namespace nx::ui {
@@ -26,17 +27,15 @@ public:
     /// A painter of the whole screen, `size` pixels, appending to `quads`.
     PanelPainter(std::vector<render::ScreenQuad>& quads, rhi::Extent2d size) noexcept;
 
-    /// Fills the rectangle at `x`, `y`, `wide` by `tall` with `color`, as opaque as its alpha.
-    void fill(std::int32_t x, std::int32_t y, std::int32_t wide, std::int32_t tall,
-              render::ScreenColor color);
-    /// Draws the UTF-8 `text` in `face`, the line's top at `y` and the pen from `x`, in `color`.
-    /// Returns where the pen ends.
-    auto text(const TextFace& face, std::string_view text, std::int32_t x, std::int32_t y,
-              render::ScreenColor color) -> std::int32_t;
+    /// Fills `rect` with `color`, as opaque as its alpha.
+    void fill(const PixelRect& rect, render::ScreenColor color);
+    /// Draws the UTF-8 `text` in `face`, the line's top at `pen`'s and the pen from its left, in
+    /// `color`. Returns where the pen ends, from the panel's left.
+    auto text(const TextFace& face, std::string_view text, PixelPoint pen, render::ScreenColor color)
+        -> Pixels;
 
-    /// The painter of a panel at `x`, `y`, `wide` by `tall` in this one: from its top left, within it.
-    [[nodiscard]] auto inside(std::int32_t x, std::int32_t y, std::int32_t wide,
-                              std::int32_t tall) const noexcept -> PanelPainter;
+    /// The painter of a panel at `rect` in this one: from its top left, within it.
+    [[nodiscard]] auto inside(const PixelRect& rect) const noexcept -> PanelPainter;
     /// Whether nothing it draws would show.
     [[nodiscard]] inline auto isClippedAway() const noexcept -> bool {
         return m_clip.size.width == 0 || m_clip.size.height == 0;
@@ -45,12 +44,10 @@ public:
     [[nodiscard]] inline auto clip() const noexcept -> const rhi::Rect& { return m_clip; }
 
 private:
-    PanelPainter(std::vector<render::ScreenQuad>& quads, std::int32_t x, std::int32_t y,
-                 rhi::Rect clip) noexcept;
+    PanelPainter(std::vector<render::ScreenQuad>& quads, PixelPoint origin, rhi::Rect clip) noexcept;
 
     std::vector<render::ScreenQuad>* m_quads;
-    std::int32_t m_x = 0; ///< The panel's top left on the screen.
-    std::int32_t m_y = 0;
+    PixelPoint m_origin{}; ///< The panel's top left on the screen.
     rhi::Rect m_clip{};
 };
 

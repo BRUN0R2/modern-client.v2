@@ -12,6 +12,9 @@ namespace nx::ui {
 
 namespace {
 
+/// What a parent's extent is divided by for its middle, which a `c` position counts from.
+constexpr std::int32_t kMiddleDivisor = 2;
+
 /// `word` as a whole number; none for anything else.
 [[nodiscard]] auto wholeNumberOf(std::string_view word) noexcept -> std::optional<std::int32_t> {
     std::int32_t value = 0;
@@ -37,8 +40,7 @@ namespace {
 /// A position setting: from the start of the parent's `extent`, from its end with `r`, from its middle
 /// with `c`; `current` when it is left out.
 [[nodiscard]] auto positionSetting(const assets::KeyValuesEntry& settings, std::string_view key,
-                                   std::int32_t extent, std::int32_t current)
-    -> Result<std::int32_t, PanelError> {
+                                   Pixels extent, Pixels current) -> Result<Pixels, PanelError> {
     const std::optional<std::string_view> word = settings.findWord(key);
     if (!word) {
         return current;
@@ -49,7 +51,16 @@ namespace {
     if (!number) {
         return fail(PanelError::BadSetting, std::format("{:?} {}: {:?}", settings.key, key, *word));
     }
-    return anchor == 'r' ? extent - *number : anchor == 'c' ? (extent / 2) + *number : *number;
+    const Pixels offset{*number};
+    return anchor == 'r' ? extent - offset : anchor == 'c' ? (extent / kMiddleDivisor) + offset : offset;
+}
+
+/// The size `key` of `settings` sets in pixels; `current` when it sets none. Errors: BadSetting.
+[[nodiscard]] auto sizeSetting(const assets::KeyValuesEntry& settings, std::string_view key, Pixels current)
+    -> Result<Pixels, PanelError> {
+    return numberSetting(settings, key, current.value()).transform([](std::int32_t number) {
+        return Pixels{number};
+    });
 }
 
 /// An enumeration setting, its value the enumerator's number; `current` when it is left out.
@@ -68,7 +79,7 @@ template <class Enum>
 
 } // namespace
 
-Panel::Panel(std::string name, PanelBounds bounds) : m_name{std::move(name)}, m_bounds{bounds} {}
+Panel::Panel(std::string name, PixelRect bounds) : m_name{std::move(name)}, m_bounds{bounds} {}
 
 auto Panel::add(std::unique_ptr<Panel> child) -> Panel& {
     expects(child != nullptr, "Panel::add: a panel");
@@ -83,19 +94,18 @@ auto Panel::find(std::string_view name) const noexcept -> Panel* {
     return found == m_children.end() ? nullptr : found->get();
 }
 
-void Panel::setBounds(PanelBounds bounds) {
-    const std::int32_t wider = bounds.wide - m_bounds.wide;
-    const std::int32_t taller = bounds.tall - m_bounds.tall;
+void Panel::setBounds(PixelRect bounds) {
+    const PixelSize grown{.wide = bounds.wide - m_bounds.wide, .tall = bounds.tall - m_bounds.tall};
     m_bounds = bounds;
-    if (wider == 0 && taller == 0) {
+    if (grown == PixelSize{}) {
         return;
     }
     for (const std::unique_ptr<Panel>& child : m_children) {
-        child->followParent(wider, taller);
+        child->followParent(grown);
     }
 }
 
-void Panel::followParent(std::int32_t wider, std::int32_t taller) {
+void Panel::followParent(PixelSize grown) {
     // Each edge follows the parent's left or right, top or bottom: the left and top edges the pinned
     // corner's, the right and bottom ones the parent's right and bottom when the panel resizes that
     // way, else the left and top edges', keeping the panel's size.
@@ -106,10 +116,10 @@ void Panel::followParent(std::int32_t wider, std::int32_t taller) {
         m_autoResize == AutoResize::Right || m_autoResize == AutoResize::DownAndRight || leftFollowsRight;
     const bool bottomFollowsBottom =
         m_autoResize == AutoResize::Down || m_autoResize == AutoResize::DownAndRight || topFollowsBottom;
-    const std::int32_t left = leftFollowsRight ? wider : 0;
-    const std::int32_t top = topFollowsBottom ? taller : 0;
-    const std::int32_t right = rightFollowsRight ? wider : 0;
-    const std::int32_t bottom = bottomFollowsBottom ? taller : 0;
+    const Pixels left = leftFollowsRight ? grown.wide : Pixels{};
+    const Pixels top = topFollowsBottom ? grown.tall : Pixels{};
+    const Pixels right = rightFollowsRight ? grown.wide : Pixels{};
+    const Pixels bottom = bottomFollowsBottom ? grown.tall : Pixels{};
     setBounds({.x = m_bounds.x + left,
                .y = m_bounds.y + top,
                .wide = m_bounds.wide + right - left,
@@ -117,9 +127,9 @@ void Panel::followParent(std::int32_t wider, std::int32_t taller) {
 }
 
 auto Panel::applySettings(const assets::KeyValuesEntry& settings) -> Result<void, PanelError> {
-    const PanelBounds parentBounds = m_parent != nullptr ? m_parent->m_bounds : PanelBounds{};
+    const PixelRect parentBounds = m_parent != nullptr ? m_parent->m_bounds : PixelRect{};
     // Read whole before any of it is applied: a setting that cannot be read changes nothing.
-    PanelBounds bounds = m_bounds;
+    PixelRect bounds = m_bounds;
     std::array numbers{std::pair{"visible", m_isVisible ? 1 : 0}, std::pair{"enabled", m_isEnabled ? 1 : 0},
                        std::pair{"tabPosition", m_tabPosition}};
     for (auto& [key, value] : numbers) {
@@ -138,7 +148,7 @@ auto Panel::applySettings(const assets::KeyValuesEntry& settings) -> Result<void
         *value = *read;
     }
     for (const auto& [key, value] : {std::pair{"wide", &bounds.wide}, std::pair{"tall", &bounds.tall}}) {
-        auto read = numberSetting(settings, key, *value);
+        auto read = sizeSetting(settings, key, *value);
         if (!read) {
             return std::unexpected{std::move(read.error())};
         }
@@ -162,7 +172,7 @@ void Panel::paintTree(const PanelPainter& painter) const {
     if (!m_isVisible) {
         return;
     }
-    PanelPainter mine = painter.inside(m_bounds.x, m_bounds.y, m_bounds.wide, m_bounds.tall);
+    PanelPainter mine = painter.inside(m_bounds);
     if (mine.isClippedAway()) {
         return;
     }
@@ -174,7 +184,7 @@ void Panel::paintTree(const PanelPainter& painter) const {
 
 void Panel::paint(PanelPainter& painter) const {
     if (m_background) {
-        painter.fill(0, 0, m_bounds.wide, m_bounds.tall, *m_background);
+        painter.fill({.wide = m_bounds.wide, .tall = m_bounds.tall}, *m_background);
     }
 }
 

@@ -32,24 +32,36 @@ constexpr std::int32_t kRowPitchUnits = 21;
 constexpr std::int32_t kTitleUnits = 5;
 
 /// Where the panel's top rows run: on screens from this tall, in the larger of the original's two sizes.
-constexpr std::int32_t kLargerFrom = 768;
-/// What of the panel's top does not scale, but by those two sizes, in pixels from its top left.
+constexpr nx::Pixels kLargerFrom{768};
+/// What of the panel's top does not scale, but by those two sizes, from its top left.
 struct FixedParts {
-    std::int32_t separatorY = 0;
-    std::int32_t teamTextY = 0;
-    std::int32_t teamLineY = 0;
-    std::int32_t nameX = 0;
+    nx::Pixels separatorY{};
+    nx::Pixels teamTextY{};
+    nx::Pixels teamLineY{};
+    nx::Pixels nameX{};
 };
-constexpr FixedParts kSmallerParts{.separatorY = 23, .teamTextY = 35, .teamLineY = 51, .nameX = 45};
-constexpr FixedParts kLargerParts{.separatorY = 24, .teamTextY = 36, .teamLineY = 53, .nameX = 61};
-constexpr std::int32_t kTitleGap = 1;   ///< More than its share, before the title's pen and over the heads.
-constexpr std::int32_t kLinesInset = 6; ///< From the panel's left to the team's line.
-constexpr std::int32_t kLinesRightInset = 7; ///< From the team's line's end to the panel's right.
-constexpr std::int32_t kRowTextLift = 1;     ///< Over a row's line of text centered, measured.
-constexpr std::int32_t kBandUnderLine = 2;   ///< From the team's line to the top of its first row's band.
-constexpr std::int32_t kBandInset = 5;       ///< From either side of the panel to a band.
+constexpr FixedParts kSmallerParts{.separatorY = nx::Pixels{23},
+                                   .teamTextY = nx::Pixels{35},
+                                   .teamLineY = nx::Pixels{51},
+                                   .nameX = nx::Pixels{45}};
+constexpr FixedParts kLargerParts{.separatorY = nx::Pixels{24},
+                                  .teamTextY = nx::Pixels{36},
+                                  .teamLineY = nx::Pixels{53},
+                                  .nameX = nx::Pixels{61}};
+constexpr nx::Pixels kTitleGap{1};        ///< More than its share, before the title's pen and over the heads.
+constexpr nx::Pixels kLinesInset{6};      ///< From the panel's left to the team's line.
+constexpr nx::Pixels kLinesRightInset{7}; ///< From the team's line's end to the panel's right.
+constexpr nx::Pixels kRowTextLift{1};     ///< Over a row's line of text centered, measured.
+constexpr nx::Pixels kBandUnderLine{2};   ///< From the team's line to the top of its first row's band.
+constexpr nx::Pixels kBandInset{5};       ///< From either side of the panel to a band.
+constexpr nx::Pixels kLineThickness{1}; ///< Of the border, the corners' steps and the lines under the heads.
+/// An inset on each side of the panel: left and right, top and bottom.
+constexpr std::int32_t kInsetSides = 2;
+/// What a length is divided by for its middle.
+constexpr std::int32_t kMiddleDivisor = 2;
 /// Of each of the panel's top rows, how far in its corner rounds it.
-constexpr std::array<std::int32_t, 5> kCornerInsets{5, 4, 2, 2, 1};
+constexpr auto kCornerInsets =
+    std::to_array({nx::Pixels{5}, nx::Pixels{4}, nx::Pixels{2}, nx::Pixels{2}, nx::Pixels{1}});
 
 // The colors, measured: a black and an orange half opaque over the scene, the heads' orange, a player's own
 // row's white, the teams'.
@@ -73,31 +85,38 @@ constexpr std::string_view kDeathsHead = "Deaths";
 constexpr std::string_view kLatencyHead = "Latency";
 
 /// `units` of the board's on a screen `height` tall, cut to whole pixels (the original's YRES).
-[[nodiscard]] constexpr auto unitsOf(std::int32_t units, std::int32_t height) noexcept -> std::int32_t {
-    return units * height / kUnitsTall;
+[[nodiscard]] constexpr auto unitsOf(std::int32_t units, nx::Pixels height) noexcept -> nx::Pixels {
+    return nx::Pixels{units * height.value() / kUnitsTall};
 }
 
-/// Fills the panel `painter` draws in, `wide` by `tall`, and draws its border, its corners rounded.
-void paintPanel(nx::ui::PanelPainter& painter, std::int32_t wide, std::int32_t tall) {
-    const auto rounded = nx::narrow<std::int32_t>(kCornerInsets.size());
-    painter.fill(0, rounded, wide, tall - (2 * rounded), kPanelColor);
+/// Fills the panel `painter` draws in, of `size`, and draws its border, its corners rounded.
+void paintPanel(nx::ui::PanelPainter& painter, nx::ui::PixelSize size) {
+    const auto [wide, tall] = size;
+    const nx::Pixels rounded{nx::narrow<std::int32_t>(kCornerInsets.size())};
+    const nx::Pixels bottom = tall - kLineThickness;
+    painter.fill({.y = rounded, .wide = wide, .tall = tall - (rounded * kInsetSides)}, kPanelColor);
     for (const auto& [row, inset] : std::views::enumerate(kCornerInsets)) {
-        const auto y = nx::narrow<std::int32_t>(row);
-        painter.fill(inset, y, wide - (2 * inset), 1, kPanelColor);
-        painter.fill(inset, tall - 1 - y, wide - (2 * inset), 1, kPanelColor);
+        const nx::Pixels y{nx::narrow<std::int32_t>(row)};
+        const nx::Pixels across = wide - (inset * kInsetSides);
+        painter.fill({.x = inset, .y = y, .wide = across, .tall = kLineThickness}, kPanelColor);
+        painter.fill({.x = inset, .y = bottom - y, .wide = across, .tall = kLineThickness}, kPanelColor);
     }
-    const std::int32_t top = kCornerInsets.front();
-    painter.fill(top, 0, wide - (2 * top), 1, kBorderColor);
-    painter.fill(top, tall - 1, wide - (2 * top), 1, kBorderColor);
-    painter.fill(0, rounded, 1, tall - (2 * rounded), kBorderColor);
-    painter.fill(wide - 1, rounded, 1, tall - (2 * rounded), kBorderColor);
+    const nx::Pixels top = kCornerInsets.front();
+    const nx::Pixels edge = wide - (top * kInsetSides);
+    const nx::Pixels side = tall - (rounded * kInsetSides);
+    painter.fill({.x = top, .wide = edge, .tall = kLineThickness}, kBorderColor);
+    painter.fill({.x = top, .y = bottom, .wide = edge, .tall = kLineThickness}, kBorderColor);
+    painter.fill({.y = rounded, .wide = kLineThickness, .tall = side}, kBorderColor);
+    painter.fill({.x = wide - kLineThickness, .y = rounded, .wide = kLineThickness, .tall = side},
+                 kBorderColor);
     for (std::size_t row = 1; row < kCornerInsets.size(); ++row) {
-        const std::int32_t inset = kCornerInsets[row];
-        const std::int32_t run = std::max(kCornerInsets[row - 1] - inset, 1);
-        const auto y = nx::narrow<std::int32_t>(row);
-        for (const std::int32_t at : {y, tall - 1 - y}) {
-            painter.fill(inset, at, run, 1, kBorderColor);
-            painter.fill(wide - inset - run, at, run, 1, kBorderColor);
+        const nx::Pixels inset = kCornerInsets[row];
+        const nx::Pixels run = std::max(kCornerInsets[row - 1] - inset, kLineThickness);
+        const nx::Pixels y{nx::narrow<std::int32_t>(row)};
+        for (const nx::Pixels at : {y, bottom - y}) {
+            painter.fill({.x = inset, .y = at, .wide = run, .tall = kLineThickness}, kBorderColor);
+            painter.fill({.x = wide - inset - run, .y = at, .wide = run, .tall = kLineThickness},
+                         kBorderColor);
         }
     }
 }
@@ -145,23 +164,23 @@ auto teamRowText(Team team, std::size_t count) -> std::string {
     return std::format("{}   -   {} {}", kTeamNames[team], count, count == 1 ? "player" : "players");
 }
 
-auto scoreboardMetricsOf(nx::rhi::Extent2d size, std::int32_t lineHeight) noexcept -> ScoreboardMetrics {
-    const auto height = nx::narrow<std::int32_t>(size.height);
+auto scoreboardMetricsOf(nx::rhi::Extent2d size, nx::Pixels lineHeight) noexcept -> ScoreboardMetrics {
+    const nx::Pixels height{nx::narrow<std::int32_t>(size.height)};
     const FixedParts& fixed = height < kLargerFrom ? kSmallerParts : kLargerParts;
-    const std::int32_t wide = unitsOf(kPanelWideUnits, height);
-    const std::int32_t pitch = unitsOf(kRowPitchUnits, height);
+    const nx::Pixels wide = unitsOf(kPanelWideUnits, height);
+    const nx::Pixels pitch = unitsOf(kRowPitchUnits, height);
     return ScoreboardMetrics{
-        .panelX = (nx::narrow<std::int32_t>(size.width) - wide) / 2,
-        .panelY = unitsOf(kPanelTopUnits, height),
-        .panelWide = wide,
-        .panelTall = unitsOf(kPanelTallUnits, height),
+        .panel = {.x = (nx::Pixels{nx::narrow<std::int32_t>(size.width)} - wide) / kMiddleDivisor,
+                  .y = unitsOf(kPanelTopUnits, height),
+                  .wide = wide,
+                  .tall = unitsOf(kPanelTallUnits, height)},
         .titleX = unitsOf(kTitleUnits, height) + kTitleGap,
         .headsY = kTitleGap + unitsOf(1, height),
         .separatorY = fixed.separatorY,
         .teamTextY = fixed.teamTextY,
         .teamLineY = fixed.teamLineY,
         .nameX = fixed.nameX,
-        .rowTextUnderLine = unitsOf(kRowCenterUnits, height) - (lineHeight / 2) - kRowTextLift,
+        .rowTextUnderLine = unitsOf(kRowCenterUnits, height) - (lineHeight / kMiddleDivisor) - kRowTextLift,
         .statusX = unitsOf(kStatusUnits, height),
         .rowPitch = pitch,
         .healthEnd = unitsOf(kHealthEndUnits, height),
@@ -216,46 +235,51 @@ void Scoreboard::append(std::vector<nx::render::ScreenQuad>& quads, const Scoreb
 
 void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const nx::ui::TextFace& face,
                         const ScoreboardView& view, nx::rhi::Extent2d size) const {
-    const ScoreboardMetrics metrics = scoreboardMetricsOf(size, atlas.metrics().height());
+    const ScoreboardMetrics metrics = scoreboardMetricsOf(size, atlas.lineHeight());
     nx::ui::PanelPainter screen{quads, size};
-    nx::ui::PanelPainter painter =
-        screen.inside(metrics.panelX, metrics.panelY, metrics.panelWide, metrics.panelTall);
-    paintPanel(painter, metrics.panelWide, metrics.panelTall);
-    // Right-aligned so that its last pixel is about `end`: its pen ends a pixel after it.
-    const auto writeEndingAt = [&](std::string_view text, std::int32_t end, std::int32_t y,
-                                   nx::render::ScreenColor color) {
-        std::ignore = painter.text(face, text, end + 1 - nx::ui::widthOf(atlas, text), y, color);
+    nx::ui::PanelPainter painter = screen.inside(metrics.panel);
+    paintPanel(painter, {.wide = metrics.panel.wide, .tall = metrics.panel.tall});
+    const auto write = [&](std::string_view text, nx::Pixels x, nx::Pixels y, nx::render::ScreenColor color) {
+        std::ignore = painter.text(face, text, {.x = x, .y = y}, color); // where its pen ends is no matter
     };
+    // Right-aligned so that its last pixel is about `end`: its pen ends a pixel after it.
+    const auto writeEndingAt = [&](std::string_view text, nx::Pixels end, nx::Pixels y,
+                                   nx::render::ScreenColor color) {
+        write(text, end + kLineThickness - nx::ui::widthOf(atlas, text), y, color);
+    };
+    const nx::Pixels lineWide = metrics.panel.wide - kLinesInset - kLinesRightInset;
 
-    std::ignore = painter.text(face, view.hostname, metrics.titleX, metrics.headsY, kHeadColor);
+    write(view.hostname, metrics.titleX, metrics.headsY, kHeadColor);
     writeEndingAt(kHealthHead, metrics.healthEnd, metrics.headsY, kHeadColor);
     writeEndingAt(kMoneyHead, metrics.moneyEnd, metrics.headsY, kHeadColor);
     writeEndingAt(kScoreHead, metrics.scoreEnd, metrics.headsY, kHeadColor);
     writeEndingAt(kDeathsHead, metrics.deathsEnd, metrics.headsY, kHeadColor);
     writeEndingAt(kLatencyHead, metrics.latencyEnd, metrics.headsY, kHeadColor);
-    painter.fill(kLinesInset, metrics.separatorY, metrics.panelWide - kLinesInset - kLinesRightInset, 1,
+    painter.fill({.x = kLinesInset, .y = metrics.separatorY, .wide = lineWide, .tall = kLineThickness},
                  kBorderColor);
 
     // Each team's rows under its own, one row's room between the teams.
-    std::int32_t down = 0;
+    nx::Pixels down{};
     for (const ScoreTeam& team : scoreTeamsOf(view.rows, view.wins)) {
         const nx::render::ScreenColor color = kTeamColors[team.team];
-        const std::int32_t textY = metrics.teamTextY + down;
-        const std::int32_t lineY = metrics.teamLineY + down;
-        std::ignore =
-            painter.text(face, teamRowText(team.team, team.rows.size()), metrics.nameX, textY, color);
+        const nx::Pixels textY = metrics.teamTextY + down;
+        const nx::Pixels lineY = metrics.teamLineY + down;
+        write(teamRowText(team.team, team.rows.size()), metrics.nameX, textY, color);
         writeEndingAt(std::to_string(team.wins), metrics.scoreEnd, textY, color);
-        painter.fill(kLinesInset, lineY, metrics.panelWide - kLinesInset - kLinesRightInset, 1, color);
-        std::int32_t rowDown = lineY;
+        painter.fill({.x = kLinesInset, .y = lineY, .wide = lineWide, .tall = kLineThickness}, color);
+        nx::Pixels rowDown = lineY;
         for (const ScoreRow& row : team.rows) {
             if (row.player == view.self) {
-                painter.fill(kBandInset, rowDown + metrics.bandUnderLine,
-                             metrics.panelWide - (2 * kBandInset), metrics.bandTall, kBandColor);
+                painter.fill({.x = kBandInset,
+                              .y = rowDown + metrics.bandUnderLine,
+                              .wide = metrics.panel.wide - (kBandInset * kInsetSides),
+                              .tall = metrics.bandTall},
+                             kBandColor);
             }
-            const std::int32_t rowY = rowDown + metrics.rowTextUnderLine;
-            std::ignore = painter.text(face, row.name, metrics.nameX, rowY, color);
+            const nx::Pixels rowY = rowDown + metrics.rowTextUnderLine;
+            write(row.name, metrics.nameX, rowY, color);
             if (row.isDead) {
-                std::ignore = painter.text(face, kDeadStatus, metrics.statusX, rowY, color);
+                write(kDeadStatus, metrics.statusX, rowY, color);
             } else if (row.health) {
                 writeEndingAt(healthDigits(*row.health), metrics.healthEnd, rowY, color);
             }

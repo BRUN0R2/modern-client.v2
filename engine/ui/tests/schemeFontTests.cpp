@@ -97,9 +97,9 @@ TEST_F(SchemeFontTest, AnAtlasOfASchemesFont) {
     ASSERT_TRUE(set.has_value()) << nx::describe(set.error());
     const auto atlas = nx::ui::GlyphAtlas::build(*set, U"AB");
     ASSERT_TRUE(atlas.has_value()) << atlas.error().detail;
-    EXPECT_EQ(atlas->metrics().height(), 20);
-    EXPECT_EQ(atlas->glyph(U'A')->advance, 10) << "Square's";
-    EXPECT_EQ(atlas->glyph(U'B')->advance, 4) << "Mark's";
+    EXPECT_EQ(atlas->lineHeight(), nx::Pixels{20});
+    EXPECT_EQ(atlas->glyph(U'A')->advance, nx::Pixels{10}) << "Square's";
+    EXPECT_EQ(atlas->glyph(U'B')->advance, nx::Pixels{4}) << "Mark's";
 }
 
 TEST_F(SchemeFontTest, TheCharactersOfACandidateWithADropShadowCastIt) {

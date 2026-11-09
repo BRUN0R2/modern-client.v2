@@ -101,13 +101,13 @@ TEST(KillFeedLayoutTest, ARowIsWhereTheOriginalDrawsItAtEachResolutionMeasured) 
         MeasuredRow{{.width = 1600, .height = 900}, 47, 1531, 1490, 60, 30},
     };
     for (const MeasuredRow& row : measured) {
-        const cs::KillRowWidths widths{.icon = 32, .victim = row.nameWidth};
+        const cs::KillRowWidths widths{.icon = nx::Pixels{32}, .victim = nx::Pixels{row.nameWidth}};
         const cs::KillRowLayout first = cs::layoutKillRow(widths, 0, false, row.size);
-        EXPECT_EQ(first.victimX, row.victimX) << row.size.width << "x" << row.size.height;
-        EXPECT_EQ(first.iconX, row.iconX) << row.size.width << "x" << row.size.height;
-        EXPECT_EQ(first.y, row.top) << row.size.width << "x" << row.size.height;
-        EXPECT_EQ(cs::layoutKillRow(widths, 3, false, row.size).y, row.top + (3 * row.pitch));
-        EXPECT_EQ(cs::layoutKillRow(widths, 0, true, row.size).y, 2 * row.top)
+        EXPECT_EQ(first.victimX, nx::Pixels{row.victimX}) << row.size.width << "x" << row.size.height;
+        EXPECT_EQ(first.iconX, nx::Pixels{row.iconX}) << row.size.width << "x" << row.size.height;
+        EXPECT_EQ(first.y, nx::Pixels{row.top}) << row.size.width << "x" << row.size.height;
+        EXPECT_EQ(cs::layoutKillRow(widths, 3, false, row.size).y, nx::Pixels{row.top + (3 * row.pitch)});
+        EXPECT_EQ(cs::layoutKillRow(widths, 0, true, row.size).y, nx::Pixels{2 * row.top})
             << "under the spectator's panel";
         EXPECT_EQ(first.killerX, std::nullopt);
         EXPECT_EQ(first.headX, std::nullopt);
@@ -115,12 +115,13 @@ TEST(KillFeedLayoutTest, ARowIsWhereTheOriginalDrawsItAtEachResolutionMeasured) 
 }
 
 TEST(KillFeedLayoutTest, AKillersNameGoesBeforeThePicturesTheHeadsAfterWhatKilled) {
-    const cs::KillRowLayout layout = cs::layoutKillRow({.killer = 60, .icon = 48, .head = 36, .victim = 50},
-                                                       0, false, {.width = 1280, .height = 720});
-    EXPECT_EQ(layout.victimX, 1212);
-    EXPECT_EQ(layout.headX, 1169) << "a share of the height before the name";
-    EXPECT_EQ(layout.iconX, 1121);
-    EXPECT_EQ(layout.killerX, 1054) << "as much before the pictures";
+    const cs::KillRowLayout layout = cs::layoutKillRow(
+        {.killer = nx::Pixels{60}, .icon = nx::Pixels{48}, .head = nx::Pixels{36}, .victim = nx::Pixels{50}},
+        0, false, {.width = 1280, .height = 720});
+    EXPECT_EQ(layout.victimX, nx::Pixels{1212});
+    EXPECT_EQ(layout.headX, nx::Pixels{1169}) << "a share of the height before the name";
+    EXPECT_EQ(layout.iconX, nx::Pixels{1121});
+    EXPECT_EQ(layout.killerX, nx::Pixels{1054}) << "as much before the pictures";
 }
 
 TEST(KillLineTest, TheConsoleTellsWhoKilledWhomWithWhat) {
