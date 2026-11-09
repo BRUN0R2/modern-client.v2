@@ -140,11 +140,6 @@ private:
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
-    /// Draws over the scene the agents' mesh of the map played and the way each of its agents follows on
-    /// it, or stops (nav_draw). Errors: InvalidArguments, CommandFailed (the map has no mesh, the cause
-    /// told).
-    [[nodiscard]] auto drawNavigationCommand(const nx::console::CommandLine& line)
-        -> nx::Result<void, ConsoleError>;
     /// Builds the agents' mesh of the map played again, what the cache keeps of it left aside, and plays
     /// the map again on it from the next frame (nav_generate), as Condition Zero restarts the game once it
     /// analyzed a map. Errors: InvalidArguments, CommandFailed.
@@ -211,9 +206,6 @@ private:
     [[nodiscard]] auto sessionView() -> cs::SceneView;
     /// The camera the session's scene is drawn from: the player's view turned by its weapon's kick.
     [[nodiscard]] auto kickedCamera() const -> nx::render::Camera;
-    /// What nav_draw draws over the session's frame, while it draws: its agents' mesh, which upload put on
-    /// the GPU, and the way each of its living agents follows on it, found again as the game ticks.
-    [[nodiscard]] auto navigationOverlay() -> cs::SceneOverlay;
     /// The screen's pictures over the frame, of `size`: the HUD, cl_showfps's label, and the console's
     /// window when open.
     void appendScreen(nx::rhi::Extent2d size);
@@ -230,10 +222,7 @@ private:
     nx::settings::BoundInput m_keys;
     std::optional<ClientSettings> settings; ///< Registered as the client starts.
     cs::FogControl m_fog;                   ///< The fog the frames show, as the fog's cvars ask for it.
-    bool drawsNavigation = false;           ///< nav_draw's: the agents' mesh and their ways over the scene.
-    /// navigationOverlay's, kept for their room: the bodies of the agents, and those living that it shows.
-    std::vector<std::pair<nx::ecs::Entity, const nx::agents::Agent*>> agentBodies;
-    std::vector<cs::ShownAgent> shownAgents;
+    NavigationView navigationView;          ///< What nav_draw draws over the scene.
     /// Read as the client starts: each map's agents' mesh is built by it as the map loads.
     nx::Result<nx::game::NavigationData, ConsoleError> navigationData{};
     std::optional<cs::GameContent> m_content;
@@ -405,7 +394,9 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
           add({.name = "nav_draw",
                .description = "Draws the agents' navigation mesh and the way each bot and zombie follows "
                               "over the scene, or stops."},
-              [this](Console&, const CommandLine& line) { return drawNavigationCommand(line); }),
+              [this](Console&, const CommandLine& line) {
+                  return navigationView.toggle(line, m_session.get());
+              }),
           add({.name = "nav_generate",
                .description = "Builds the agents' navigation mesh of the map again, the cache's left "
                               "aside, and plays the map again on it."},
@@ -511,19 +502,6 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return std::unexpected{std::move(session.error())};
     }
     m_nextSession = std::move(*session);
-    return {};
-}
-
-auto Client::drawNavigationCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
-    if (!line.arguments().empty()) {
-        return nx::fail(ConsoleError::InvalidArguments, "usage: nav_draw");
-    }
-    if (!drawsNavigation && m_session && !m_session->agentMesh) {
-        return nx::fail(ConsoleError::CommandFailed,
-                        std::format("nav_draw: {} has no navigation mesh: {}", m_session->map->name(),
-                                    nx::describe(m_session->agentMesh.error())));
-    }
-    drawsNavigation = !drawsNavigation;
     return {};
 }
 
@@ -1046,14 +1024,8 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
         }
     }
-    if (m_scene && drawsNavigation && m_session->agentMesh && navigationData &&
-        !m_session->navigationDrawing) {
-        // nav_draw's mesh, put on the GPU once: the session's scene keeps it as long as the drawing lives.
-        const cs::NavigationDrawing& drawing =
-            m_session->navigationDrawing.emplace(*m_session->agentMesh, navigationData->build.cellHeight);
-        if (auto kept = m_scene->keepOverlay(list, drawing.mesh()); !kept) {
-            return nx::fail(ClientError::GpuFailed, std::move(kept.error()));
-        }
+    if (m_scene) {
+        return navigationView.upload(*m_session, *m_scene, list, navigationData);
     }
     return {};
 }
@@ -1091,37 +1063,9 @@ auto Client::sessionView() -> cs::SceneView {
             .blood = m_session->blood.shown(time, m_content->blood.enhancedLook),
             .clientEvents = m_session->clientEvents,
             .hand = settings->hud.hand(),
-            .overlay = navigationOverlay(),
+            .overlay = navigationView.overlay(*m_session, *m_jobs),
             .fog = m_fog.shown(),
             .jobs = m_jobs.get()};
-}
-
-auto Client::navigationOverlay() -> cs::SceneOverlay {
-    Session& session = *m_session;
-    if (!drawsNavigation || !session.navigationDrawing) {
-        return {};
-    }
-    cs::NavigationDrawing& drawing = *session.navigationDrawing;
-    // The ways change only as the game ticks: found again once a tick, not once a frame.
-    const nx::GameTime now = session.game->time().now;
-    if (!drawing.showsWaysOf(now)) {
-        agentBodies.clear();
-        session.game->forEachEntityComponent<nx::agents::Agent>(
-            [this](nx::ecs::Entity body, const nx::agents::Agent& agent) {
-                agentBodies.emplace_back(body, &agent);
-            });
-        // A dead body decides nothing: its agent's last decision and corridor are of its last life.
-        shownAgents.clear();
-        for (const auto& [body, agent] : agentBodies) {
-            if (const cs::BodyStatus status = session.game->bodyStatusOf(body); status.isAlive) {
-                shownAgents.push_back(cs::ShownAgent{.agent = agent, .team = status.team});
-            }
-        }
-        drawing.showWays(*m_jobs, now, shownAgents);
-        agentBodies.clear(); // borrowed only until the world's entities change
-        shownAgents.clear();
-    }
-    return drawing.overlay();
 }
 
 void Client::appendScreen(nx::rhi::Extent2d size) {
