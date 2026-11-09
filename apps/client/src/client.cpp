@@ -165,8 +165,6 @@ private:
     /// Reads, before the session plays the frame, the view models of the weapons made or changed since
     /// (cs::Level::updateViewModels), which upload puts on the GPU, and their sounds.
     void updateWeapons();
-    /// What tells the player what happened in the frame played.
-    [[nodiscard]] auto frameNotices() noexcept -> FrameNotices;
     /// Records the frame begun in `list`, and hands it to the GPU to show.
     [[nodiscard]] auto drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
@@ -212,19 +210,14 @@ private:
     std::optional<Video> m_video;
     std::optional<cs::Scene> m_scene;          ///< Of the session's level, made with the first image of it.
     std::optional<cs::FrameRenderer> m_frames; ///< What draws the frames, made with the first image.
-    std::optional<cs::Hud> m_hud;              ///< None when its pictures could not be read.
     std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
     std::vector<nx::render::ModelPlacement> m_placements; ///< Where the frame draws the brush entities.
     std::vector<cs::ShownHostage> m_hostages;             ///< How the frame shows the game's hostages.
     std::vector<cs::ShownPlayer> m_players;               ///< How the frame shows the other players.
     nx::ui::FontCatalog m_fonts;
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
-    std::optional<cs::FpsLabel> m_fpsLabel;             ///< None when its font could not be had.
-    std::optional<cs::DamageNumbers> m_damageNumbers;   ///< None when its font could not be had.
-    std::optional<cs::StepIndicator> m_stepIndicator;   ///< Once the window's text is open.
-    std::optional<cs::KillFeed> killFeed;     ///< None when its font or its pictures could not be had.
-    std::optional<cs::Scoreboard> scoreboard; ///< None when its font could not be had.
-    std::optional<ClientBuyMenu> buyMenu;     ///< Made with the game's content.
+    ClientHud hud;                                      ///< What it draws over the scene of the map played.
+    std::optional<ClientBuyMenu> buyMenu;               ///< Made with the game's content.
     bool isCursorShown = false;
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
@@ -519,27 +512,7 @@ void Client::openWindowText(std::uint32_t screenHeight) {
     } else {
         nx::log::warning(kLog, "the console has no window: {}", nx::describe(window.error()));
     }
-    if (auto label = cs::FpsLabel::open(*fonts, screenHeight); label) {
-        m_fpsLabel.emplace(std::move(*label));
-    } else {
-        nx::log::warning(kLog, "cl_showfps shows nothing: {}", nx::describe(label.error()));
-    }
-    if (auto numbers = cs::DamageNumbers::open(m_fonts, m_content->damageNumbers, screenHeight); numbers) {
-        m_damageNumbers.emplace(std::move(*numbers));
-    } else {
-        nx::log::warning(kLog, "the damage of the hits shows no numbers: {}", nx::describe(numbers.error()));
-    }
-    m_stepIndicator.emplace(m_content->stepIndicator);
-    if (auto feed = cs::KillFeed::open(*fonts, screenHeight); feed) {
-        killFeed.emplace(std::move(*feed));
-    } else {
-        nx::log::warning(kLog, "the kill feed shows nothing: {}", nx::describe(feed.error()));
-    }
-    if (auto board = cs::Scoreboard::open(*fonts, screenHeight); board) {
-        scoreboard.emplace(std::move(*board));
-    } else {
-        nx::log::warning(kLog, "the scoreboard shows nothing: {}", nx::describe(board.error()));
-    }
+    hud.open(*fonts, m_fonts, *m_content, screenHeight);
 }
 
 void Client::toggleConsole() {
@@ -638,7 +611,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_scene->setDecalLimit(decalLimitOf(settings->client.video));
             stampMarks(*m_session, *m_scene, *m_content, m_bulletHoles);
             const nx::Seconds now{m_mapClock.elapsed()};
-            showNotices(*m_session, frameNotices(), m_content->weapons, now);
+            showNotices(*m_session, hud.notices(m_console, *settings), m_content->weapons, now);
             showEffects(*m_session, *m_scene, *m_content, now, elapsed);
         }
         if (auto drawn = drawFrame(commands->get()); !drawn) {
@@ -691,15 +664,7 @@ void Client::startNextSession() {
     if (auto held = nx::settings::enterMultiplayerGame(settings->client.video); !held) {
         nx::log::warning(kLog, "r_decals not held to mp_decals: {}", nx::describe(held.error()));
     }
-    if (m_damageNumbers) {
-        m_damageNumbers->clear(); // over the old game's bodies
-    }
-    if (m_stepIndicator) {
-        m_stepIndicator->clear(); // the old game's bodies
-    }
-    if (killFeed) {
-        killFeed->clear(); // the old game's deaths
-    }
+    hud.clear();
     buyMenu->reset();
     m_changedWeapons.clear(); // the new level read every weapon's view model
     sounds->readWeapons(m_content->weapons, *m_session->level, m_session->level->weapons());
@@ -742,15 +707,6 @@ void Client::updateWeapons() {
         m_session->level->updateViewModels(m_content->vfs, m_content->weapons);
     sounds->readWeapons(m_content->weapons, *m_session->level, changed);
     m_changedWeapons.insert(m_changedWeapons.end(), changed.begin(), changed.end());
-}
-
-auto Client::frameNotices() noexcept -> FrameNotices {
-    return {.console = m_console,
-            .killFeed = killFeed,
-            .damageNumbers = m_damageNumbers,
-            .damageNumberCvars = settings->damageNumbers,
-            .stepIndicator = m_stepIndicator,
-            .stepIndicatorCvars = settings->stepIndicator};
 }
 
 auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError> {
@@ -803,12 +759,8 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(frames.error()));
         }
         m_frames.emplace(std::move(*frames));
-        if (auto hud = cs::Hud::load(m_content->vfs, m_content->weapons.ammo(), m_frames->screen(), list);
-            hud) {
-            m_hud.emplace(std::move(*hud));
-        } else {
-            nx::log::warning(kLog, "the HUD is not drawn: {}",
-                             nx::describe(hud.error())); // the game plays on
+        if (auto loaded = hud.load(*m_content, m_frames->screen(), list); !loaded) {
+            return loaded;
         }
         if (m_consoleWindow != nullptr) {
             auto size = m_video->window.pixelSize();
@@ -819,32 +771,6 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
                 return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
             }
             m_output.window = m_consoleWindow->dialog();
-        }
-        if (m_fpsLabel) {
-            if (auto loaded = m_fpsLabel->load(m_frames->screen(), list); !loaded) {
-                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
-            }
-        }
-        if (m_damageNumbers) {
-            if (auto loaded = m_damageNumbers->load(m_frames->screen(), list); !loaded) {
-                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
-            }
-        }
-        if (m_stepIndicator) {
-            if (auto loaded = m_stepIndicator->load(m_frames->screen(), list); !loaded) {
-                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
-            }
-        }
-        if (killFeed) {
-            if (auto loaded = killFeed->load(m_content->vfs, m_frames->screen(), list); !loaded) {
-                nx::log::warning(kLog, "the kill feed shows nothing: {}", nx::describe(loaded.error()));
-                killFeed.reset(); // the game plays on, as without the HUD
-            }
-        }
-        if (scoreboard) {
-            if (auto loaded = scoreboard->load(m_frames->screen(), list); !loaded) {
-                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
-            }
         }
     }
     if (buyMenu->needsLoading()) {
@@ -932,56 +858,23 @@ auto Client::sessionView() -> cs::SceneView {
 
 void Client::appendScreen(nx::rhi::Extent2d size) {
     m_screenQuads.clear();
-    if (m_session && m_damageNumbers && settings->client.video.hudDraw.value() && size.height > 0) {
-        // Over the scene, walls and all, under the HUD; the view the scene is drawn from.
-        const float aspect = static_cast<float>(size.width) / static_cast<float>(size.height);
-        m_damageNumbers->append(m_screenQuads, nx::render::viewProjectionMatrix(kickedCamera(), aspect), size,
-                                nx::Seconds{m_mapClock.elapsed()});
-    }
-    if (m_session && m_stepIndicator && settings->client.video.hudDraw.value()) {
-        // About the middle of the screen, under the HUD, the way each body heard is from the view.
-        const nx::render::Camera view = kickedCamera();
-        m_stepIndicator->append(m_screenQuads, view.position, view.angles.yaw, size,
-                                nx::Seconds{m_mapClock.elapsed()});
-    }
-    const bool showsBuyMenu = buyMenu->isShown();
-    buyMenu->appendBackdrop(m_screenQuads, size); // under the HUD, which stays as bright
-    if (m_session && m_hud && settings->client.video.hudDraw.value()) {
-        // The HUD, over the scene, the knife's crosshair in the middle but under the buy menu.
-        const cs::PlayerStatus& status = m_session->client.status();
-        m_hud->append(
-            m_screenQuads,
-            {.health = status.health,
-             .armor = status.armor,
-             .armorKind = status.armorKind,
-             .money = status.money,
-             .ammo = cs::hudAmmoOf(m_session->client.inventory(), m_content->weapons),
-             .crosshairDistance = showsBuyMenu ? std::nullopt : std::optional{cs::kKnifeCrosshairDistance},
-             .roundTime = m_session->client.roundTimeShown()},
-            settings->hud.crosshair(), size);
-    }
-    if (m_session && killFeed && settings->client.video.hudDraw.value()) {
-        killFeed->append(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()},
-                         settings->killFeed.shownFor(), !m_session->client.status().isAlive());
-    }
-    buyMenu->append(m_screenQuads, size);
-    if (m_session && scoreboard && settings->scoreboard.shown.isDown()) {
-        // One of the client's panels, over the HUD whether it is drawn or not.
-        const std::string hostname = settings->scoreboard.hostname.value();
-        scoreboard->append(m_screenQuads,
-                           {.hostname = hostname,
-                            .rows = m_session->client.scores(),
-                            .self = m_session->client.self(),
-                            .wins = m_session->client.teamWins()},
-                           size);
-    }
-    // cl_showfps, over the HUD whether it is drawn or not, as the original's engine writes it over its
-    // client's HUD, while a map is played.
+    // Measured each frame, whether it shows or not.
     const std::optional<double> framesPerSecond = m_frameRate.framesPerSecond();
-    if (m_session && m_fpsLabel && framesPerSecond && settings->client.video.showFps.value()) {
-        m_fpsLabel->append(m_screenQuads, *framesPerSecond);
+    if (m_session) {
+        const HudFrame frame{.session = *m_session,
+                             .content = *m_content,
+                             .settings = *settings,
+                             .view = kickedCamera(),
+                             .now = nx::Seconds{m_mapClock.elapsed()},
+                             .size = size};
+        const bool showsBuyMenu = buyMenu->isShown();
+        hud.appendUnderMenu(m_screenQuads, frame);
+        buyMenu->appendBackdrop(m_screenQuads, size); // under the HUD, which stays as bright
+        hud.appendHud(m_screenQuads, frame, showsBuyMenu);
+        buyMenu->append(m_screenQuads, size);
+        hud.appendPanels(m_screenQuads, frame, framesPerSecond);
+        buyMenu->appendNotice(m_screenQuads, size);
     }
-    buyMenu->appendNotice(m_screenQuads, size);
     if (m_consoleWindow != nullptr && m_consoleWindow->dialog() != nullptr) {
         m_logSink->showIn(*m_consoleWindow->dialog());
         m_consoleWindow->paint(m_screenQuads, size);
