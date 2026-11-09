@@ -49,6 +49,9 @@ constexpr std::chrono::milliseconds kMostTickingInAFrame{33};
 /// The stream of random numbers that chooses which decal a bullet leaves when its mark has several, as
 /// the original's game chooses it among them.
 constexpr std::string_view kBulletHoleStream = "bulletHoles";
+/// The command that opens the console's window, and closes it: the keys bound to it do so over the main
+/// menu too.
+constexpr std::string_view kToggleConsoleCommand = "toggleconsole";
 /// The console's output: replies on the standard output, failures on the standard error, and both in
 /// the console's window once there is one.
 class PrintedOutput final : public nx::console::ConsoleOutput {
@@ -145,15 +148,29 @@ private:
     void lastWeaponCommand();
     /// Opens the console's window, or closes it.
     void toggleConsole();
-    /// The cursor shows while the console's window or the buy menu is open; else the mouse turns the view.
+    /// The cursor shows while the console's window, the main menu or the buy menu is open; else the mouse
+    /// turns the view.
     void showCursorAsNeeded();
+    /// Whether a map is played under the main menu.
+    [[nodiscard]] auto menuGame() const noexcept -> cs::MenuGame;
+    /// Opens the main menu over the map played, or over none: the keys held for the game are let go.
+    void openMainMenu();
+    /// Whether `key` is bound to `toggleconsole`.
+    [[nodiscard]] auto togglesConsole(const nx::platform::KeyChanged& key) const -> bool;
+    /// What `event` does in the main menu, open: the keys bound to `toggleconsole` open the console's
+    /// window over it, and the rest are the menu's.
+    void handleInMainMenu(const nx::platform::WindowEvent& event);
     /// Whether the buy menu, open, takes `event`.
     [[nodiscard]] auto isTakenByBuyMenu(const nx::platform::WindowEvent& event) -> bool;
     /// Opens the console's window and cl_showfps's label for a screen `screenHeight` pixels tall, in the
     /// fonts of the installation's windows; one that cannot be had is logged, and the client goes on
     /// without it.
     void openWindowText(std::uint32_t screenHeight);
+    /// Reads what happened to the window: it closes or changes size, and the rest is input (handleInput).
     [[nodiscard]] auto readInput() -> nx::Result<void, ClientError>;
+    /// Hands `event` to what takes the keys and the mouse now: the console's window, the main menu or the
+    /// buy menu when open, else the game, where Escape opens the main menu.
+    void handleInput(const nx::platform::WindowEvent& event);
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
     /// Plays the map the console asked for, if any: its scene is made with the next frame, and
@@ -171,15 +188,15 @@ private:
     void updateWeapons();
     /// Records the frame begun in `list`, and hands it to the GPU to show.
     [[nodiscard]] auto drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError>;
-    [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
+    [[nodiscard]] auto upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
         -> nx::Result<void, ClientError>;
     /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
     /// gave it, the brush entities where the game puts them, the weapon in hand, and what nav_draw draws.
     [[nodiscard]] auto sessionView() -> cs::SceneView;
     /// The camera the session's scene is drawn from: the player's view turned by its weapon's kick.
     [[nodiscard]] auto kickedCamera() const -> nx::render::Camera;
-    /// The screen's pictures over the frame, of `size`: the HUD, cl_showfps's label, and the console's
-    /// window when open.
+    /// The screen's pictures over the frame, of `size`: the HUD, cl_showfps's label, the main menu and the
+    /// console's window when open.
     void appendScreen(nx::rhi::Extent2d size);
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
 
@@ -223,6 +240,7 @@ private:
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     ClientHud hud;                                      ///< What it draws over the scene of the map played.
     std::optional<ClientBuyMenu> buyMenu;               ///< Made with the game's content.
+    std::optional<ClientMainMenu> mainMenu;             ///< Made with the game's content.
     bool isCursorShown = false;
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
@@ -310,6 +328,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = buyMenu->registerCommands(m_console, m_content->weapons); !registered) {
         return registered;
     }
+    mainMenu.emplace(m_content->mainMenu);
     if (auto registered = registerZombieCommands(m_console, *m_content, dataFolder, *m_jobs,
                                                  [this] { return playedSession(); });
         !registered) {
@@ -334,6 +353,9 @@ auto Client::start() -> nx::Result<void, ClientError> {
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
+    if (playedSession() == nullptr) {
+        mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
+    }
     sounds->openNamedOutput();
     auto video = openVideo(*m_options, settings->client.video.vsync.value(), readPipelineCache());
     if (!video) {
@@ -387,7 +409,7 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
                   m_isRunning = false;
                   return nx::Result<void, ConsoleError>{};
               }),
-          add({.name = "toggleconsole", .description = "Opens the console, or closes it."},
+          add({.name = kToggleConsoleCommand, .description = "Opens the console, or closes it."},
               [this](Console&, const CommandLine&) {
                   toggleConsole();
                   return nx::Result<void, ConsoleError>{};
@@ -557,7 +579,8 @@ void Client::toggleConsole() {
 }
 
 void Client::showCursorAsNeeded() {
-    const bool isNeeded = (m_consoleWindow != nullptr && m_consoleWindow->isOpen()) || buyMenu->isOpen();
+    const bool isNeeded =
+        (m_consoleWindow != nullptr && m_consoleWindow->isOpen()) || mainMenu->isOpen() || buyMenu->isOpen();
     if (isNeeded == isCursorShown) {
         return;
     }
@@ -579,13 +602,38 @@ void Client::handleInConsole(const nx::platform::WindowEvent& event) {
         return;
     }
     // Escape, and the keys bound to toggleconsole, close it; the rest are the window's.
-    const std::optional<nx::console::KeyId> bound = nx::settings::keyOf(key->key);
-    const bool isToggle = bound && m_bindings.commandOf(*bound) == "toggleconsole";
-    if (key->key == nx::platform::Key::Escape || isToggle) {
+    if (key->key == nx::platform::Key::Escape || togglesConsole(*key)) {
         toggleConsole();
         return;
     }
     std::ignore = m_consoleWindow->dialog()->pressKey(key->key); // a key it does not take does nothing
+}
+
+auto Client::togglesConsole(const nx::platform::KeyChanged& key) const -> bool {
+    const std::optional<nx::console::KeyId> bound = nx::settings::keyOf(key.key);
+    return bound && m_bindings.commandOf(*bound) == kToggleConsoleCommand;
+}
+
+auto Client::menuGame() const noexcept -> cs::MenuGame {
+    return m_session ? cs::MenuGame::Played : cs::MenuGame::None;
+}
+
+void Client::openMainMenu() {
+    mainMenu->open(menuGame());
+    m_keys.releaseAll();
+}
+
+void Client::handleInMainMenu(const nx::platform::WindowEvent& event) {
+    const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
+    if (key != nullptr && key->isDown && togglesConsole(*key)) {
+        toggleConsole();
+        return;
+    }
+    const auto size = m_video->window.pixelSize();
+    if (!size) {
+        return; // a window of no size has nothing the mouse could be over
+    }
+    mainMenu->handle(event, m_video->window.mousePosition(), extentOf(*size), menuGame(), m_console);
 }
 
 auto Client::run() -> nx::Result<void, ClientError> {
@@ -651,28 +699,43 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
         if (const auto* focus = std::get_if<nx::platform::FocusChanged>(&event)) {
             m_isFocused = focus->isFocused;
         }
-        const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
-        const bool isConsoleOpen = m_consoleWindow != nullptr && m_consoleWindow->isOpen();
-        if (!isConsoleOpen && isTakenByBuyMenu(event)) {
-            continue;
-        }
-        if (isConsoleOpen && !std::holds_alternative<nx::platform::CloseRequested>(event) &&
-            !std::holds_alternative<nx::platform::Resized>(event)) {
-            handleInConsole(event);
-        } else if (std::holds_alternative<nx::platform::CloseRequested>(event) ||
-                   (key != nullptr && key->key == nx::platform::Key::Escape && key->isDown)) {
-            m_isRunning = false; // until the menus come, Escape ends the client, whatever is bound to it
-        } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
-            look(m_camera.angles, *moved, settings->client.mouse);
+        if (std::holds_alternative<nx::platform::CloseRequested>(event)) {
+            m_isRunning = false;
         } else if (const auto* resized = std::get_if<nx::platform::Resized>(&event)) {
             if (auto recreated = m_video->swapchain->resize(extentOf(resized->size)); !recreated) {
                 return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
             }
         } else {
-            m_keys.handle(event, settings->client.keyboard.keymap.value());
+            handleInput(event);
         }
     }
     return {};
+}
+
+void Client::handleInput(const nx::platform::WindowEvent& event) {
+    // Whatever is open over the game takes the keys and the mouse, the one on top first.
+    if (m_consoleWindow != nullptr && m_consoleWindow->isOpen()) {
+        handleInConsole(event);
+        return;
+    }
+    if (mainMenu->isOpen()) {
+        handleInMainMenu(event);
+        return;
+    }
+    if (isTakenByBuyMenu(event)) {
+        return;
+    }
+    const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
+    if (key != nullptr && key->key == nx::platform::Key::Escape) {
+        // Escape opens the main menu whatever is bound to it, as in the original.
+        if (key->isDown && !key->isRepeat) {
+            openMainMenu();
+        }
+    } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
+        look(m_camera.angles, *moved, settings->client.mouse);
+    } else {
+        m_keys.handle(event, settings->client.keyboard.keymap.value());
+    }
 }
 
 void Client::startNextSession() {
@@ -687,8 +750,10 @@ void Client::startNextSession() {
     buyMenu->reset();
     m_changedWeapons.clear(); // the new level read every weapon's view model
     if (!m_session) {
-        return; // the map was left: none is played
+        openMainMenu(); // the map was left: none is played
+        return;
     }
+    mainMenu->close();
     // The local game is one of more than one player, as a Counter-Strike server's: r_decals is held
     // to mp_decals as the original's client holds it when it enters one.
     if (auto held = nx::settings::enterMultiplayerGame(settings->client.video); !held) {
@@ -751,7 +816,7 @@ auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientErr
         return {};
     }
     const nx::rhi::SwapchainImage& frame = **image;
-    if (auto uploaded = upload(list, frame.format); !uploaded) {
+    if (auto uploaded = upload(list, frame); !uploaded) {
         return uploaded;
     }
     appendScreen(frame.size);
@@ -775,13 +840,14 @@ auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientErr
 }
 
 /// Puts on the GPU what the frame draws that is not there yet, its uploads recorded in `list` before
-/// the frame renders: what draws the frames, the HUD's pictures and the console's atlas, and the scene
-/// of the map played.
-auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::Result<void, ClientError> {
+/// the frame renders: what draws the frames, the HUD's pictures and the console's atlas, the main menu's
+/// text while it is open, and the scene of the map played.
+auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
+    -> nx::Result<void, ClientError> {
     if (!m_frames) {
         auto frames = cs::FrameRenderer::create(*m_video->device,
                                                 std::move(*std::exchange(m_frameShaders, std::nullopt)),
-                                                format, gammaOf(settings->client.video));
+                                                frame.format, gammaOf(settings->client.video));
         if (!frames) {
             return nx::fail(ClientError::GpuFailed, std::move(frames.error()));
         }
@@ -798,6 +864,11 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
                 return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
             }
             m_output.window = m_consoleWindow->dialog();
+        }
+    }
+    if (mainMenu->isOpen()) {
+        if (auto loaded = mainMenu->load(m_fonts, m_frames->screen(), list, frame.size); !loaded) {
+            return loaded;
         }
     }
     if (buyMenu->needsLoading()) {
@@ -902,6 +973,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         hud.appendPanels(m_screenQuads, frame, framesPerSecond);
         buyMenu->appendNotice(m_screenQuads, size);
     }
+    mainMenu->append(m_screenQuads, size, menuGame());
     if (m_consoleWindow != nullptr && m_consoleWindow->dialog() != nullptr) {
         m_logSink->showIn(*m_consoleWindow->dialog());
         m_consoleWindow->paint(m_screenQuads, size);

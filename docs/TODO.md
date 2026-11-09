@@ -579,7 +579,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] The scoreboard's rows of more players, measured on the original (they need a second player): how far apart rows are, where a next team goes, the order of teams and players; `Bomb` and `VIP` in the status; `Latency`; a player's avatar; mute
 - [ ] Team and character menus
 - [ ] MOTD with restricted HTML
-- [ ] Main menu, options and server browser
+- [x] The main menu ([12 §4](12-ui-hud-and-console.md#4-game-menus-and-screens)), the project's own look over the original's pattern: the items `data/cstrike/mainMenu.toml` lists, down the left under the game's name, those of a map played only over one (resume, disconnect), chosen by the arrows and Enter or by the mouse (`cs.client:mainMenu`, `:mainMenuLayout`, `:mainMenuPanel`); `next` opens on it without a map, Escape opens it over the map played, and its items run the console's commands (`app.client:mainMenu`, `disconnect`, `quit`); the look it shares with the buy menu (`cs.client:menuDesign`)
+- [ ] The main menu's background from the active content and its music; its new game (the maps to choose from)
+- [ ] Options and server browser
 - [ ] Complete console (history, autocomplete, suggestions): the window over `nx.console`; its history, completions and suggestions are in `nx.console` ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module))
 - [x] Binds with the original key names (`nx.settings`, above)
 - [ ] Localization with typed keys

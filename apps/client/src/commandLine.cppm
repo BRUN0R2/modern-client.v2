@@ -26,7 +26,8 @@ inline constexpr std::string_view kClientUsage =
 Plays Counter-Strike 1.6. Each word that starts with + runs a console command as the client starts,
 after the player's config.cfg, userconfig.cfg and autoexec.cfg, with the words after it up to the
 next one that starts with + or - as its arguments, as the original reads its command line:
-`next +map de_dust2` plays de_dust2. Until the menus come, Escape ends it, as does `quit`.
+`next +map de_dust2` plays de_dust2. Without a map it opens on the main menu, which Escape opens over
+a map played; its Quit ends it, as does `quit`.
 
   -basedir <folder>        the Counter-Strike 1.6 installation: the folder with cstrike/ and
                            valve/ (default: the content configuration's, else the one Steam

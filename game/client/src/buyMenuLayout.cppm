@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// Where the buy menu's parts go on a screen (docs/12-ui-hud-and-console.md, section 4): what its keys and
-/// its mouse reach and what draws it read one layout, a design 1080 lines tall made as large as the screen,
+/// its mouse reach and what draws it read one layout, the menus' design (cs.client:menuDesign) on the screen,
 /// its content no wider than the design's and in the middle of a wider screen.
 export module cs.client:buyMenuLayout;
 
@@ -10,11 +10,9 @@ import std;
 import nx.core;
 import nx.rhi;
 import nx.ui;
+import :menuDesign;
 
 export namespace cs {
-
-/// How many lines tall the screen is that the menu is designed on.
-inline constexpr float kBuyMenuDesignHeight = 1080.0F;
 
 /// Whether an item's price takes a row of its own under its name, `nameRows` rows of which `nameWide` is the
 /// widest: when its name wrapped, or when `priceWide` more and `gap` between them do not fit in `room`.
@@ -40,8 +38,10 @@ class BuyMenuLayout {
 public:
     explicit BuyMenuLayout(nx::rhi::Extent2d size) noexcept;
 
-    /// `units` of the design's on this screen, to the nearest pixel, at least one of some.
-    [[nodiscard]] auto pixels(std::int32_t units) const noexcept -> nx::Pixels;
+    /// `units` of the design's on this screen (MenuScale::pixels).
+    [[nodiscard]] inline auto pixels(std::int32_t units) const noexcept -> nx::Pixels {
+        return scale.pixels(units);
+    }
 
     /// What heads the menu: its name, the team, the time left and the money.
     [[nodiscard]] inline auto header() const noexcept -> const nx::ui::PixelRect& { return headerRect; }
@@ -71,7 +71,7 @@ public:
     [[nodiscard]] auto againTile() const noexcept -> nx::ui::PixelRect;
 
 private:
-    float scale = 1.0F; ///< Pixels of the screen for each unit of the design.
+    MenuScale scale;
     nx::ui::PixelRect headerRect{};
     nx::ui::PixelRect railRect{};
     nx::ui::PixelRect gridRect{};

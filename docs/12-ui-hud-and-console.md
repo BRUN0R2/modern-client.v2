@@ -409,6 +409,27 @@ Without the historical limits on text channels and message size:
 | Scoreboard | Name, frags, deaths, ping, status (dead, bomb, VIP), *mute* |
 | MOTD | **Restricted and safe** text or HTML (a subset rendered by the UI, no scripts). External links open in the system browser after confirmation |
 
+**The main menu** (`cs.client:mainMenu`, `:mainMenuLayout`, `:mainMenuPanel`): the original's pattern in the
+project's own look. Its items are data, `data/cstrike/mainMenu.toml`, as the original lists its menu's in
+`resource/GameMenu.res`: what each does (`action`) and when the menu lists it (`listed`: `always`, or `inGame` for
+over a map played alone), from the top. Today it lists going back to the map played and leaving it, both over a map
+alone, and ending the game; the new game, the options and the server browser come with what they open. It shows
+the game's name at the top left and the items down the left, the last a fixed way over the screen's foot, where
+the original's menu stands, with the keys under them: over the whole screen while no map is played, over the scene
+darkened while one is, which plays on under it, as a game of more than one player does.
+
+Up and Down select the item before and the one after, around the ends; Enter chooses the one selected; the mouse
+selects the item it is over and its left button chooses it; Escape goes back to the map played. `next` opens on it
+when no map is played, and comes back to it as the map is left; over a map played, Escape opens it whatever is
+bound to that key, as in the original, the keys held for the game let go and the cursor shown. The keys bound to
+`toggleconsole` open the console's window over it; the other keys run no bind while it is open. An item does what
+the console's command does, queued as a bind queues its own (`app.client:mainMenu`): `disconnect`, `quit`. The
+fonts it writes in are the project's own; a client that cannot have them does not start.
+
+**The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, made as
+large as the screen (`MenuScale`); the sizes of text made of the families a menu's data names for that height
+(`makeMenuFace`); and the colors, warm white text and gold over dark glass.
+
 **The buy menu** (`cs.client:buyMenu`, `:buyMenuLayout`, `:buyMenuPanel`): the project's own look, where the
 original has a key menu and a VGUI one, and the original's keys. `buy` (`b`) opens it, or closes it; `buyequip`
 (`o`) opens it on its equipment. Over the scene darkened, under the HUD's numbers, it shows:
@@ -426,8 +447,8 @@ the CV-47 and `b` `8` `2` a vest and a helmet: the keys are those of the `slot1`
 they are bound to; `slot10` (`0`) and Escape go back a level, then close; `cancelselect` too. `6` and `7` buy a
 box at once. The mouse shows while it is open: over an item it selects it, and a click buys it or opens a tab;
 Enter buys what is selected. Unlike the original's, it stays open as the player buys, and the player goes on
-walking: the keys it has no use for go to their binds, and what comes up always reaches them. Its look is in
-pixels of a design 1080 lines tall, so that it takes the same share of any screen, in the middle of a wider one.
+walking: the keys it has no use for go to their binds, and what comes up always reaches them. Its look is the
+menus', so that it takes the same share of any screen, in the middle of a wider one.
 
 It is not a screen of its own: where the player may not buy (outside a buy zone, its time over, dead), the menu
 does not open, and closes as it comes to that. `cs::PlayerSnapshot::buying` tells the client so, and how long is

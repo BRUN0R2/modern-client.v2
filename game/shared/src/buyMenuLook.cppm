@@ -10,6 +10,7 @@ import nx.core;
 import nx.meta;
 import nx.data;
 import :player;
+import :menuFonts;
 
 export namespace cs {
 
@@ -28,16 +29,9 @@ struct BuyMenuArmor {
     std::string about{};
 };
 
-/// The font families the buy menu writes in, of the project's own fonts (data/fonts/): for its text, and for
-/// what stands out in it.
-struct BuyMenuFontFamilies {
-    std::string regular{};
-    std::string strong{};
-};
-
 /// data/cstrike/buyMenu.toml: the families the menu writes in, and its armor.
 struct BuyMenuLook {
-    BuyMenuFontFamilies font{};
+    MenuFontFamilies font{};
     std::vector<BuyMenuArmor> armor{};
 };
 
@@ -57,15 +51,6 @@ struct nx::meta::Description<cs::BuyMenuArmor> {
         nx::meta::field<&cs::BuyMenuArmor::name>("name"),
         nx::meta::field<&cs::BuyMenuArmor::picture>("picture"),
         nx::meta::field<&cs::BuyMenuArmor::about>("about"),
-    };
-};
-
-template <>
-struct nx::meta::Description<cs::BuyMenuFontFamilies> {
-    static constexpr std::string_view kName = "cs::BuyMenuFontFamilies";
-    static constexpr std::tuple kFields{
-        nx::meta::field<&cs::BuyMenuFontFamilies::regular>("regular"),
-        nx::meta::field<&cs::BuyMenuFontFamilies::strong>("strong"),
     };
 };
 

@@ -20,36 +20,24 @@ using TextFaces = nx::EnumArray<BuyMenuFont, nx::ui::TextFace>;
 
 constexpr nx::log::Category kLog{"client"};
 
-// The colors: warm white text, dark glass over the scene, and each team's accent.
-constexpr ScreenColor kInk{.red = 244, .green = 240, .blue = 231};
-constexpr ScreenColor kInkSoft{.red = 244, .green = 240, .blue = 231, .alpha = 168};
-constexpr ScreenColor kInkFaint{.red = 244, .green = 240, .blue = 231, .alpha = 102};
-constexpr ScreenColor kLine{.red = 255, .green = 255, .blue = 255, .alpha = 31};
+// The colors, besides the menus' (cs.client:menuDesign): the glass of its panels, what warns, and each
+// team's accent, the Terrorists' the menus' gold.
 constexpr ScreenColor kGlass{.red = 13, .green = 14, .blue = 16, .alpha = 199};
-constexpr ScreenColor kCell{.red = 255, .green = 255, .blue = 255, .alpha = 13};
-constexpr ScreenColor kCellLit{.red = 255, .green = 255, .blue = 255, .alpha = 28};
-constexpr ScreenColor kBackdrop{.red = 6, .green = 7, .blue = 9, .alpha = 184};
 constexpr ScreenColor kDanger{.red = 244, .green = 101, .blue = 79};
 constexpr ScreenColor kDangerGlass{.red = 60, .green = 22, .blue = 18, .alpha = 216};
-constexpr nx::EnumArray<Team, ScreenColor> kAccents{nx::EnumArray<Team, ScreenColor>::Storage{
-    ScreenColor{.red = 242, .green = 179, .blue = 61}, ScreenColor{.red = 103, .green = 184, .blue = 246}}};
-constexpr nx::EnumArray<Team, ScreenColor> kOnAccents{nx::EnumArray<Team, ScreenColor>::Storage{
-    ScreenColor{.red = 27, .green = 19, .blue = 5}, ScreenColor{.red = 4, .green = 19, .blue = 31}}};
+constexpr nx::EnumArray<Team, ScreenColor> kAccents{
+    nx::EnumArray<Team, ScreenColor>::Storage{kMenuGold, ScreenColor{.red = 103, .green = 184, .blue = 246}}};
+constexpr nx::EnumArray<Team, ScreenColor> kOnAccents{
+    nx::EnumArray<Team, ScreenColor>::Storage{kOnMenuGold, ScreenColor{.red = 4, .green = 19, .blue = 31}}};
 constexpr std::uint8_t kWholePicture = 255;
 constexpr std::uint8_t kTooDearPicture = 107;
 constexpr std::uint8_t kTabPicture = 128;
 
-/// A size of text: its line in the design's units, 1080 lines tall, and whether it stands out.
-struct FontSize {
-    float units = 0.0F;
-    bool isStrong = false;
-};
-constexpr std::int32_t kRegularWeight = 400;
-constexpr std::int32_t kStrongWeight = 600;
-constexpr nx::EnumArray<BuyMenuFont, FontSize> kFontSizes{nx::EnumArray<BuyMenuFont, FontSize>::Storage{
-    FontSize{.units = 56.0F, .isStrong = true}, FontSize{.units = 32.0F, .isStrong = false},
-    FontSize{.units = 25.0F, .isStrong = true}, FontSize{.units = 21.0F, .isStrong = false},
-    FontSize{.units = 16.0F, .isStrong = false}}};
+constexpr nx::EnumArray<BuyMenuFont, MenuFontSize> kFontSizes{
+    nx::EnumArray<BuyMenuFont, MenuFontSize>::Storage{
+        MenuFontSize{.units = 56.0F, .isStrong = true}, MenuFontSize{.units = 32.0F, .isStrong = false},
+        MenuFontSize{.units = 25.0F, .isStrong = true}, MenuFontSize{.units = 21.0F, .isStrong = false},
+        MenuFontSize{.units = 16.0F, .isStrong = false}}};
 
 // What it writes.
 constexpr std::string_view kMenuName = "BUY";
@@ -206,10 +194,10 @@ public:
         if (isLit) {
             fill(badge, teamAccent);
         } else {
-            outline(badge, kLine);
+            outline(badge, kMenuLine);
         }
         std::ignore = write(kFont, key, x + ((wide - textWide) / 2), badge.y + ((tall - lineOf(kFont)) / 2),
-                            isLit ? onTeamAccent : kInk);
+                            isLit ? onTeamAccent : kMenuInk);
         return x + wide;
     }
 
@@ -271,22 +259,22 @@ void paintHeader(Paint& paint, const BuyMenuFrame& frame) {
     };
 
     nx::Pixels pen =
-        paint.write(BuyMenuFont::Headline, kMenuName, header.x, topFor(BuyMenuFont::Headline), kInk);
+        paint.write(BuyMenuFont::Headline, kMenuName, header.x, topFor(BuyMenuFont::Headline), kMenuInk);
     pen = paint.write(BuyMenuFont::Body, kTeamNames[frame.team], pen + paint.px(kHeaderTextGap),
                       topFor(BuyMenuFont::Body), paint.accent());
     pen = paint.write(BuyMenuFont::Body, "Time to buy ", pen + paint.px(kHeaderTextGap),
-                      topFor(BuyMenuFont::Body), kInkSoft);
-    std::ignore =
-        paint.write(BuyMenuFont::Body, clockText(frame.secondsLeft), pen, topFor(BuyMenuFont::Body), kInk);
+                      topFor(BuyMenuFont::Body), kMenuInkSoft);
+    std::ignore = paint.write(BuyMenuFont::Body, clockText(frame.secondsLeft), pen, topFor(BuyMenuFont::Body),
+                              kMenuInk);
 
     const nx::Pixels end = header.x + header.wide;
     const nx::Pixels moneyTop = topFor(BuyMenuFont::Headline);
     paint.writeEnding(BuyMenuFont::Headline, dollarsText(frame.money), end, moneyTop, paint.accent());
     const bool isShort = frame.detail && frame.detail->entry.state == BuyItemState::TooDear;
     paint.writeEnding(BuyMenuFont::Body, moneyAfterText(frame), end,
-                      moneyTop - paint.lineOf(BuyMenuFont::Body), isShort ? kDanger : kInkSoft);
+                      moneyTop - paint.lineOf(BuyMenuFont::Body), isShort ? kDanger : kMenuInkSoft);
 
-    paint.fill(track, kLine);
+    paint.fill(track, kMenuLine);
 }
 
 void paintRail(Paint& paint, const BuyMenuFrame& frame) {
@@ -294,13 +282,13 @@ void paintRail(Paint& paint, const BuyMenuFrame& frame) {
     for (const auto& [index, listed] : std::views::enumerate(frame.tabs)) {
         const nx::ui::PixelRect rect = layout.tab(nx::narrow<std::size_t>(index));
         const bool isShownTab = listed.tab == frame.tab;
-        paint.cell(rect, isShownTab ? kCellLit : kCell, isShownTab);
+        paint.cell(rect, isShownTab ? kMenuCellLit : kMenuCell, isShownTab);
         const nx::Pixels pen =
             paint.keyBadge(std::to_string(kBuyTabKeys[listed.tab]), rect.x + paint.px(kInsetLeft), rect,
                            isShownTab && frame.isArmed);
         std::ignore = paint.write(BuyMenuFont::Body, kTabNames[listed.tab], pen + paint.px(kTextGap),
                                   rect.y + ((rect.tall - paint.lineOf(BuyMenuFont::Body)) / 2),
-                                  isShownTab ? kInk : kInkSoft);
+                                  isShownTab ? kMenuInk : kMenuInkSoft);
         const nx::Pixels wide = paint.px(kTabPictureWide);
         const nx::Pixels tall = paint.px(kTabPictureTall);
         paint.picture(listed.picture,
@@ -312,14 +300,15 @@ void paintRail(Paint& paint, const BuyMenuFrame& frame) {
     }
     for (const auto& [index, row] : std::views::enumerate(frame.ammo)) {
         const nx::ui::PixelRect rect = layout.ammoRow(nx::narrow<std::size_t>(index), frame.tabs.size());
-        paint.cell(rect, kCell, false);
+        paint.cell(rect, kMenuCell, false);
         const nx::Pixels pen =
             paint.keyBadge(std::to_string(row.key), rect.x + paint.px(kInsetLeft), rect, false) +
             paint.px(kTextGap);
         const nx::Pixels top =
             rect.y + ((rect.tall - paint.lineOf(BuyMenuFont::Body) - paint.lineOf(BuyMenuFont::Caption)) / 2);
-        std::ignore = paint.write(
-            BuyMenuFont::Body, row.key == kPrimaryAmmoKey ? "Primary ammo" : "Pistol ammo", pen, top, kInk);
+        std::ignore =
+            paint.write(BuyMenuFont::Body, row.key == kPrimaryAmmoKey ? "Primary ammo" : "Pistol ammo", pen,
+                        top, kMenuInk);
         const std::string facts =
             !row.ammo ? std::string{"No weapon"}
             : row.state == BuyItemState::Owned
@@ -328,7 +317,7 @@ void paintRail(Paint& paint, const BuyMenuFrame& frame) {
                 : std::format("{} {}/{} {} +{} {}", row.ammo->name, row.ammo->carried, row.ammo->most,
                               kMiddleDot, row.ammo->boxRounds, dollarsText(row.ammo->boxPrice));
         std::ignore = paint.write(BuyMenuFont::Caption, facts, pen, top + paint.lineOf(BuyMenuFont::Body),
-                                  row.state == BuyItemState::TooDear ? kDanger : kInkSoft);
+                                  row.state == BuyItemState::TooDear ? kDanger : kMenuInkSoft);
     }
 }
 
@@ -338,7 +327,7 @@ void paintGrid(Paint& paint, const BuyMenuFrame& frame) {
     for (const auto& [index, entry] : std::views::enumerate(frame.entries)) {
         const nx::ui::PixelRect rect = layout.cell(nx::narrow<std::size_t>(index), frame.entries.size());
         const bool isSelected = hasDetail && frame.detail->entry.item == entry.item;
-        paint.cell(rect, isSelected ? kCellLit : kCell, isSelected);
+        paint.cell(rect, isSelected ? kMenuCellLit : kMenuCell, isSelected);
 
         const nx::Pixels inset = paint.px(kCellInset);
         const nx::Pixels room = rect.wide - (2 * inset);
@@ -363,12 +352,12 @@ void paintGrid(Paint& paint, const BuyMenuFrame& frame) {
 
         const BuyMenuFont digitFont = frame.isArmed ? BuyMenuFont::Strong : BuyMenuFont::Caption;
         std::ignore = paint.write(digitFont, std::to_string(entry.key), rect.x + inset, rect.y + (inset / 2),
-                                  frame.isArmed ? paint.accent() : kInkFaint);
+                                  frame.isArmed ? paint.accent() : kMenuInkFaint);
 
         nx::Pixels y = rowY;
         for (const std::string& row : nameRows) {
             std::ignore =
-                paint.write(BuyMenuFont::Body, row, rect.x + inset, y, isTooDear ? kInkFaint : kInk);
+                paint.write(BuyMenuFont::Body, row, rect.x + inset, y, isTooDear ? kMenuInkFaint : kMenuInk);
             y += line;
         }
         // On the name's last row, or a row of its own: at the foot of the cell either way.
@@ -376,24 +365,24 @@ void paintGrid(Paint& paint, const BuyMenuFrame& frame) {
         paint.writeEnding(priceFont, price, rect.x + rect.wide - inset, priceY,
                           isOwned     ? paint.accent()
                           : isTooDear ? kDanger
-                                      : kInkSoft);
+                                      : kMenuInkSoft);
     }
 }
 
 /// A stat of the item selected at `y`: its name, its value and a bar of it. Returns where it ends.
 auto paintStat(Paint& paint, const nx::ui::PixelRect& inner, nx::Pixels y, std::string_view name,
                std::string_view value, float share) -> nx::Pixels {
-    std::ignore = paint.write(BuyMenuFont::Body, name, inner.x, y, kInkSoft);
-    paint.writeEnding(BuyMenuFont::Body, value, inner.x + inner.wide, y, kInk);
+    std::ignore = paint.write(BuyMenuFont::Body, name, inner.x, y, kMenuInkSoft);
+    paint.writeEnding(BuyMenuFont::Body, value, inner.x + inner.wide, y, kMenuInk);
     const nx::Pixels barY = y + paint.lineOf(BuyMenuFont::Body) + paint.px(kStatBarGap);
     const nx::Pixels tall = paint.px(kStatBarTall);
-    paint.fill({.x = inner.x, .y = barY, .wide = inner.wide, .tall = tall}, kLine);
+    paint.fill({.x = inner.x, .y = barY, .wide = inner.wide, .tall = tall}, kMenuLine);
     paint.fill({.x = inner.x,
                 .y = barY,
                 .wide = nx::Pixels{static_cast<std::int32_t>(static_cast<float>(inner.wide.value()) *
                                                              std::clamp(share, 0.0F, 1.0F))},
                 .tall = tall},
-               kInk);
+               kMenuInk);
     return barY + tall + paint.px(kStatGap);
 }
 
@@ -415,24 +404,24 @@ void paintGunFacts(Paint& paint, const nx::ui::PixelRect& inner, nx::Pixels y, c
     const nx::Pixels column = inner.wide / nx::narrow<std::int32_t>(facts.size());
     for (const auto& [index, fact] : std::views::enumerate(facts)) {
         const nx::Pixels x = inner.x + (nx::narrow<std::int32_t>(index) * column);
-        std::ignore = paint.write(BuyMenuFont::Caption, fact.first, x, y, kInkFaint);
-        std::ignore =
-            paint.write(BuyMenuFont::Strong, fact.second, x, y + paint.lineOf(BuyMenuFont::Caption), kInk);
+        std::ignore = paint.write(BuyMenuFont::Caption, fact.first, x, y, kMenuInkFaint);
+        std::ignore = paint.write(BuyMenuFont::Strong, fact.second, x, y + paint.lineOf(BuyMenuFont::Caption),
+                                  kMenuInk);
     }
     y += paint.lineOf(BuyMenuFont::Caption) + paint.lineOf(BuyMenuFont::Strong) + paint.px(kStatGap);
-    paint.fill({.x = inner.x, .y = y, .wide = inner.wide, .tall = kLineThick}, kLine);
+    paint.fill({.x = inner.x, .y = y, .wide = inner.wide, .tall = kLineThick}, kMenuLine);
     y += paint.px(kStatGap);
-    std::ignore = paint.write(BuyMenuFont::Body, gun.ammoName, inner.x, y, kInkSoft);
+    std::ignore = paint.write(BuyMenuFont::Body, gun.ammoName, inner.x, y, kMenuInkSoft);
     paint.writeEnding(BuyMenuFont::Body,
                       std::format("{} for {} rounds", dollarsText(gun.boxPrice), gun.boxRounds),
-                      inner.x + inner.wide, y, kInkSoft);
+                      inner.x + inner.wide, y, kMenuInkSoft);
 }
 
 void paintDetail(Paint& paint, const BuyMenuFrame& frame) {
     const BuyMenuLayout& layout = paint.layout();
     const nx::ui::PixelRect& panel = layout.detail();
     paint.fill(panel, kGlass);
-    paint.outline(panel, kLine);
+    paint.outline(panel, kMenuLine);
     if (!frame.detail) {
         return;
     }
@@ -447,14 +436,14 @@ void paintDetail(Paint& paint, const BuyMenuFrame& frame) {
                                            : std::string{kKindNames[detail.tab]};
     std::ignore = paint.write(BuyMenuFont::Caption, kind, inner.x, y, paint.accent());
     y += paint.lineOf(BuyMenuFont::Caption);
-    std::ignore = paint.write(BuyMenuFont::Title, detail.entry.name, inner.x, y, kInk);
+    std::ignore = paint.write(BuyMenuFont::Title, detail.entry.name, inner.x, y, kMenuInk);
     y += paint.lineOf(BuyMenuFont::Title) + paint.px(kSectionGap);
 
     if (detail.gun) {
         paintGunFacts(paint, inner, y, *detail.gun);
     }
     for (const std::string& row : paint.wrapped(BuyMenuFont::Body, detail.about, inner.wide)) {
-        std::ignore = paint.write(BuyMenuFont::Body, row, inner.x, y, kInkSoft);
+        std::ignore = paint.write(BuyMenuFont::Body, row, inner.x, y, kMenuInkSoft);
         y += paint.lineOf(BuyMenuFont::Body);
     }
 
@@ -470,12 +459,12 @@ void paintDetail(Paint& paint, const BuyMenuFrame& frame) {
                        (nx::narrow<std::int32_t>(noteRows.size()) * paint.lineOf(BuyMenuFont::Caption));
     for (const std::string& row : noteRows) {
         std::ignore = paint.write(BuyMenuFont::Caption, row, inner.x, noteY,
-                                  detail.entry.state == BuyItemState::TooDear ? kDanger : kInkSoft);
+                                  detail.entry.state == BuyItemState::TooDear ? kDanger : kMenuInkSoft);
         noteY += paint.lineOf(BuyMenuFont::Caption);
     }
 
-    paint.fill(button, isForSale ? paint.accent() : kCell);
-    const ScreenColor color = isForSale ? paint.onAccent() : kInkFaint;
+    paint.fill(button, isForSale ? paint.accent() : kMenuCell);
+    const ScreenColor color = isForSale ? paint.onAccent() : kMenuInkFaint;
     const nx::Pixels textY = button.y + ((button.tall - paint.lineOf(BuyMenuFont::Strong)) / 2);
     const bool isOwned = detail.entry.state == BuyItemState::Owned;
     const std::string_view owned = std::holds_alternative<ArmorKind>(detail.entry.item) ? kWorn : kOwned;
@@ -491,7 +480,7 @@ void paintDetail(Paint& paint, const BuyMenuFrame& frame) {
 void paintTile(Paint& paint, const nx::ui::PixelRect& tile, std::string_view name, std::string_view text,
                std::string_view picture, bool isCarried) {
     paint.fill(tile, kGlass);
-    paint.outline(tile, kLine);
+    paint.outline(tile, kMenuLine);
     nx::Pixels x = tile.x + paint.px(kInsetLeft);
     if (!picture.empty()) {
         const nx::Pixels tall = paint.px(kTilePictureTall);
@@ -505,9 +494,9 @@ void paintTile(Paint& paint, const nx::ui::PixelRect& tile, std::string_view nam
     }
     const nx::Pixels top =
         tile.y + ((tile.tall - paint.lineOf(BuyMenuFont::Caption) - paint.lineOf(BuyMenuFont::Body)) / 2);
-    std::ignore = paint.write(BuyMenuFont::Caption, name, x, top, kInkFaint);
+    std::ignore = paint.write(BuyMenuFont::Caption, name, x, top, kMenuInkFaint);
     std::ignore = paint.write(BuyMenuFont::Body, text, x, top + paint.lineOf(BuyMenuFont::Caption),
-                              isCarried ? kInk : kInkFaint);
+                              isCarried ? kMenuInk : kMenuInkFaint);
 }
 
 void paintCarried(Paint& paint, const BuyMenuFrame& frame) {
@@ -533,7 +522,7 @@ void paintCarried(Paint& paint, const BuyMenuFrame& frame) {
     if (frame.again) {
         const nx::ui::PixelRect tile = layout.againTile();
         paint.fill(tile, kGlass);
-        paint.outline(tile, kLine);
+        paint.outline(tile, kMenuLine);
         const nx::Pixels pen =
             paint.keyBadge("R", tile.x + paint.px(kInsetLeft), tile, false) + paint.px(kTextGap);
         const std::string cost = dollarsText(frame.again->cost);
@@ -547,10 +536,10 @@ void paintCarried(Paint& paint, const BuyMenuFrame& frame) {
         const nx::Pixels line = paint.lineOf(BuyMenuFont::Caption);
         nx::Pixels y =
             tile.y + ((tile.tall - ((nx::narrow<std::int32_t>(rows.size()) + 1) * line)) / kMiddleDivisor);
-        std::ignore = paint.write(BuyMenuFont::Caption, "BUY AGAIN", pen, y, kInkFaint);
+        std::ignore = paint.write(BuyMenuFont::Caption, "BUY AGAIN", pen, y, kMenuInkFaint);
         for (const std::string& row : rows) {
             y += line;
-            std::ignore = paint.write(BuyMenuFont::Caption, row, pen, y, kInk);
+            std::ignore = paint.write(BuyMenuFont::Caption, row, pen, y, kMenuInk);
         }
         paint.writeEnding(BuyMenuFont::Strong, cost, end,
                           tile.y + ((tile.tall - paint.lineOf(BuyMenuFont::Strong)) / 2),
@@ -564,7 +553,8 @@ void paintCarried(Paint& paint, const BuyMenuFrame& frame) {
          {std::pair{"B", "Close"}, std::pair{"Esc", "Back"}, std::pair{"Enter", "Buy"}}) {
         end -= paint.widthOf(BuyMenuFont::Caption, what);
         std::ignore = paint.write(BuyMenuFont::Caption, what, end,
-                                  row.y + ((row.tall - paint.lineOf(BuyMenuFont::Caption)) / 2), kInkSoft);
+                                  row.y + ((row.tall - paint.lineOf(BuyMenuFont::Caption)) / kMiddleDivisor),
+                                  kMenuInkSoft);
         end -= paint.px(kBadgeTextGap) + paint.keyBadgeWide(key);
         std::ignore = paint.keyBadge(key, end, row, false);
         end -= paint.px(kHintGap);
@@ -595,32 +585,14 @@ BuyMenuPanel::BuyMenuPanel(const BuyMenuContent& sold) noexcept : content{sold} 
 
 auto BuyMenuPanel::makeFaces(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
                              nx::rhi::CommandList& commands, std::uint32_t screenHeight)
-    -> nx::Result<void, BuyMenuPanelError> {
-    const std::u32string characters = consoleCharacters();
-    for (const BuyMenuFont font : nx::EnumArray<BuyMenuFont, FontSize>::keys()) {
-        const FontSize size = kFontSizes[font];
-        const std::string& family = size.isStrong ? content.look->font.strong : content.look->font.regular;
-        const std::optional<nx::ui::FontChoice> choice =
-            fonts.choose({.family = family, .weight = size.isStrong ? kStrongWeight : kRegularWeight});
-        if (!choice) {
-            return nx::fail(BuyMenuPanelError::NoFont, family);
+    -> nx::Result<void, MenuPanelError> {
+    for (const BuyMenuFont font : nx::EnumArray<BuyMenuFont, MenuFontSize>::keys()) {
+        auto face = makeMenuFace(fonts, screen, commands, content.look->font, kFontSizes[font], screenHeight,
+                                 "buyMenu");
+        if (!face) {
+            return std::unexpected{std::move(face.error())};
         }
-        const auto cellHeight = static_cast<std::int32_t>(
-            std::lround(size.units * static_cast<float>(screenHeight) / kBuyMenuDesignHeight));
-        auto opened = fonts.open(*choice, {.cellHeight = std::max(cellHeight, 1),
-                                           .smoothing = nx::ui::FontSmoothing::Antialiased});
-        if (!opened) {
-            return nx::fail(BuyMenuPanelError::Unusable, family, std::move(opened.error()));
-        }
-        auto atlas = nx::ui::GlyphAtlas::build(*opened, characters);
-        if (!atlas) {
-            return nx::fail(BuyMenuPanelError::Unusable, family, std::move(atlas.error()));
-        }
-        auto image = screen.loadImage(commands, atlas->texels(), atlas->width(), atlas->height(), "buyMenu");
-        if (!image) {
-            return nx::fail(BuyMenuPanelError::GpuFailed, family, std::move(image.error()));
-        }
-        faces[font].emplace(Face{.atlas = std::move(*atlas), .image = std::move(*image)});
+        faces[font].emplace(std::move(*face));
     }
     facesHeight = screenHeight;
     return {};
@@ -628,7 +600,7 @@ auto BuyMenuPanel::makeFaces(nx::ui::FontCatalog& fonts, nx::render::ScreenRende
 
 auto BuyMenuPanel::loadPicture(std::string_view path, const nx::assets::Vfs& vfs,
                                nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands)
-    -> nx::Result<void, BuyMenuPanelError> {
+    -> nx::Result<void, MenuPanelError> {
     if (path.empty() || pictures.contains(path)) {
         return {};
     }
@@ -643,7 +615,7 @@ auto BuyMenuPanel::loadPicture(std::string_view path, const nx::assets::Vfs& vfs
     }
     auto loaded = screen.loadImage(commands, image->pixels, image->width, image->height, path);
     if (!loaded) {
-        return nx::fail(BuyMenuPanelError::GpuFailed, std::string{path}, std::move(loaded.error()));
+        return nx::fail(MenuPanelError::GpuFailed, std::string{path}, std::move(loaded.error()));
     }
     picture.emplace(std::move(*loaded));
     return {};
@@ -651,7 +623,7 @@ auto BuyMenuPanel::loadPicture(std::string_view path, const nx::assets::Vfs& vfs
 
 auto BuyMenuPanel::load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
                         nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,
-                        std::uint32_t screenHeight) -> nx::Result<void, BuyMenuPanelError> {
+                        std::uint32_t screenHeight) -> nx::Result<void, MenuPanelError> {
     if (screenHeight != facesHeight) {
         if (auto made = makeFaces(fonts, screen, commands, screenHeight); !made) {
             return made;
@@ -679,13 +651,13 @@ void BuyMenuPanel::showNotice(std::string_view text, nx::Seconds now) {
 void BuyMenuPanel::appendBackdrop(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size) {
     nx::ui::PanelPainter{quads, size}.fill({.wide = nx::Pixels{nx::narrow<std::int32_t>(size.width)},
                                             .tall = nx::Pixels{nx::narrow<std::int32_t>(size.height)}},
-                                           kBackdrop);
+                                           kMenuBackdrop);
 }
 
 auto BuyMenuPanel::textFaces() const noexcept -> TextFaces {
     TextFaces shownFaces;
     for (const BuyMenuFont font : TextFaces::keys()) {
-        shownFaces[font] = {.atlas = &faces[font]->atlas, .image = &faces[font]->image};
+        shownFaces[font] = faces[font]->textFace();
     }
     return shownFaces;
 }
@@ -740,8 +712,8 @@ void BuyMenuPanel::appendNotice(std::vector<nx::render::ScreenQuad>& quads, nx::
                  fadedBy(kDangerGlass, opacity));
     painter.fill({.x = x - padX, .y = y - padY, .wide = layout.pixels(kAccentBar), .tall = tall},
                  fadedBy(kDanger, opacity));
-    std::ignore = painter.text({.atlas = &atlas, .image = &faces[BuyMenuFont::Strong]->image}, notice->text,
-                               {.x = x, .y = y}, fadedBy(kInk, opacity)); // the last it draws
+    std::ignore = painter.text(faces[BuyMenuFont::Strong]->textFace(), notice->text, {.x = x, .y = y},
+                               fadedBy(kMenuInk, opacity)); // the last it draws
 }
 
 } // namespace cs

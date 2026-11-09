@@ -23,7 +23,7 @@ auto readBuyMenuLook(std::string_view text, std::string_view sourceName)
     const auto isValid = [&isShared](const BuyMenuArmor& item) {
         return item.kind != ArmorKind::None && !item.name.empty() && !item.picture.empty() && !isShared(item);
     };
-    if (look->font.regular.empty() || look->font.strong.empty() || !std::ranges::all_of(armor, isValid)) {
+    if (!look->font.isComplete() || !std::ranges::all_of(armor, isValid)) {
         return nx::fail(
             BuyMenuLookError::DataInvalid,
             std::format("{}: both font families, and armor of some kind, named and with a picture, "

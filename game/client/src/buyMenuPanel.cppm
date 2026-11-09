@@ -14,15 +14,9 @@ import nx.render;
 import nx.ui;
 import cs.shared;
 import :buyMenu;
+import :menuDesign;
 
 export namespace cs {
-
-/// Why the buy menu cannot be drawn.
-enum class BuyMenuPanelError : std::uint8_t {
-    NoFont,    ///< A family of the look's is among no fonts; the detail names it.
-    Unusable,  ///< A face does not open at its size, or its glyphs cannot be drawn (cause).
-    GpuFailed, ///< The GPU refused a picture or an atlas (cause).
-};
 
 /// The sizes of text the menu writes in.
 enum class BuyMenuFont : std::uint8_t {
@@ -55,10 +49,10 @@ public:
     /// for a screen `screenHeight` pixels tall, of the look's families among `fonts`, made again as that
     /// height changes; and the pictures of what is sold, read from `vfs`, a weapon made as the game
     /// runs too. A picture that cannot be read is logged, and what it shows drawn without it. Errors: every
-    /// BuyMenuPanelError.
+    /// MenuPanelError.
     [[nodiscard]] auto load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
                             nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,
-                            std::uint32_t screenHeight) -> nx::Result<void, BuyMenuPanelError>;
+                            std::uint32_t screenHeight) -> nx::Result<void, MenuPanelError>;
 
     /// Tells `text` from `now`, for a moment.
     void showNotice(std::string_view text, nx::Seconds now);
@@ -78,11 +72,6 @@ public:
                       bool isMenuOpen);
 
 private:
-    /// A size of text on the GPU.
-    struct Face {
-        nx::ui::GlyphAtlas atlas;
-        nx::render::ScreenImage image;
-    };
     /// What append laid out.
     struct Shown {
         BuyMenuFrame frame{};
@@ -98,15 +87,15 @@ private:
 
     [[nodiscard]] auto makeFaces(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
                                  nx::rhi::CommandList& commands, std::uint32_t screenHeight)
-        -> nx::Result<void, BuyMenuPanelError>;
+        -> nx::Result<void, MenuPanelError>;
     [[nodiscard]] auto loadPicture(std::string_view path, const nx::assets::Vfs& vfs,
                                    nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands)
-        -> nx::Result<void, BuyMenuPanelError>;
+        -> nx::Result<void, MenuPanelError>;
     [[nodiscard]] auto textFaces() const noexcept -> nx::EnumArray<BuyMenuFont, nx::ui::TextFace>;
 
     BuyMenuContent content;
     std::uint32_t facesHeight = 0; ///< The screen's height the fonts are made for; 0 before they are.
-    nx::EnumArray<BuyMenuFont, std::optional<Face>> faces;
+    nx::EnumArray<BuyMenuFont, std::optional<MenuFace>> faces;
     /// By their files; none for one that cannot be read, which is not read again.
     std::map<std::string, std::optional<nx::render::ScreenImage>, std::less<>> pictures;
     nx::render::RetainedQuads<Shown> shown;

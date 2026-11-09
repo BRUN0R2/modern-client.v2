@@ -20,9 +20,10 @@ enum class ClientError : std::uint8_t {
     ValidationFailed,    ///< The validation layer reported errors; the detail has their count.
 };
 
-/// Plays as `options` say until the window is closed, Escape is pressed or `quit` runs: the player's
+/// Plays as `options` say until the window is closed or `quit` runs: the player's
 /// settings from the user's folder (config.cfg, userconfig.cfg, autoexec.cfg), then the command
-/// line's `+` commands; a map once `map <name>` loads it, the player walking through it with the
+/// line's `+` commands; the main menu while no map is played, and over the map played as Escape opens it;
+/// a map once `map <name>` loads it, the player walking through it with the
 /// weapons its team spawns with, firing, reloading and drawing them as the binds ask, `noclip`
 /// making it fly, its health, armor, money and ammo on the HUD while `hud_draw` says so, the frames a
 /// second in the top left corner while `cl_showfps` does; the console's window as `toggleconsole` opens
