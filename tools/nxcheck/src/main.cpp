@@ -34,9 +34,17 @@ struct Options {
     std::optional<std::filesystem::path> data;
 };
 
-/// The options in `arguments`, the command line without the program; nullopt when they are not
-/// valid options.
-[[nodiscard]] auto parseOptions(std::span<const std::string_view> arguments) -> std::optional<Options> {
+/// Why the command line was refused; the detail is the word at fault.
+enum class CommandLineError : std::uint8_t {
+    UnknownOption,  ///< A word that is not an option.
+    MissingValue,   ///< The last option, without its folder.
+    RepeatedOption, ///< An option given a second time.
+};
+
+/// The options in `arguments`, the command line without the program. Errors: UnknownOption,
+/// MissingValue, RepeatedOption.
+[[nodiscard]] auto parseOptions(std::span<const std::string_view> arguments)
+    -> nx::Result<Options, CommandLineError> {
     Options options;
     constexpr std::size_t kWordsPerOption = 2; // the option, then its value
     for (std::size_t index = 0; index < arguments.size(); index += kWordsPerOption) {
@@ -44,9 +52,14 @@ struct Options {
         std::optional<std::filesystem::path>* value = option == "--install" ? &options.install
                                                       : option == "--data"  ? &options.data
                                                                             : nullptr;
-        // An unknown or repeated option, or the last one without its value.
-        if (value == nullptr || value->has_value() || index + 1 == arguments.size()) {
-            return std::nullopt;
+        if (value == nullptr) {
+            return nx::fail(CommandLineError::UnknownOption, std::string{option});
+        }
+        if (value->has_value()) {
+            return nx::fail(CommandLineError::RepeatedOption, std::string{option});
+        }
+        if (index + 1 == arguments.size()) {
+            return nx::fail(CommandLineError::MissingValue, std::string{option});
         }
         *value = nx::platform::fromUtf8(arguments[index + 1]);
     }
@@ -189,8 +202,9 @@ auto main(int argumentCount, char** argumentValues) -> int {
         std::print("{}", kUsage);
         return EXIT_SUCCESS;
     }
-    const std::optional<Options> options = parseOptions(arguments);
+    const nx::Result<Options, CommandLineError> options = parseOptions(arguments);
     if (!options) {
+        std::println(stderr, "nxcheck: {}", nx::describe(options.error()));
         std::print(stderr, "{}", kUsage);
         return kExitUnusable;
     }

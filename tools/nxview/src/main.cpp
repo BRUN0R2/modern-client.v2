@@ -111,24 +111,46 @@ struct Options {
     return size;
 }
 
-/// The options in `arguments`, the command line without the program; nullopt when they are not
-/// valid options.
-[[nodiscard]] auto parseOptions(std::span<const std::string_view> arguments) -> std::optional<Options> {
+/// Why the command line was refused; the detail is the word at fault, or the option and its value.
+enum class CommandLineError : std::uint8_t {
+    UnknownOption,   ///< A word that is not an option.
+    MissingValue,    ///< The last option, without the value it takes.
+    RepeatedOption,  ///< An option given a second time, but `--console`.
+    InvalidValue,    ///< A value its option does not take.
+    MissingRequired, ///< `--screenshot`, which every frame needs.
+};
+
+/// The options that take the word after them as their value.
+constexpr auto kValueOptions = std::to_array<std::string_view>(
+    {"--map", "--install", "--data", "--user-folder", "--weapon", "--look", "--screenshot", "--time", "--fps",
+     "--size", "--console", "--typing", "--position", "--angles"});
+
+/// The options in `arguments`, the command line without the program. Errors: UnknownOption,
+/// MissingValue, RepeatedOption, InvalidValue, MissingRequired.
+[[nodiscard]] auto parseOptions(std::span<const std::string_view> arguments)
+    -> nx::Result<Options, CommandLineError> {
     Options options;
     std::set<std::string_view> seen;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const std::string_view option = arguments[index];
-        if (option != "--console" && !seen.insert(option).second) {
-            return std::nullopt; // repeated, but the console's lines
+        const bool isFlag = option == "--validation" || option == "--hud";
+        if (!isFlag && !std::ranges::contains(kValueOptions, option)) {
+            return nx::fail(CommandLineError::UnknownOption, std::string{option});
         }
-        if (option == "--validation" || option == "--hud") {
+        if (option != "--console" && !seen.insert(option).second) {
+            return nx::fail(CommandLineError::RepeatedOption, std::string{option});
+        }
+        if (isFlag) {
             (option == "--hud" ? options.isHudShown : options.isValidationEnabled) = true;
             continue;
         }
         if (index + 1 == arguments.size()) {
-            return std::nullopt; // the other options have a value
+            return nx::fail(CommandLineError::MissingValue, std::string{option});
         }
         const std::string_view value = arguments[++index];
+        const auto invalid = [option, value] {
+            return nx::fail(CommandLineError::InvalidValue, std::format("{} {}", option, value));
+        };
         if (option == "--map") {
             options.map = std::string{value};
         } else if (option == "--install") {
@@ -141,7 +163,7 @@ struct Options {
             options.weapon = std::string{value};
         } else if (option == "--look") {
             if (value != "legacy" && value != "enhanced") {
-                return std::nullopt;
+                return invalid();
             }
             options.look =
                 value == "enhanced" ? nx::render::StudioLook::Enhanced : nx::render::StudioLook::Legacy;
@@ -151,7 +173,7 @@ struct Options {
             float seconds = 0.0F;
             if (std::from_chars(value.data(), value.data() + value.size(), seconds).ec != std::errc{} ||
                 seconds < 0.0F) {
-                return std::nullopt;
+                return invalid();
             }
             options.time = nx::Seconds{seconds};
         } else if (option == "--fps") {
@@ -159,13 +181,13 @@ struct Options {
             if (const auto [end, error] =
                     std::from_chars(value.data(), value.data() + value.size(), framesPerSecond);
                 error != std::errc{} || end != value.data() + value.size() || framesPerSecond < 0.0) {
-                return std::nullopt;
+                return invalid();
             }
             options.framesPerSecond = framesPerSecond;
         } else if (option == "--size") {
             const std::optional<nx::rhi::Extent2d> size = sizeOfText(value);
             if (!size) {
-                return std::nullopt;
+                return invalid();
             }
             options.size = *size;
         } else if (option == "--console") {
@@ -175,12 +197,15 @@ struct Options {
         } else if (option == "--position" || option == "--angles") {
             const std::optional<nx::Vec3> numbers = nx::assets::vectorOfValue(value);
             if (!numbers) {
-                return std::nullopt;
+                return invalid();
             }
             (option == "--position" ? options.position : options.angles) = numbers;
         } else {
-            return std::nullopt;
+            nx::invariant(false, "nxview: every option of kValueOptions is read");
         }
+    }
+    if (!options.screenshot) {
+        return nx::fail(CommandLineError::MissingRequired, "--screenshot");
     }
     return options;
 }
@@ -500,8 +525,9 @@ auto main(int argumentCount, char** argumentValues) -> int {
         std::print("{}", kUsage);
         return EXIT_SUCCESS;
     }
-    const std::optional<Options> options = parseOptions(arguments);
-    if (!options || !options->screenshot) {
+    const nx::Result<Options, CommandLineError> options = parseOptions(arguments);
+    if (!options) {
+        std::println(stderr, "nxview: {}", nx::describe(options.error()));
         std::print(stderr, "{}", kUsage);
         return kExitUnusable;
     }
