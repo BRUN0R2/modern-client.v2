@@ -14,6 +14,7 @@ nxAddModuleLibrary(appClient
         src/clientBots.cppm
         src/navigationView.cppm
         src/clientSounds.cppm
+        src/clientHud.cppm
         src/video.cppm
         src/agentMeshes.cppm
         src/session.cppm
@@ -31,6 +32,7 @@ nxAddModuleLibrary(appClient
         src/clientBots.cpp
         src/navigationView.cpp
         src/clientSounds.cpp
+        src/clientHud.cpp
         src/client.cpp
     DEPENDS
         nx::core
