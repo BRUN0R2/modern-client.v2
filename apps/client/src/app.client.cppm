@@ -12,6 +12,7 @@ export import :commandLine;
 export import :client;
 export import :settings;
 export import :buyMenu;
+export import :bots;
 export import :video;
 export import :agentMeshes;
 export import :session;
