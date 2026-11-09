@@ -62,33 +62,30 @@ struct ScoreTeam {
 /// team's line, a row's status starts, and how far apart rows are; where each right-aligned column ends, its
 /// last pixel; and the band of a player's own row, under the team's line.
 struct ScoreboardMetrics {
-    std::int32_t panelX = 0;
-    std::int32_t panelY = 0;
-    std::int32_t panelWide = 0;
-    std::int32_t panelTall = 0;
-    std::int32_t titleX = 0;
-    std::int32_t headsY = 0;
-    std::int32_t separatorY = 0;
-    std::int32_t teamTextY = 0;
-    std::int32_t teamLineY = 0;
-    std::int32_t nameX = 0;
-    std::int32_t rowTextUnderLine = 0;
-    std::int32_t statusX = 0;
-    std::int32_t rowPitch = 0;
-    std::int32_t healthEnd = 0;
-    std::int32_t moneyEnd = 0;
-    std::int32_t scoreEnd = 0;
-    std::int32_t deathsEnd = 0;
-    std::int32_t latencyEnd = 0;
-    std::int32_t bandUnderLine = 0;
-    std::int32_t bandTall = 0;
+    nx::ui::PixelRect panel{};
+    nx::Pixels titleX{};
+    nx::Pixels headsY{};
+    nx::Pixels separatorY{};
+    nx::Pixels teamTextY{};
+    nx::Pixels teamLineY{};
+    nx::Pixels nameX{};
+    nx::Pixels rowTextUnderLine{};
+    nx::Pixels statusX{};
+    nx::Pixels rowPitch{};
+    nx::Pixels healthEnd{};
+    nx::Pixels moneyEnd{};
+    nx::Pixels scoreEnd{};
+    nx::Pixels deathsEnd{};
+    nx::Pixels latencyEnd{};
+    nx::Pixels bandUnderLine{};
+    nx::Pixels bandTall{};
 
     [[nodiscard]] inline auto operator==(const ScoreboardMetrics&) const noexcept -> bool = default;
 };
 
 /// The board's parts on a screen of `size`, written in a font of lines `lineHeight` tall (docs/12
 /// section 3.2).
-[[nodiscard]] auto scoreboardMetricsOf(nx::rhi::Extent2d size, std::int32_t lineHeight) noexcept
+[[nodiscard]] auto scoreboardMetricsOf(nx::rhi::Extent2d size, nx::Pixels lineHeight) noexcept
     -> ScoreboardMetrics;
 
 /// What the board shows: what heads it, the players, whose its own player is, and the teams' wins.

@@ -10,6 +10,7 @@ import std;
 import nx.core;
 import nx.platform;
 import nx.render;
+import :geometry;
 import :panel;
 import :painter;
 import :text;
@@ -27,7 +28,7 @@ enum class TextEntryAction : std::uint8_t {
 /// of them when they are wider than it.
 class TextEntry : public Panel {
 public:
-    explicit TextEntry(std::string name, PanelBounds bounds = {});
+    explicit TextEntry(std::string name, PixelRect bounds = {});
 
     /// The text, UTF-8.
     [[nodiscard]] auto text() const -> std::string;
@@ -48,11 +49,11 @@ public:
         m_textColor = text;
         m_cursorColor = cursor;
     }
-    /// The pixels between the entry's left edge and its text.
-    inline void setTextInset(std::int32_t inset) noexcept { m_inset = inset; }
+    /// How far the text is from the entry's left edge.
+    inline void setTextInset(Pixels inset) noexcept { textInset = inset; }
 
-    /// How far the text is scrolled left so that the cursor shows, in pixels.
-    [[nodiscard]] auto scroll() const -> std::int32_t;
+    /// How far the text is scrolled left so that the cursor shows.
+    [[nodiscard]] auto scroll() const -> Pixels;
 
 protected:
     /// Its background, its text and its cursor, a pixel wide and a line tall.
@@ -60,14 +61,14 @@ protected:
 
 private:
     /// The pen's distance from the text's start to the cursor.
-    [[nodiscard]] auto cursorPen() const -> std::int32_t;
+    [[nodiscard]] auto cursorPen() const -> Pixels;
 
     std::u32string m_characters;
     std::size_t m_cursor = 0;
     TextFace m_face{};
     render::ScreenColor m_textColor{};
     render::ScreenColor m_cursorColor{};
-    std::int32_t m_inset = 0;
+    Pixels textInset{};
 };
 
 } // namespace nx::ui

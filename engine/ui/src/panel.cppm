@@ -11,6 +11,7 @@ import std;
 import nx.core;
 import nx.assets;
 import nx.render;
+import :geometry;
 import :painter;
 
 export namespace nx::ui {
@@ -39,22 +40,13 @@ enum class AutoResize : std::uint8_t {
     Count,
 };
 
-/// A panel's place and size, in pixels from its parent's top left.
-struct PanelBounds {
-    std::int32_t x = 0;
-    std::int32_t y = 0;
-    std::int32_t wide = 0;
-    std::int32_t tall = 0;
-
-    [[nodiscard]] inline auto operator==(const PanelBounds&) const noexcept -> bool = default;
-};
-
 /// A panel of the interface, its children over it in their order. It stays where it is made: its
 /// children point to it. A control is a kind of panel that draws more than its background.
 class Panel {
 public:
-    /// A panel named `name` at `bounds`, visible and enabled, pinned to its parent's top left.
-    explicit Panel(std::string name, PanelBounds bounds = {});
+    /// A panel named `name` at `bounds`, from its parent's top left, visible and enabled, pinned to its
+    /// parent's top left.
+    explicit Panel(std::string name, PixelRect bounds = {});
 
     Panel(const Panel&) = delete;
     auto operator=(const Panel&) -> Panel& = delete;
@@ -63,7 +55,8 @@ public:
     virtual ~Panel() = default;
 
     [[nodiscard]] inline auto name() const noexcept -> std::string_view { return m_name; }
-    [[nodiscard]] inline auto bounds() const noexcept -> const PanelBounds& { return m_bounds; }
+    /// Its place and size, from its parent's top left.
+    [[nodiscard]] inline auto bounds() const noexcept -> const PixelRect& { return boundsRect; }
     [[nodiscard]] inline auto isVisible() const noexcept -> bool { return m_isVisible; }
     [[nodiscard]] inline auto isEnabled() const noexcept -> bool { return m_isEnabled; }
     [[nodiscard]] inline auto pinCorner() const noexcept -> PinCorner { return m_pinCorner; }
@@ -87,7 +80,7 @@ public:
 
     /// Moves and sizes the panel. Its children follow: each of their edges keeps its distance to the
     /// edge of the panel it follows.
-    void setBounds(PanelBounds bounds);
+    void setBounds(PixelRect bounds);
     inline void setVisible(bool isVisible) noexcept { m_isVisible = isVisible; }
     inline void setAnchors(PinCorner pinCorner, AutoResize autoResize) noexcept {
         m_pinCorner = pinCorner;
@@ -113,11 +106,11 @@ protected:
     virtual void paint(PanelPainter& painter) const;
 
 private:
-    /// Moves the panel's edges that follow its parent's, which grew by `wider` and `taller`.
-    void followParent(std::int32_t wider, std::int32_t taller);
+    /// Moves the panel's edges that follow its parent's, which grew by `grown`.
+    void followParent(PixelSize grown);
 
     std::string m_name;
-    PanelBounds m_bounds;
+    PixelRect boundsRect;
     bool m_isVisible = true;
     bool m_isEnabled = true;
     PinCorner m_pinCorner = PinCorner::TopLeft;

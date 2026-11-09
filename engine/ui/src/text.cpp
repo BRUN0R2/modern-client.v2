@@ -141,9 +141,10 @@ auto GlyphAtlas::pack(const FontMetrics& metrics, std::vector<std::pair<char32_t
                     std::byte{glyph.coverage[(std::size_t{row} * place.width) + column]};
             }
         }
-        atlas.m_glyphs.emplace_back(
-            character,
-            AtlasGlyph{.source = place, .left = glyph.left, .top = glyph.top, .advance = glyph.advance});
+        atlas.m_glyphs.emplace_back(character, AtlasGlyph{.source = place,
+                                                          .left = Pixels{glyph.left},
+                                                          .top = Pixels{glyph.top},
+                                                          .advance = Pixels{glyph.advance}});
     }
     return atlas;
 }
@@ -156,7 +157,7 @@ auto GlyphAtlas::glyph(char32_t character) const noexcept -> const AtlasGlyph* {
 
 auto layoutText(const GlyphAtlas& atlas, std::string_view text, float x, float y)
     -> std::vector<PlacedGlyph> {
-    const float baseline = y + static_cast<float>(atlas.metrics().ascent);
+    const float baseline = y + static_cast<float>(atlas.ascent().value());
     std::vector<PlacedGlyph> placed;
     for (const char32_t character : decodeUtf8(text)) {
         const AtlasGlyph* glyph = atlas.glyph(character);
@@ -165,11 +166,11 @@ auto layoutText(const GlyphAtlas& atlas, std::string_view text, float x, float y
         }
         if (glyph->source.width > 0) {
             placed.push_back({.source = glyph->source,
-                              .x = x + static_cast<float>(glyph->left),
-                              .y = baseline - static_cast<float>(glyph->top),
+                              .x = x + static_cast<float>(glyph->left.value()),
+                              .y = baseline - static_cast<float>(glyph->top.value()),
                               .hasDropShadow = glyph->hasDropShadow});
         }
-        x += static_cast<float>(glyph->advance);
+        x += static_cast<float>(glyph->advance.value());
     }
     return placed;
 }
@@ -188,11 +189,11 @@ auto appendText(std::vector<render::ScreenQuad>& quads, const GlyphAtlas& atlas,
     for (const PlacedGlyph& glyph : placed) {
         quads.push_back(glyphQuad(image, glyph, 0.0F, color));
     }
-    return x + static_cast<float>(widthOf(atlas, text));
+    return x + static_cast<float>(widthOf(atlas, text).value());
 }
 
-auto widthOf(const GlyphAtlas& atlas, std::string_view text) -> std::int32_t {
-    std::int32_t width = 0;
+auto widthOf(const GlyphAtlas& atlas, std::string_view text) -> Pixels {
+    Pixels width{};
     for (const char32_t character : decodeUtf8(text)) {
         if (const AtlasGlyph* glyph = atlas.glyph(character); glyph != nullptr) {
             width += glyph->advance;
@@ -201,28 +202,27 @@ auto widthOf(const GlyphAtlas& atlas, std::string_view text) -> std::int32_t {
     return width;
 }
 
-auto wrapText(const GlyphAtlas& atlas, std::string_view text, std::int32_t width)
-    -> std::vector<std::string> {
-    if (width <= 0) {
+auto wrapText(const GlyphAtlas& atlas, std::string_view text, Pixels width) -> std::vector<std::string> {
+    if (width <= Pixels{}) {
         return {std::string{text}};
     }
     const std::u32string characters = decodeUtf8(text);
     std::vector<std::string> rows;
     std::size_t start = 0;
     std::optional<std::size_t> space; // the last space of the row
-    std::int32_t pen = 0;
+    Pixels pen{};
     for (std::size_t index = 0; index < characters.size(); ++index) {
         const AtlasGlyph* glyph = atlas.glyph(characters[index]);
-        const std::int32_t advance = glyph != nullptr ? glyph->advance : 0;
+        const Pixels advance = glyph != nullptr ? glyph->advance : Pixels{};
         if (pen + advance > width && index > start) {
             const std::size_t end = space.value_or(index);
             rows.push_back(utf8Text(std::u32string_view{characters}.substr(start, end - start)));
             start = space ? end + 1 : end;
             space.reset();
-            pen = 0;
+            pen = Pixels{};
             for (std::size_t carried = start; carried < index; ++carried) {
                 const AtlasGlyph* earlier = atlas.glyph(characters[carried]);
-                pen += earlier != nullptr ? earlier->advance : 0;
+                pen += earlier != nullptr ? earlier->advance : Pixels{};
             }
         }
         if (characters[index] == U' ') {

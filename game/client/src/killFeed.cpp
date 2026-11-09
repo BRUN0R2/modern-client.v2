@@ -28,6 +28,7 @@ constexpr std::int32_t kRowsTopShare = 15;     ///< Down to the first row's top,
 constexpr std::int32_t kRowPitchShare = 30;    ///< From a row's top to the next one's.
 constexpr std::int32_t kRightMarginShare = 40; ///< Between the victim's name and the right edge.
 constexpr std::int32_t kPartGapShare = 96;     ///< Before the victim's name, and the killer's after it.
+constexpr std::int32_t kDeadRowsTopFactor = 2; ///< How much further down the rows start with the player dead.
 
 /// The color each team's names are written in.
 constexpr nx::EnumArray<Team, nx::render::ScreenColor> kTeamNameColors{
@@ -97,12 +98,13 @@ auto KillPictures::icon(std::optional<std::string_view> weapon) const -> const H
 
 auto layoutKillRow(const KillRowWidths& widths, std::size_t row, bool isPlayerDead,
                    nx::rhi::Extent2d size) noexcept -> KillRowLayout {
-    const std::int32_t height = nx::narrow<std::int32_t>(size.height);
-    const std::int32_t gap = height / kPartGapShare;
-    const std::int32_t rowsTop = (height / kRowsTopShare) * (isPlayerDead ? 2 : 1);
-    KillRowLayout layout{.y = rowsTop + (nx::narrow<std::int32_t>(row) * (height / kRowPitchShare))};
-    layout.victimX = nx::narrow<std::int32_t>(size.width) - (height / kRightMarginShare) - widths.victim;
-    std::int32_t x = layout.victimX - gap;
+    const nx::Pixels height{nx::narrow<std::int32_t>(size.height)};
+    const nx::Pixels gap = height / kPartGapShare;
+    const nx::Pixels rowsTop = (height / kRowsTopShare) * (isPlayerDead ? kDeadRowsTopFactor : 1);
+    KillRowLayout layout{.y = rowsTop + ((height / kRowPitchShare) * nx::narrow<std::int32_t>(row))};
+    layout.victimX =
+        nx::Pixels{nx::narrow<std::int32_t>(size.width)} - (height / kRightMarginShare) - widths.victim;
+    nx::Pixels x = layout.victimX - gap;
     if (widths.head) {
         x -= *widths.head;
         layout.headX = x;
@@ -205,25 +207,29 @@ void KillFeed::layOut(std::vector<nx::render::ScreenQuad>& quads, const Loaded& 
     const auto widthOf = [this](std::string_view name) {
         return nx::ui::widthOf(atlas, name);
     };
-    const auto writeName = [&](const NoticedPlayer& player, std::int32_t x, std::int32_t y) {
-        std::ignore = nx::ui::appendText(quads, atlas, onGpu.glyphs, player.name, static_cast<float>(x),
-                                         static_cast<float>(y), kTeamNameColors[player.team]);
+    const auto writeName = [&](const NoticedPlayer& player, nx::Pixels x, nx::Pixels y) {
+        std::ignore =
+            nx::ui::appendText(quads, atlas, onGpu.glyphs, player.name, static_cast<float>(x.value()),
+                               static_cast<float>(y.value()), kTeamNameColors[player.team]);
     };
     for (const auto& [index, row] : std::views::enumerate(rows)) {
         const nx::render::ScreenColor color = row.isTeamKill ? kTeamKillColor : kKillColor;
-        const auto addPicture = [&](const HudSpritePicture& picture, std::int32_t x, std::int32_t y) {
-            quads.push_back(nx::render::spriteQuad(onGpu.images[picture.image], picture.rect,
-                                                   static_cast<float>(x), static_cast<float>(y), color,
-                                                   nx::render::ScreenBlend::Additive));
+        const auto addPicture = [&](const HudSpritePicture& picture, nx::Pixels x, nx::Pixels y) {
+            quads.push_back(nx::render::spriteQuad(
+                onGpu.images[picture.image], picture.rect, static_cast<float>(x.value()),
+                static_cast<float>(y.value()), color, nx::render::ScreenBlend::Additive));
+        };
+        const auto pictureWidth = [](const HudSpritePicture& picture) {
+            return nx::Pixels{nx::narrow<std::int32_t>(picture.rect.width)};
         };
         const HudSpritePicture& icon = onGpu.pictures.icon(row.weapon);
         const HudSpritePicture& head = onGpu.pictures.head();
-        const KillRowLayout layout = layoutKillRow(
-            {.killer = row.killer ? std::optional{widthOf(row.killer->name)} : std::nullopt,
-             .icon = nx::narrow<std::int32_t>(icon.rect.width),
-             .head = row.isHead ? std::optional{nx::narrow<std::int32_t>(head.rect.width)} : std::nullopt,
-             .victim = widthOf(row.victim.name)},
-            nx::narrow<std::size_t>(index), isPlayerDead, size);
+        const KillRowLayout layout =
+            layoutKillRow({.killer = row.killer ? std::optional{widthOf(row.killer->name)} : std::nullopt,
+                           .icon = pictureWidth(icon),
+                           .head = row.isHead ? std::optional{pictureWidth(head)} : std::nullopt,
+                           .victim = widthOf(row.victim.name)},
+                          nx::narrow<std::size_t>(index), isPlayerDead, size);
         if (row.killer && layout.killerX) {
             writeName(*row.killer, *layout.killerX, layout.y);
         }

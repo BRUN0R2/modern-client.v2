@@ -16,6 +16,7 @@ import nx.render;
 import nx.ui;
 
 #include "gpuScreen.hpp"
+#include "pixelGeometry.hpp"
 
 namespace {
 
@@ -41,41 +42,40 @@ constexpr ScreenColor kGray{.red = 64, .green = 64, .blue = 64};
 TEST(PanelPainterTest, PlacesFromThePanelsTopLeftWithinIt) {
     std::vector<ScreenQuad> quads;
     PanelPainter screen{quads, kScreen};
-    screen.fill(2, 3, 4, 5, kGray);
+    screen.fill(nx::test::rectOf(2, 3, 4, 5), kGray);
     ASSERT_EQ(quads.size(), 1U);
     EXPECT_EQ(quads[0].target.x, 2.0F);
     EXPECT_EQ(quads[0].target.height, 5.0F);
     EXPECT_EQ(quads[0].blend, nx::render::ScreenBlend::Translucent);
     EXPECT_TRUE(isSameRect(*quads[0].clip, rect(0, 0, 32, 32)));
 
-    PanelPainter panel = screen.inside(10, 10, 8, 8);
-    panel.fill(-2, -2, 20, 20, kGray);
+    PanelPainter panel = screen.inside(nx::test::rectOf(10, 10, 8, 8));
+    panel.fill(nx::test::rectOf(-2, -2, 20, 20), kGray);
     ASSERT_EQ(quads.size(), 2U);
     EXPECT_EQ(quads[1].target.x, 8.0F) << "from the panel's top left";
     EXPECT_TRUE(isSameRect(*quads[1].clip, rect(10, 10, 8, 8))) << "kept within the panel";
 
-    EXPECT_TRUE(isSameRect(screen.inside(30, 28, 8, 8).clip(), rect(30, 28, 2, 4)))
+    EXPECT_TRUE(isSameRect(screen.inside(nx::test::rectOf(30, 28, 8, 8)).clip(), rect(30, 28, 2, 4)))
         << "and within the screen";
-    EXPECT_TRUE(isSameRect(panel.inside(6, -4, 8, 8).clip(), rect(16, 10, 2, 4))) << "and within its parent";
+    EXPECT_TRUE(isSameRect(panel.inside(nx::test::rectOf(6, -4, 8, 8)).clip(), rect(16, 10, 2, 4)))
+        << "and within its parent";
 
-    PanelPainter offscreen = screen.inside(40, 40, 4, 4);
+    PanelPainter offscreen = screen.inside(nx::test::rectOf(40, 40, 4, 4));
     EXPECT_TRUE(offscreen.isClippedAway());
-    offscreen.fill(0, 0, 4, 4, kGray);
+    offscreen.fill(nx::test::rectOf(0, 0, 4, 4), kGray);
     EXPECT_EQ(quads.size(), 2U) << "nothing drawn where nothing shows";
 }
 
 TEST(PanelPaintTest, ABackgroundThenTheVisibleChildrenWithinIt) {
-    Panel dialog{"Dialog", {.x = 4, .y = 4, .wide = 20, .tall = 20}};
+    Panel dialog{"Dialog", nx::test::rectOf(4, 4, 20, 20)};
     dialog.setBackground(kGray);
-    Panel& list = dialog.add(
-        std::make_unique<Panel>("List", nx::ui::PanelBounds{.x = 2, .y = 2, .wide = 30, .tall = 30}));
+    Panel& list = dialog.add(std::make_unique<Panel>("List", nx::test::rectOf(2, 2, 30, 30)));
     list.setBackground(ScreenColor{.red = 255});
-    Panel& hidden = dialog.add(std::make_unique<Panel>("Hidden", nx::ui::PanelBounds{.wide = 4, .tall = 4}));
+    Panel& hidden = dialog.add(std::make_unique<Panel>("Hidden", nx::test::rectOf(0, 0, 4, 4)));
     hidden.setBackground(kGray);
     hidden.setVisible(false);
-    hidden.add(std::make_unique<Panel>("Inside", nx::ui::PanelBounds{.wide = 2, .tall = 2}))
-        .setBackground(kGray);
-    dialog.add(std::make_unique<Panel>("Bare", nx::ui::PanelBounds{.wide = 4, .tall = 4}));
+    hidden.add(std::make_unique<Panel>("Inside", nx::test::rectOf(0, 0, 2, 2))).setBackground(kGray);
+    dialog.add(std::make_unique<Panel>("Bare", nx::test::rectOf(0, 0, 4, 4)));
 
     std::vector<ScreenQuad> quads;
     dialog.paintTree(PanelPainter{quads, kScreen});
@@ -89,18 +89,18 @@ TEST(PanelPaintTest, ABackgroundThenTheVisibleChildrenWithinIt) {
 
 TEST(LabelTest, ItsAlignmentPlacesItsText) {
     const nx::ui::GlyphAtlas atlas = nx::test::squareAtlas();
-    Label label{"Title", {.wide = 40, .tall = 30}};
+    Label label{"Title", nx::test::rectOf(0, 0, 40, 30)};
     label.setFace({.atlas = &atlas});
     label.setText("AB");
     const auto at = [&label](TextAlignment alignment) {
         label.setAlignment(alignment);
         return label.textPosition();
     };
-    EXPECT_EQ(at(TextAlignment::West), (std::pair{0, 5})) << "the line halfway down";
-    EXPECT_EQ(at(TextAlignment::Center), (std::pair{10, 5}));
-    EXPECT_EQ(at(TextAlignment::East), (std::pair{20, 5}));
-    EXPECT_EQ(at(TextAlignment::NorthWest), (std::pair{0, 0}));
-    EXPECT_EQ(at(TextAlignment::SouthEast), (std::pair{20, 10}));
+    EXPECT_EQ(at(TextAlignment::West), nx::test::pointOf(0, 5)) << "the line halfway down";
+    EXPECT_EQ(at(TextAlignment::Center), nx::test::pointOf(10, 5));
+    EXPECT_EQ(at(TextAlignment::East), nx::test::pointOf(20, 5));
+    EXPECT_EQ(at(TextAlignment::NorthWest), nx::test::pointOf(0, 0));
+    EXPECT_EQ(at(TextAlignment::SouthEast), nx::test::pointOf(20, 10));
 }
 
 TEST(LabelTest, AlignmentsByTheirNamesInLayouts) {
@@ -115,7 +115,7 @@ TEST(LabelTest, DrawsItsTextOverItsBackground) {
     if (!screen.isReady()) {
         GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
     }
-    Label label{"Title", {.x = 4, .y = 2, .wide = 12, .tall = 24}};
+    Label label{"Title", nx::test::rectOf(4, 2, 12, 24)};
     label.setBackground(kGray);
     label.setFace(screen.face());
     label.setText("AB");

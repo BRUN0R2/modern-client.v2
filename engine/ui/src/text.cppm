@@ -25,9 +25,9 @@ inline constexpr float kDropShadowOffset = 1.0F;
 /// A glyph in an atlas: where its bitmap is, where the pen puts it, and whether it casts a shadow.
 struct AtlasGlyph {
     assets::SpriteRect source{}; ///< Its bitmap in the atlas; empty for a glyph without one (a space).
-    std::int32_t left = 0;       ///< From the pen to the bitmap's left edge.
-    std::int32_t top = 0;        ///< From the baseline up to the bitmap's top edge.
-    std::int32_t advance = 0;    ///< How far the pen moves past the glyph.
+    Pixels left{};               ///< From the pen to the bitmap's left edge.
+    Pixels top{};                ///< From the baseline up to the bitmap's top edge.
+    Pixels advance{};            ///< How far the pen moves past the glyph.
     bool hasDropShadow = false;  ///< Casts VGUI2's drop shadow (kDropShadowOffset).
 };
 
@@ -45,8 +45,10 @@ public:
     [[nodiscard]] static auto build(const SchemeFontSet& fonts, std::u32string_view characters,
                                     std::uint32_t width = kAtlasWidth) -> Result<GlyphAtlas, FontError>;
 
-    /// The font's line, which text is laid out by.
-    [[nodiscard]] inline auto metrics() const noexcept -> const FontMetrics& { return m_metrics; }
+    /// The height of the font's line, which text is laid out by.
+    [[nodiscard]] inline auto lineHeight() const noexcept -> Pixels { return Pixels{m_metrics.height()}; }
+    /// From the top of the line to its baseline.
+    [[nodiscard]] inline auto ascent() const noexcept -> Pixels { return Pixels{m_metrics.ascent}; }
     [[nodiscard]] inline auto width() const noexcept -> std::uint32_t { return m_width; }
     [[nodiscard]] inline auto height() const noexcept -> std::uint32_t { return m_height; }
     /// The picture: RGBA texels, row by row from the top, for ScreenRenderer::loadImage.
@@ -91,12 +93,12 @@ auto appendText(std::vector<render::ScreenQuad>& quads, const GlyphAtlas& atlas,
                 render::ScreenColor color) -> float;
 
 /// How far the pen moves over the UTF-8 `text` with `atlas`'s glyphs.
-[[nodiscard]] auto widthOf(const GlyphAtlas& atlas, std::string_view text) -> std::int32_t;
+[[nodiscard]] auto widthOf(const GlyphAtlas& atlas, std::string_view text) -> Pixels;
 
-/// The rows the UTF-8 `text` makes `width` pixels wide with `atlas`'s glyphs: broken at the last space
+/// The rows the UTF-8 `text` makes `width` wide with `atlas`'s glyphs: broken at the last space
 /// that fits, the space left out, or before the character that does not fit when no space does; one empty
 /// row for an empty text. Without room, the text is one row.
-[[nodiscard]] auto wrapText(const GlyphAtlas& atlas, std::string_view text, std::int32_t width)
+[[nodiscard]] auto wrapText(const GlyphAtlas& atlas, std::string_view text, Pixels width)
     -> std::vector<std::string>;
 
 } // namespace nx::ui

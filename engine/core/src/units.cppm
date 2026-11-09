@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Units of the game domain. The Rook counterparts (5000hp, 320ups, 64hu...) are listed in
-/// docs/14-rook-language.md, section 6.
+/// Units of the game domain, and the pixels of its screen. The Rook counterparts (5000hp, 320ups,
+/// 64hu...) are listed in docs/14-rook-language.md, section 6.
 export module nx.core:units;
 
 import std;
@@ -73,6 +73,10 @@ struct RadiansTag {
 struct HertzTag {
     static constexpr std::string_view kSuffix = "Hz";
 };
+/// The unit of Pixels.
+struct PixelsTag {
+    static constexpr std::string_view kSuffix = "px";
+};
 
 /// Map distance. One hammer unit is the GoldSrc world unit (about one inch).
 using HammerUnits = Quantity<float, HammerUnitsTag>;
@@ -118,6 +122,10 @@ using Radians = Quantity<float, RadiansTag>;
 
 /// Sample frames a second: what a sound is made at and what a sound device plays at.
 using SampleRate = Quantity<std::uint32_t, HertzTag>;
+
+/// Whole pixels of the screen: where the interface places things, from a top left (negative to its
+/// left or above it), how large it makes them, and how far apart.
+using Pixels = Quantity<std::int32_t, PixelsTag>;
 
 /// Simulation durations. Wall-clock time belongs to nx.platform.
 using Seconds = std::chrono::duration<float>;
