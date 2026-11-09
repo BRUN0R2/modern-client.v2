@@ -6,8 +6,16 @@
 export module app.client:commandLine;
 
 import std;
+import nx.core;
 
 export namespace app {
+
+/// Why a command line was refused; the detail is the word at fault.
+enum class CommandLineError : std::uint8_t {
+    UnknownOption,  ///< A word that is not an option, outside a `+` command.
+    MissingValue,   ///< An option without the folder or the file it takes.
+    RepeatedOption, ///< An option given a second time.
+};
 
 /// What `--help` prints, and what a command line that is not valid shows.
 inline constexpr std::string_view kClientUsage =
@@ -44,9 +52,9 @@ struct ClientOptions {
 
 /// The options of `arguments`, the command line without the program. A word that starts with `+`
 /// starts a command, and the words after it up to the next that starts with `+` or `-` are its
-/// arguments, joined by spaces as the original's stuffcmds joins them. None for an option that is
-/// not one of the above, one given twice, or one without its folder or file.
+/// arguments, joined by spaces as the original's stuffcmds joins them. Errors: UnknownOption,
+/// MissingValue, RepeatedOption.
 [[nodiscard]] auto parseClientOptions(std::span<const std::string_view> arguments)
-    -> std::optional<ClientOptions>;
+    -> nx::Result<ClientOptions, CommandLineError>;
 
 } // namespace app

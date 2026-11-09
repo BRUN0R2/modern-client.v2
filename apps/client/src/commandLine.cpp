@@ -4,6 +4,7 @@
 module app.client;
 
 import std;
+import nx.core;
 import nx.platform;
 
 namespace app {
@@ -30,7 +31,8 @@ namespace {
 
 } // namespace
 
-auto parseClientOptions(std::span<const std::string_view> arguments) -> std::optional<ClientOptions> {
+auto parseClientOptions(std::span<const std::string_view> arguments)
+    -> nx::Result<ClientOptions, CommandLineError> {
     const auto isOption = [](std::string_view word) {
         return word.starts_with('+') || word.starts_with('-');
     };
@@ -48,15 +50,18 @@ auto parseClientOptions(std::span<const std::string_view> arguments) -> std::opt
             continue;
         }
         if (!seen.insert(word).second) {
-            return std::nullopt; // given twice
+            return nx::fail(CommandLineError::RepeatedOption, std::string{word});
         }
         if (word == "--validation") {
             options.isValidationEnabled = true;
             continue;
         }
         std::optional<std::filesystem::path>* const path = pathOptionOf(options, word);
-        if (path == nullptr || index + 1 == arguments.size()) {
-            return std::nullopt; // not an option, or its folder or file missing
+        if (path == nullptr) {
+            return nx::fail(CommandLineError::UnknownOption, std::string{word});
+        }
+        if (index + 1 == arguments.size()) {
+            return nx::fail(CommandLineError::MissingValue, std::string{word});
         }
         *path = nx::platform::fromUtf8(arguments[++index]);
     }
