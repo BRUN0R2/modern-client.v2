@@ -44,10 +44,10 @@ public:
     [[nodiscard]] inline auto clip() const noexcept -> const rhi::Rect& { return m_clip; }
 
 private:
-    PanelPainter(std::vector<render::ScreenQuad>& quads, PixelPoint origin, rhi::Rect clip) noexcept;
+    PanelPainter(std::vector<render::ScreenQuad>& quads, PixelPoint topLeft, rhi::Rect clip) noexcept;
 
     std::vector<render::ScreenQuad>* m_quads;
-    PixelPoint m_origin{}; ///< The panel's top left on the screen.
+    PixelPoint origin{}; ///< The panel's top left on the screen.
     rhi::Rect m_clip{};
 };
 

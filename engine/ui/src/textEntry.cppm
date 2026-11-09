@@ -50,7 +50,7 @@ public:
         m_cursorColor = cursor;
     }
     /// How far the text is from the entry's left edge.
-    inline void setTextInset(Pixels inset) noexcept { m_inset = inset; }
+    inline void setTextInset(Pixels inset) noexcept { textInset = inset; }
 
     /// How far the text is scrolled left so that the cursor shows.
     [[nodiscard]] auto scroll() const -> Pixels;
@@ -68,7 +68,7 @@ private:
     TextFace m_face{};
     render::ScreenColor m_textColor{};
     render::ScreenColor m_cursorColor{};
-    Pixels m_inset{};
+    Pixels textInset{};
 };
 
 } // namespace nx::ui

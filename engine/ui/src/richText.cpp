@@ -34,7 +34,7 @@ RichText::RichText(std::string name, PixelRect bounds, std::size_t capacity)
     : Panel{std::move(name), bounds}, m_capacity{std::max<std::size_t>(capacity, 1)} {}
 
 void RichText::append(RichTextLine line) {
-    const Pixels width = bounds().wide - (m_inset * kInsetSides);
+    const Pixels width = bounds().wide - (textInset * kInsetSides);
     if (m_scrolled > 0) {
         m_scrolled += wrapped(line, m_face.atlas, width).size(); // the rows shown stay put
     }
@@ -51,7 +51,7 @@ void RichText::clear() noexcept {
 }
 
 auto RichText::rows() const -> std::vector<RichTextLine> {
-    const Pixels width = bounds().wide - (m_inset * kInsetSides);
+    const Pixels width = bounds().wide - (textInset * kInsetSides);
     std::vector<RichTextLine> all;
     for (const RichTextLine& line : m_lines) {
         std::ranges::move(wrapped(line, m_face.atlas, width), std::back_inserter(all));
@@ -64,7 +64,7 @@ auto RichText::visibleRows() const -> std::size_t {
         return 0;
     }
     return narrow<std::size_t>(
-        std::max(0, (bounds().tall - (m_inset * kInsetSides)) / m_face.atlas->lineHeight()));
+        std::max(0, (bounds().tall - (textInset * kInsetSides)) / m_face.atlas->lineHeight()));
 }
 
 void RichText::scrollBy(std::int64_t rows) {
@@ -81,7 +81,7 @@ void RichText::paint(PanelPainter& painter) const {
         return;
     }
     // The newest lines' rows, back to the oldest row shown.
-    const Pixels width = bounds().wide - (m_inset * kInsetSides);
+    const Pixels width = bounds().wide - (textInset * kInsetSides);
     const std::size_t needed = m_scrolled + shown;
     std::vector<RichTextLine> newest; // newest row first
     for (auto line = m_lines.rbegin(); line != m_lines.rend() && newest.size() < needed; ++line) {
@@ -92,7 +92,7 @@ void RichText::paint(PanelPainter& painter) const {
     for (std::size_t row = m_scrolled; row < std::min(needed, newest.size()); ++row) {
         const auto fromBottom = narrow<std::int32_t>(row - m_scrolled + 1);
         std::ignore = painter.text(m_face, newest[row].text,
-                                   {.x = m_inset, .y = bounds().tall - m_inset - (height * fromBottom)},
+                                   {.x = textInset, .y = bounds().tall - textInset - (height * fromBottom)},
                                    newest[row].color); // where its pen ends is no matter
     }
 }

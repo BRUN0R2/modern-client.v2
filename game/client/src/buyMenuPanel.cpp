@@ -110,6 +110,10 @@ constexpr std::int32_t kNoticePadX = 18;
 constexpr std::int32_t kNoticePadY = 8;
 /// How thick an outline and a rule are drawn.
 constexpr nx::Pixels kLineThick{1};
+/// What the room left is divided by to put a thing halfway into it.
+constexpr std::int32_t kMiddleDivisor = 2;
+/// A padding on each side of the notice: left and right, top and bottom.
+constexpr std::int32_t kPaddedSides = 2;
 
 /// `color`, as opaque as `share` of what it is.
 [[nodiscard]] constexpr auto fadedBy(ScreenColor color, float share) noexcept -> ScreenColor {
@@ -225,15 +229,16 @@ public:
         const auto boxWide = static_cast<float>(box.wide.value());
         const auto boxTall = static_cast<float>(box.tall.value());
         const float fit = std::min(boxWide / wide, boxTall / tall);
-        output->push_back({.image = &image,
-                           .source = {.x = 0, .y = 0, .width = image.width(), .height = image.height()},
-                           .target = {.x = boxX + ((boxWide - (wide * fit)) / 2.0F),
-                                      .y = boxY + ((boxTall - (tall * fit)) / 2.0F),
-                                      .width = wide * fit,
-                                      .height = tall * fit},
-                           .color = {.alpha = alpha},
-                           .blend = nx::render::ScreenBlend::Translucent,
-                           .filter = nx::render::ScreenFilter::Linear});
+        output->push_back(
+            {.image = &image,
+             .source = {.x = 0, .y = 0, .width = image.width(), .height = image.height()},
+             .target = {.x = boxX + ((boxWide - (wide * fit)) / static_cast<float>(kMiddleDivisor)),
+                        .y = boxY + ((boxTall - (tall * fit)) / static_cast<float>(kMiddleDivisor)),
+                        .width = wide * fit,
+                        .height = tall * fit},
+             .color = {.alpha = alpha},
+             .blend = nx::render::ScreenBlend::Translucent,
+             .filter = nx::render::ScreenFilter::Linear});
     }
 
 private:
@@ -540,7 +545,8 @@ void paintCarried(Paint& paint, const BuyMenuFrame& frame) {
         }
         const std::vector<std::string> rows = paint.wrapped(BuyMenuFont::Caption, names, room);
         const nx::Pixels line = paint.lineOf(BuyMenuFont::Caption);
-        nx::Pixels y = tile.y + ((tile.tall - ((nx::narrow<std::int32_t>(rows.size()) + 1) * line)) / 2);
+        nx::Pixels y =
+            tile.y + ((tile.tall - ((nx::narrow<std::int32_t>(rows.size()) + 1) * line)) / kMiddleDivisor);
         std::ignore = paint.write(BuyMenuFont::Caption, "BUY AGAIN", pen, y, kInkFaint);
         for (const std::string& row : rows) {
             y += line;
@@ -726,11 +732,11 @@ void BuyMenuPanel::appendNotice(std::vector<nx::render::ScreenQuad>& quads, nx::
     const nx::Pixels wide = nx::ui::widthOf(atlas, notice->text);
     const nx::Pixels padX = layout.pixels(kNoticePadX);
     const nx::Pixels padY = layout.pixels(kNoticePadY);
-    const nx::Pixels x = (nx::Pixels{nx::narrow<std::int32_t>(size.width)} - wide) / 2;
+    const nx::Pixels x = (nx::Pixels{nx::narrow<std::int32_t>(size.width)} - wide) / kMiddleDivisor;
     const nx::Pixels y = layout.pixels(isMenuOpen ? kNoticeOverMenu : kNoticeOverGame);
-    const nx::Pixels tall = atlas.lineHeight() + (2 * padY);
+    const nx::Pixels tall = atlas.lineHeight() + (kPaddedSides * padY);
     nx::ui::PanelPainter painter{quads, size};
-    painter.fill({.x = x - padX, .y = y - padY, .wide = wide + (2 * padX), .tall = tall},
+    painter.fill({.x = x - padX, .y = y - padY, .wide = wide + (kPaddedSides * padX), .tall = tall},
                  fadedBy(kDangerGlass, opacity));
     painter.fill({.x = x - padX, .y = y - padY, .wide = layout.pixels(kAccentBar), .tall = tall},
                  fadedBy(kDanger, opacity));

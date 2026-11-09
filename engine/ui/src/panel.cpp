@@ -79,7 +79,7 @@ template <class Enum>
 
 } // namespace
 
-Panel::Panel(std::string name, PixelRect bounds) : m_name{std::move(name)}, m_bounds{bounds} {}
+Panel::Panel(std::string name, PixelRect bounds) : m_name{std::move(name)}, boundsRect{bounds} {}
 
 auto Panel::add(std::unique_ptr<Panel> child) -> Panel& {
     expects(child != nullptr, "Panel::add: a panel");
@@ -95,8 +95,8 @@ auto Panel::find(std::string_view name) const noexcept -> Panel* {
 }
 
 void Panel::setBounds(PixelRect bounds) {
-    const PixelSize grown{.wide = bounds.wide - m_bounds.wide, .tall = bounds.tall - m_bounds.tall};
-    m_bounds = bounds;
+    const PixelSize grown{.wide = bounds.wide - boundsRect.wide, .tall = bounds.tall - boundsRect.tall};
+    boundsRect = bounds;
     if (grown == PixelSize{}) {
         return;
     }
@@ -120,16 +120,16 @@ void Panel::followParent(PixelSize grown) {
     const Pixels top = topFollowsBottom ? grown.tall : Pixels{};
     const Pixels right = rightFollowsRight ? grown.wide : Pixels{};
     const Pixels bottom = bottomFollowsBottom ? grown.tall : Pixels{};
-    setBounds({.x = m_bounds.x + left,
-               .y = m_bounds.y + top,
-               .wide = m_bounds.wide + right - left,
-               .tall = m_bounds.tall + bottom - top});
+    setBounds({.x = boundsRect.x + left,
+               .y = boundsRect.y + top,
+               .wide = boundsRect.wide + right - left,
+               .tall = boundsRect.tall + bottom - top});
 }
 
 auto Panel::applySettings(const assets::KeyValuesEntry& settings) -> Result<void, PanelError> {
-    const PixelRect parentBounds = m_parent != nullptr ? m_parent->m_bounds : PixelRect{};
+    const PixelRect parentBounds = m_parent != nullptr ? m_parent->boundsRect : PixelRect{};
     // Read whole before any of it is applied: a setting that cannot be read changes nothing.
-    PixelRect bounds = m_bounds;
+    PixelRect bounds = boundsRect;
     std::array numbers{std::pair{"visible", m_isVisible ? 1 : 0}, std::pair{"enabled", m_isEnabled ? 1 : 0},
                        std::pair{"tabPosition", m_tabPosition}};
     for (auto& [key, value] : numbers) {
@@ -172,7 +172,7 @@ void Panel::paintTree(const PanelPainter& painter) const {
     if (!m_isVisible) {
         return;
     }
-    PanelPainter mine = painter.inside(m_bounds);
+    PanelPainter mine = painter.inside(boundsRect);
     if (mine.isClippedAway()) {
         return;
     }
@@ -184,7 +184,7 @@ void Panel::paintTree(const PanelPainter& painter) const {
 
 void Panel::paint(PanelPainter& painter) const {
     if (m_background) {
-        painter.fill({.wide = m_bounds.wide, .tall = m_bounds.tall}, *m_background);
+        painter.fill({.wide = boundsRect.wide, .tall = boundsRect.tall}, *m_background);
     }
 }
 

@@ -38,7 +38,7 @@ public:
 
     inline void setFace(TextFace face) noexcept { m_face = face; }
     /// The pixels between the panel's edges and its text, on each side.
-    inline void setTextInset(Pixels inset) noexcept { m_inset = inset; }
+    inline void setTextInset(Pixels inset) noexcept { textInset = inset; }
 
     /// The rows the lines make at the panel's width, oldest first: each a line's text or a part of it.
     [[nodiscard]] auto rows() const -> std::vector<RichTextLine>;
@@ -58,7 +58,7 @@ private:
     std::size_t m_capacity;
     std::size_t m_scrolled = 0;
     TextFace m_face{};
-    Pixels m_inset{};
+    Pixels textInset{};
 };
 
 } // namespace nx::ui

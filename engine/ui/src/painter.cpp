@@ -38,15 +38,16 @@ namespace {
 PanelPainter::PanelPainter(std::vector<render::ScreenQuad>& quads, rhi::Extent2d size) noexcept
     : m_quads{&quads}, m_clip{.x = 0, .y = 0, .size = size} {}
 
-PanelPainter::PanelPainter(std::vector<render::ScreenQuad>& quads, PixelPoint origin, rhi::Rect clip) noexcept
-    : m_quads{&quads}, m_origin{origin}, m_clip{clip} {}
+PanelPainter::PanelPainter(std::vector<render::ScreenQuad>& quads, PixelPoint topLeft,
+                           rhi::Rect clip) noexcept
+    : m_quads{&quads}, origin{topLeft}, m_clip{clip} {}
 
 void PanelPainter::fill(const PixelRect& rect, render::ScreenColor color) {
     if (isClippedAway() || rect.wide <= Pixels{} || rect.tall <= Pixels{}) {
         return;
     }
-    m_quads->push_back({.target = {.x = static_cast<float>((m_origin.x + rect.x).value()),
-                                   .y = static_cast<float>((m_origin.y + rect.y).value()),
+    m_quads->push_back({.target = {.x = static_cast<float>((origin.x + rect.x).value()),
+                                   .y = static_cast<float>((origin.y + rect.y).value()),
                                    .width = static_cast<float>(rect.wide.value()),
                                    .height = static_cast<float>(rect.tall.value())},
                         .color = color,
@@ -63,20 +64,20 @@ auto PanelPainter::text(const TextFace& face, std::string_view text, PixelPoint 
     }
     const std::size_t first = m_quads->size();
     const float end =
-        appendText(*m_quads, *face.atlas, *face.image, text, static_cast<float>((m_origin.x + pen.x).value()),
-                   static_cast<float>((m_origin.y + pen.y).value()), color);
+        appendText(*m_quads, *face.atlas, *face.image, text, static_cast<float>((origin.x + pen.x).value()),
+                   static_cast<float>((origin.y + pen.y).value()), color);
     for (render::ScreenQuad& quad : std::span{*m_quads}.subspan(first)) {
         quad.clip = m_clip;
     }
-    return Pixels{narrow<std::int32_t>(std::lround(end))} - m_origin.x;
+    return Pixels{narrow<std::int32_t>(std::lround(end))} - origin.x;
 }
 
 auto PanelPainter::inside(const PixelRect& rect) const noexcept -> PanelPainter {
-    const std::int64_t left = std::int64_t{m_origin.x.value()} + rect.x.value();
-    const std::int64_t top = std::int64_t{m_origin.y.value()} + rect.y.value();
+    const std::int64_t left = std::int64_t{origin.x.value()} + rect.x.value();
+    const std::int64_t top = std::int64_t{origin.y.value()} + rect.y.value();
     return PanelPainter{*m_quads,
                         {.x = Pixels{narrow<std::int32_t>(left)}, .y = Pixels{narrow<std::int32_t>(top)}},
-                        clipped(m_clip, m_origin, rect)};
+                        clipped(m_clip, origin, rect)};
 }
 
 } // namespace nx::ui

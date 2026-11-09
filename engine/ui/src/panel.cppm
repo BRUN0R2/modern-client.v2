@@ -56,7 +56,7 @@ public:
 
     [[nodiscard]] inline auto name() const noexcept -> std::string_view { return m_name; }
     /// Its place and size, from its parent's top left.
-    [[nodiscard]] inline auto bounds() const noexcept -> const PixelRect& { return m_bounds; }
+    [[nodiscard]] inline auto bounds() const noexcept -> const PixelRect& { return boundsRect; }
     [[nodiscard]] inline auto isVisible() const noexcept -> bool { return m_isVisible; }
     [[nodiscard]] inline auto isEnabled() const noexcept -> bool { return m_isEnabled; }
     [[nodiscard]] inline auto pinCorner() const noexcept -> PinCorner { return m_pinCorner; }
@@ -110,7 +110,7 @@ private:
     void followParent(PixelSize grown);
 
     std::string m_name;
-    PixelRect m_bounds;
+    PixelRect boundsRect;
     bool m_isVisible = true;
     bool m_isEnabled = true;
     PinCorner m_pinCorner = PinCorner::TopLeft;

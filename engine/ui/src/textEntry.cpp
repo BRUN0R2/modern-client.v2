@@ -95,7 +95,7 @@ auto TextEntry::cursorPen() const -> Pixels {
 
 auto TextEntry::scroll() const -> Pixels {
     // The cursor shows when its pixel is within the entry.
-    const Pixels room = bounds().wide - m_inset - kCursorWidth;
+    const Pixels room = bounds().wide - textInset - kCursorWidth;
     return std::max(Pixels{}, cursorPen() - room);
 }
 
@@ -106,7 +106,7 @@ void TextEntry::paint(PanelPainter& painter) const {
     }
     const Pixels height = m_face.atlas->lineHeight();
     const Pixels top = (bounds().tall - height) / kMiddleDivisor;
-    const Pixels start = m_inset - scroll();
+    const Pixels start = textInset - scroll();
     std::ignore =
         painter.text(m_face, text(), {.x = start, .y = top}, m_textColor); // the cursor's pen is known
     painter.fill({.x = start + cursorPen(), .y = top, .wide = kCursorWidth, .tall = height}, m_cursorColor);
