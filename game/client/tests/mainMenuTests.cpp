@@ -85,7 +85,7 @@ TEST(MainMenuTest, AMapPlayedListsItsItemsToo) {
 
 TEST(MainMenuTest, OpensOnItsFirstItem) {
     const cs::MainMenuLook look = lookOf();
-    cs::MainMenu menu{look, mapsOf(kManyMaps)};
+    cs::MainMenu menu{look, mapsOf(kManyMaps), {}};
     EXPECT_FALSE(menu.isOpen());
     menu.open(MenuGame::Played);
     EXPECT_TRUE(menu.isOpen());
@@ -98,7 +98,7 @@ TEST(MainMenuTest, OpensOnItsFirstItem) {
 
 TEST(MainMenuTest, TheArrowsGoAroundTheItems) {
     const cs::MainMenuLook look = lookOf();
-    cs::MainMenu menu{look, mapsOf(kManyMaps)};
+    cs::MainMenu menu{look, mapsOf(kManyMaps), {}};
     menu.open(MenuGame::Played);
     const auto after = [&](Key key) {
         EXPECT_EQ(asked(menu, pressed(key), kNowhere, kScreen, MenuGame::Played), std::nullopt);
@@ -115,7 +115,7 @@ TEST(MainMenuTest, TheArrowsGoAroundTheItems) {
 
 TEST(MainMenuTest, EnterChoosesWhatIsSelected) {
     const cs::MainMenuLook look = lookOf();
-    cs::MainMenu menu{look, mapsOf(kManyMaps)};
+    cs::MainMenu menu{look, mapsOf(kManyMaps), {}};
     menu.open(MenuGame::Played);
     std::ignore = asked(menu, pressed(Key::Down), kNowhere, kScreen, MenuGame::Played);
     EXPECT_EQ(asked(menu, pressed(Key::Enter, true), kNowhere, kScreen, MenuGame::Played), std::nullopt)
@@ -129,7 +129,7 @@ TEST(MainMenuTest, EnterChoosesWhatIsSelected) {
 
 TEST(MainMenuTest, TheMapLeftItsItemsAreNoLongerChosen) {
     const cs::MainMenuLook look = lookOf();
-    cs::MainMenu menu{look, mapsOf(kManyMaps)};
+    cs::MainMenu menu{look, mapsOf(kManyMaps), {}};
     menu.open(MenuGame::Played);
     std::ignore = asked(menu, pressed(Key::Down), kNowhere, kScreen, MenuGame::Played);
     ASSERT_EQ(menu.selected(), MainMenuAction::Disconnect);
@@ -141,7 +141,7 @@ TEST(MainMenuTest, TheMapLeftItsItemsAreNoLongerChosen) {
 
 TEST(MainMenuTest, EscapeGoesBackToTheMapPlayed) {
     const cs::MainMenuLook look = lookOf();
-    cs::MainMenu menu{look, mapsOf(kManyMaps)};
+    cs::MainMenu menu{look, mapsOf(kManyMaps), {}};
     menu.open(MenuGame::Played);
     EXPECT_EQ(asked(menu, pressed(Key::Escape), kNowhere, kScreen, MenuGame::Played),
               MainMenuAction::ResumeGame);
@@ -156,7 +156,7 @@ TEST(MainMenuTest, EscapeGoesBackToTheMapPlayed) {
 
 TEST(MainMenuTest, TheMouseSelectsAndChooses) {
     const cs::MainMenuLook look = lookOf();
-    cs::MainMenu menu{look, mapsOf(kManyMaps)};
+    cs::MainMenu menu{look, mapsOf(kManyMaps), {}};
     menu.open(MenuGame::Played);
     constexpr std::size_t kItems = 4;
     EXPECT_EQ(asked(menu, MouseMoved{}, middleOf(3, kItems), kScreen, MenuGame::Played), std::nullopt);
@@ -177,7 +177,7 @@ TEST(MainMenuTest, TheMouseSelectsAndChooses) {
 
 /// The menu of `look` open without a map on the page of a new game, on `maps` maps.
 [[nodiscard]] auto onNewGame(const cs::MainMenuLook& look, std::size_t maps) -> cs::MainMenu {
-    cs::MainMenu menu{look, mapsOf(maps)};
+    cs::MainMenu menu{look, mapsOf(maps), {}};
     menu.open(MenuGame::None);
     EXPECT_EQ(menu.handle(pressed(Key::Enter), kNowhere, kScreen, MenuGame::None), std::nullopt)
         << "the item opens its page, and asks for nothing yet";
@@ -192,7 +192,7 @@ TEST(MainMenuTest, TheMouseSelectsAndChooses) {
 
 TEST(MainMenuNewGameTest, ItsItemOpensThePageOnTheFirstMaps) {
     const cs::MainMenuLook look = lookOf();
-    cs::MainMenu menu{look, mapsOf(kManyMaps)};
+    cs::MainMenu menu{look, mapsOf(kManyMaps), {}};
     menu.open(MenuGame::None);
     EXPECT_EQ(menu.frameOf(MenuGame::None, kScreen).newGame, std::nullopt);
     menu = onNewGame(look, kManyMaps);

@@ -19,10 +19,10 @@ namespace app {
 namespace {
 
 /// The console's command each item runs, a new game's followed by its map; none for the one that goes back
-/// to the map played.
+/// to the map played, and for the options, which the menu shows itself and never asks for.
 constexpr nx::EnumArray<cs::MainMenuAction, std::optional<std::string_view>> kCommands{
     nx::EnumArray<cs::MainMenuAction, std::optional<std::string_view>>::Storage{std::nullopt, "disconnect",
-                                                                                "map", "quit"}};
+                                                                                "map", std::nullopt, "quit"}};
 /// What quotes an argument of a command, which no argument holds.
 constexpr char kQuote = '"';
 
@@ -35,8 +35,10 @@ constexpr char kQuote = '"';
 
 } // namespace
 
-ClientMainMenu::ClientMainMenu(const cs::GameContent& content, const cs::MainMenuTexts& texts)
-    : files{&content.vfs}, menu{content.mainMenu, playableMapsOf(content)}, panel{content.mainMenu, texts} {}
+ClientMainMenu::ClientMainMenu(const cs::GameContent& content, const cs::Texts& texts,
+                               std::vector<cs::OptionRow> settings)
+    : files{&content.vfs}, menu{content.mainMenu, playableMapsOf(content), std::move(settings)},
+      panel{content.mainMenu, texts} {}
 
 auto ClientMainMenu::isOpen() const noexcept -> bool {
     return menu.isOpen();

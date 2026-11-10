@@ -25,6 +25,7 @@ nxAddTest(csClientTests
         buyCommandsTests.cpp
         buyMenuTests.cpp
         mainMenuTests.cpp
+        optionsPageTests.cpp
         menuBackgroundTests.cpp
         hearingTests.cpp
         audioTests.cpp

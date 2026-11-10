@@ -59,6 +59,7 @@ export import :buyMenuLayout;
 export import :buyMenu;
 export import :buyMenuPanel;
 export import :mainMenuLayout;
+export import :optionsPage;
 export import :mainMenu;
 export import :mainMenuPanel;
 export import :navigationDrawing;

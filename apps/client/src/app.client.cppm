@@ -13,6 +13,7 @@ export import :client;
 export import :settings;
 export import :buyMenu;
 export import :mainMenu;
+export import :options;
 export import :bots;
 export import :navigationView;
 export import :sounds;

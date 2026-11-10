@@ -586,7 +586,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] The loading screen: `map` and `nav_generate` ask for the map, a frame tells that it is loading over the menu's background, the next loads it, and the commands after it on the line run once it is loaded (`nx::console::Console::wait`)
 - [ ] A loading screen that moves (a bar that follows the loading), with maps loaded off the main thread; a failed load told on the menu, not on the console alone
 - [ ] The main menu's music; what a new game sets besides its map (the original's `CreateMultiplayerGame*Page.res`: bots, rules)
-- [ ] Options and server browser
+- [x] The options' page ([12 §4](12-ui-hud-and-console.md#4-game-menus-and-screens)): tabs (mouse, audio, video, game), sliders and switches set as they are changed (`cs.client:optionsPage`, `app.client:options`): `sensitivity`, the mouse reversed, `volume`, `s_play_unfocused`, `fps_max`, `cl_showfps`, `hud_draw`, `_cl_autowepswitch`, `cl_righthand`
+- [ ] The options' settings read as the game or a map starts (`gl_vsync`, `gamma`, `brightness`, `r_fidelity`, `cl_language`), with a choice among values and their taking effect there; the player's name, with a text entry; the keys, with a key waited for; voice and the crosshair
+- [ ] Server browser
 - [ ] Complete console (history, autocomplete, suggestions): the window over `nx.console`; its history, completions and suggestions are in `nx.console` ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module))
 - [x] Binds with the original key names (`nx.settings`, above)
 - [x] Localization with typed keys ([12 §7](12-ui-hud-and-console.md#7-localization), [ADR-0035](adr/0035-texts-as-typed-data.md)): a text is a field of `cs::Texts`, a language a file of `data/cstrike/locale/` that writes every one (`en`, `pt-BR`), chosen by `cl_language` as the client starts; the main menu writes by it

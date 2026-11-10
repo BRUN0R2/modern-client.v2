@@ -15,6 +15,9 @@ import :menuDesign;
 
 export namespace cs {
 
+/// How many tabs a page of the menu has across it: the options'.
+inline constexpr std::size_t kPageTabs = 4;
+
 /// The main menu's parts on a screen.
 class MainMenuLayout {
 public:
@@ -53,6 +56,13 @@ public:
     /// rows shown, from `first`, of `count`; none when the list shows them all.
     [[nodiscard]] auto listThumb(std::size_t first, std::size_t count) const noexcept
         -> std::optional<nx::ui::PixelRect>;
+    /// The tab at `index` of `kPageTabs`, across the page between its name and its list.
+    [[nodiscard]] auto optionTab(std::size_t index) const noexcept -> nx::ui::PixelRect;
+    /// What changes the setting on the row at `row` of the list: the right of the row.
+    [[nodiscard]] auto optionControl(std::size_t row) const noexcept -> nx::ui::PixelRect;
+    /// The track of a slider on the row at `row`: the left of what changes its setting, its value written
+    /// after it.
+    [[nodiscard]] auto optionTrack(std::size_t row) const noexcept -> nx::ui::PixelRect;
     /// What does what the page is for, at its foot on the right.
     [[nodiscard]] auto confirmButton() const noexcept -> nx::ui::PixelRect;
     /// What goes back to the items, before it.

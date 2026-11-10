@@ -31,9 +31,9 @@ enum class MainMenuFont : std::uint8_t {
 /// with the screen's, and what it last laid out.
 class MainMenuPanel {
 public:
-    /// What draws the menu of `listed`, writing `written`, its texts in the player's language; both must
-    /// outlive it.
-    MainMenuPanel(const MainMenuLook& listed, const MainMenuTexts& written) noexcept;
+    /// What draws the menu of `listed`, writing those of `written`, the game's texts in the player's
+    /// language; both must outlive it.
+    MainMenuPanel(const MainMenuLook& listed, const Texts& written) noexcept;
 
     /// Whether load made its fonts for a screen `screenHeight` pixels tall.
     [[nodiscard]] inline auto isLoadedFor(std::uint32_t screenHeight) const noexcept -> bool {
@@ -77,7 +77,7 @@ private:
     };
 
     const MainMenuLook* look;
-    const MainMenuTexts* texts;
+    const Texts* texts;
     std::uint32_t facesHeight = 0; ///< The screen's height the fonts are made for; 0 before they are.
     nx::EnumArray<MainMenuFont, std::optional<MenuFace>> faces;
     bool isBackgroundRead = false; ///< Whether load looked for the picture behind the menu.

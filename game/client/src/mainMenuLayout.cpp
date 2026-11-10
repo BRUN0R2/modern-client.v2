@@ -32,6 +32,14 @@ constexpr std::int32_t kThumbWideUnits = 4;
 constexpr std::int32_t kButtonWideUnits = 200;
 constexpr std::int32_t kButtonTallUnits = 56;
 constexpr std::int32_t kButtonGapUnits = 16;
+constexpr std::int32_t kTabsTopUnits = 64; ///< From the page's top to its tabs'.
+constexpr std::int32_t kTabTallUnits = 32;
+constexpr std::int32_t kTabGapUnits = 4;
+constexpr std::int32_t kControlWideUnits = 300;
+constexpr std::int32_t kTrackTallUnits = 6;
+constexpr std::int32_t kValueWideUnits = 76; ///< What a slider's value is written in, after its track.
+/// What the room left is divided by to put a thing halfway into it.
+constexpr std::int32_t kMiddleDivisor = 2;
 /// The sides an inset is left on: left and right.
 constexpr std::int32_t kBothSides = 2;
 
@@ -101,6 +109,34 @@ auto MainMenuLayout::listThumb(std::size_t first, std::size_t count) const noexc
                              .y = top.y + (track * nx::narrow<std::int32_t>(first) / all),
                              .wide = wide,
                              .tall = track * nx::narrow<std::int32_t>(rows) / all};
+}
+
+auto MainMenuLayout::optionTab(std::size_t index) const noexcept -> nx::ui::PixelRect {
+    const nx::Pixels inset = pixels(kPageInsetUnits);
+    const nx::Pixels gap = pixels(kTabGapUnits);
+    const auto tabs = nx::narrow<std::int32_t>(kPageTabs);
+    const nx::Pixels tabWide = (pageRect.wide - (kBothSides * inset) - ((tabs - 1) * gap)) / tabs;
+    return {.x = pageRect.x + inset + (nx::narrow<std::int32_t>(index) * (tabWide + gap)),
+            .y = pageRect.y + pixels(kTabsTopUnits),
+            .wide = tabWide,
+            .tall = pixels(kTabTallUnits)};
+}
+
+auto MainMenuLayout::optionControl(std::size_t row) const noexcept -> nx::ui::PixelRect {
+    nx::ui::PixelRect control = listRow(row);
+    const nx::Pixels controlWide = std::min(pixels(kControlWideUnits), control.wide / kMiddleDivisor);
+    control.x += control.wide - controlWide - pixels(kPageInsetUnits) / kMiddleDivisor;
+    control.wide = controlWide;
+    return control;
+}
+
+auto MainMenuLayout::optionTrack(std::size_t row) const noexcept -> nx::ui::PixelRect {
+    const nx::ui::PixelRect control = optionControl(row);
+    const nx::Pixels trackTall = pixels(kTrackTallUnits);
+    return {.x = control.x,
+            .y = control.y + ((control.tall - trackTall) / kMiddleDivisor),
+            .wide = control.wide - pixels(kValueWideUnits),
+            .tall = trackTall};
 }
 
 auto MainMenuLayout::confirmButton() const noexcept -> nx::ui::PixelRect {

@@ -22,9 +22,10 @@ namespace app {
 /// by the console's commands as the original's menu does.
 class ClientMainMenu {
 public:
-    /// The menu of what the main menu of `content` lists, a new game played on one of its maps, written in
-    /// `texts`; both must outlive it.
-    ClientMainMenu(const cs::GameContent& content, const cs::MainMenuTexts& texts);
+    /// The menu of what the main menu of `content` lists, a new game played on one of its maps, its options
+    /// those of `settings`, written in `texts`; `content` and `texts` must outlive it.
+    ClientMainMenu(const cs::GameContent& content, const cs::Texts& texts,
+                   std::vector<cs::OptionRow> settings);
 
     [[nodiscard]] auto isOpen() const noexcept -> bool;
     /// Opens over the map played, or over none (`game`).

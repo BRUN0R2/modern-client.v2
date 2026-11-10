@@ -26,19 +26,20 @@ auto mainMenuItemsOf(const MainMenuLook& look, MenuGame game) -> std::vector<Mai
            std::ranges::to<std::vector>();
 }
 
-MainMenu::MainMenu(const MainMenuLook& listed, std::vector<std::string> playable) noexcept
-    : look{&listed}, maps{std::move(playable)} {}
+MainMenu::MainMenu(const MainMenuLook& listed, std::vector<std::string> playable,
+                   std::vector<OptionRow> settings) noexcept
+    : look{&listed}, maps{std::move(playable)}, options{std::move(settings)} {}
 
 void MainMenu::open(MenuGame game) {
     const std::vector<MainMenuAction> items = mainMenuItemsOf(*look, game);
     isShown = true;
-    isChoosingMap = false;
+    page = Page::Items;
     selection = items.empty() ? std::nullopt : std::optional{items.front()};
 }
 
 void MainMenu::close() noexcept {
     isShown = false;
-    isChoosingMap = false;
+    page = Page::Items;
 }
 
 auto MainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
@@ -48,34 +49,68 @@ auto MainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mous
     if (std::holds_alternative<nx::platform::MouseMoved>(event)) {
         // The item whose page is open stays the one selected.
         if (const std::optional<std::size_t> item = layout.itemAt(cursor.x, cursor.y);
-            item && !isChoosingMap) {
+            item && page == Page::Items) {
             selection = items[*item];
+        }
+        if (page == Page::Options) {
+            leaveOptionsIf(options.handle(event, cursor, layout));
         }
         return std::nullopt;
     }
     if (const auto* const wheel = std::get_if<nx::platform::MouseWheelMoved>(&event)) {
-        if (isChoosingMap) {
+        if (page == Page::NewGame) {
             // Away from the user scrolls up, as a list does.
             scrollMaps(-static_cast<std::ptrdiff_t>(std::lround(wheel->dy * kRowsANotch)), layout.listRows());
         }
         return std::nullopt;
     }
     if (const auto* const button = std::get_if<nx::platform::MouseButtonChanged>(&event)) {
-        return button->isDown && button->button == nx::platform::MouseButton::Left
-                   ? click(cursor, layout, items)
-                   : std::nullopt;
+        const bool isPress = button->isDown && button->button == nx::platform::MouseButton::Left;
+        if (isPress && layout.itemAt(cursor.x, cursor.y)) {
+            return click(cursor, layout, items);
+        }
+        if (page == Page::Options) {
+            leaveOptionsIf(options.handle(event, cursor, layout)); // what comes up lets go of its slider
+            return std::nullopt;
+        }
+        return isPress ? click(cursor, layout, items) : std::nullopt;
     }
     const auto* const key = std::get_if<nx::platform::KeyChanged>(&event);
     if (key == nullptr || !key->isDown) {
         return std::nullopt;
     }
-    return isChoosingMap ? pressOnNewGame(*key, layout.listRows()) : pressOnItems(*key, items);
+    switch (page) {
+    case Page::NewGame:
+        return pressOnNewGame(*key, layout.listRows());
+    case Page::Options:
+        leaveOptionsIf(options.handle(event, cursor, layout));
+        return std::nullopt;
+    case Page::Items:
+        break;
+    }
+    return pressOnItems(*key, items);
+}
+
+void MainMenu::leaveOptionsIf(OptionsOutcome outcome) noexcept {
+    if (outcome == OptionsOutcome::GoesBack) {
+        page = Page::Items;
+    }
 }
 
 auto MainMenu::choose(MainMenuAction action) -> std::optional<MainMenuRequest> {
     selection = action;
-    isChoosingMap = action == MainMenuAction::NewGame;
-    return isChoosingMap ? std::nullopt : std::optional{MainMenuRequest{.action = action}};
+    switch (action) {
+    case MainMenuAction::NewGame:
+        page = Page::NewGame;
+        return std::nullopt;
+    case MainMenuAction::Options:
+        page = Page::Options;
+        options.open();
+        return std::nullopt;
+    default:
+        page = Page::Items;
+        return MainMenuRequest{.action = action};
+    }
 }
 
 auto MainMenu::click(nx::platform::MousePosition cursor, const MainMenuLayout& layout,
@@ -83,7 +118,7 @@ auto MainMenu::click(nx::platform::MousePosition cursor, const MainMenuLayout& l
     if (const std::optional<std::size_t> item = layout.itemAt(cursor.x, cursor.y)) {
         return choose(items[*item]);
     }
-    if (!isChoosingMap) {
+    if (page != Page::NewGame) {
         return std::nullopt;
     }
     if (const std::optional<std::size_t> row = layout.listRowAt(cursor.x, cursor.y)) {
@@ -96,7 +131,7 @@ auto MainMenu::click(nx::platform::MousePosition cursor, const MainMenuLayout& l
         return playSelectedMap();
     }
     if (layout.backButton().holds(cursor.x, cursor.y)) {
-        isChoosingMap = false;
+        page = Page::Items;
     }
     return std::nullopt;
 }
@@ -151,7 +186,7 @@ auto MainMenu::pressOnNewGame(const nx::platform::KeyChanged& key, std::size_t r
         return key.isRepeat ? std::nullopt : playSelectedMap();
     case Key::Escape:
         if (!key.isRepeat) {
-            isChoosingMap = false;
+            page = Page::Items;
         }
         return std::nullopt;
     default:
@@ -206,15 +241,18 @@ auto MainMenu::frameOf(MenuGame game, nx::rhi::Extent2d size) const -> MainMenuF
     if (selection && std::ranges::contains(frame.items, *selection)) {
         frame.selected = selection;
     }
-    if (isChoosingMap) {
+    if (page == Page::NewGame) {
         const std::size_t rows = MainMenuLayout{size, frame.items.size()}.listRows();
         const std::size_t first = firstMapShownOf(rows);
-        NewGamePage page{.first = first, .count = maps.size()};
-        page.rows.assign_range(maps | std::views::drop(first) | std::views::take(rows));
-        if (selectedMap >= first && selectedMap < first + page.rows.size()) {
-            page.selectedRow = selectedMap - first;
+        NewGamePage shownMaps{.first = first, .count = maps.size()};
+        shownMaps.rows.assign_range(maps | std::views::drop(first) | std::views::take(rows));
+        if (selectedMap >= first && selectedMap < first + shownMaps.rows.size()) {
+            shownMaps.selectedRow = selectedMap - first;
         }
-        frame.newGame = std::move(page);
+        frame.newGame = std::move(shownMaps);
+    }
+    if (page == Page::Options) {
+        frame.options = options.frame();
     }
     return frame;
 }

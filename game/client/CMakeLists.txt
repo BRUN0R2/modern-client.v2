@@ -48,6 +48,7 @@ nxAddModuleLibrary(csClient
         src/buyMenu.cppm
         src/buyMenuPanel.cppm
         src/mainMenuLayout.cppm
+        src/optionsPage.cppm
         src/mainMenu.cppm
         src/mainMenuPanel.cppm
         src/navigationDrawing.cppm
@@ -92,6 +93,7 @@ nxAddModuleLibrary(csClient
         src/buyMenu.cpp
         src/buyMenuPanel.cpp
         src/mainMenuLayout.cpp
+        src/optionsPage.cpp
         src/mainMenu.cpp
         src/mainMenuPanel.cpp
         src/navigationDrawing.cpp
