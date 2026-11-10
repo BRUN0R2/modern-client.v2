@@ -166,6 +166,31 @@ void KeyBindings::bind(KeyId key, std::string command) {
     m_commands[indexOf(key)] = std::move(command);
 }
 
+auto KeyBindings::keysOf(std::string_view command) const -> std::vector<KeyId> {
+    std::vector<KeyId> keys;
+    for (std::uint32_t key = 0; key < kKeyCount; ++key) {
+        if (!command.empty() && m_commands.at(key) == command) {
+            keys.push_back(KeyId{key});
+        }
+    }
+    return keys;
+}
+
+void KeyBindings::give(KeyId key, std::string command) {
+    if (commandOf(key) != command && keysOf(command).size() >= kMostKeysOfAnAction) {
+        release(command);
+    }
+    bind(key, std::move(command));
+}
+
+void KeyBindings::release(std::string_view command) noexcept {
+    for (std::string& bound : m_commands) {
+        if (!command.empty() && bound == command) {
+            bound.clear();
+        }
+    }
+}
+
 void KeyBindings::unbindAll() noexcept {
     for (std::string& command : m_commands) {
         command.clear();

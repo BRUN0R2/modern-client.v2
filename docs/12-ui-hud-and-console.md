@@ -445,19 +445,31 @@ three rows a notch, and a thumb down its right shows how far; the mouse selects 
 Escape, or `BACK`, goes back to the items, and another item chosen leaves the page.
 
 **The options** (`cs.client:optionsPage`) list the player's settings by what they set, each on a tab: the
-mouse, the audio, the video and the game. A row names a setting and has what changes it: a slider, its value
-written after its track, or a switch, which says whether it is on. Today: `sensitivity` and the mouse reversed
+mouse, the keys, the audio, the video and the game. A row names a setting and has what changes it: a slider, its
+value written after its track; a switch, which says whether it is on; or the keys of an action. Today: `sensitivity` and the mouse reversed
 (`m_pitch` below zero, as the original's option sets it); `volume` and the sound while the window is not focused
 (`s_play_unfocused`); the most frames a second (`fps_max`, to the 100 it gives without `fps_override`),
 `cl_showfps` and `hud_draw`; `_cl_autowepswitch` and `cl_righthand`. A setting is set as it is changed, takes
 effect at once, and is kept by `config.cfg` as every archived cvar is: there is nothing to apply or to cancel,
 where the original has `OK`, `Cancel` and `Apply`. Only what takes effect at once is listed: the settings read
-as the game or a map starts (`gl_vsync`, `gamma`, `brightness`, `r_fidelity`, `cl_language`), the player's name
-and the keys come with what lets them be changed there.
+as the game or a map starts (`gl_vsync`, `gamma`, `brightness`, `r_fidelity`, `cl_language`) and the player's
+name come with what lets them be changed there.
+
+**The keys** list the actions of the commands the client has, each with the keys that run it, as `bind` names
+them: moving, jumping, ducking, walking, using, firing, the weapon's special function, reloading, the last
+weapon, the buy menu and its purchases, the scores, the console and `noclip`. Enter, or the left button, has
+the action selected wait for its key, and the next key, mouse button or notch of the wheel is given to it
+(`nx::settings::pressedKeyOf`), read as `in_keymap` says; Escape leaves it as it was, so Escape itself is
+given to none, as in the original. An action keeps two keys, as the original's options show two: a third takes
+the place of both, and a key given to an action no longer runs what it ran (`KeyBindings::give`). Delete, or
+Backspace, takes the keys of the action selected. While an action waits, every key is the page's: the one
+bound to `toggleconsole` does not open the console, so that it can be given another. The list is longer than
+the page: it follows what is selected, the wheel scrolls it, and a thumb down its right shows how far. The
+binds are those `bind` sets, kept by `config.cfg`.
 
 Left and Right change the tab while the tabs are selected, as they are when the page opens; Down selects the
 first row and Up, from it, the tabs again. On a row, Left and Right move a slider by a step and switch a switch
-over, and Enter switches a switch over too. The mouse selects the row it is over; its left button shows the tab
+over, and Enter switches a switch over too, or has an action wait for its key. The mouse selects the row it is over; its left button shows the tab
 it is pressed on, switches a switch over, and sets a slider to where it is pressed on its track, which follows
 it until the button comes up. Escape, or `BACK`, goes back to the items. What a row reads and sets is given to
 the menu by what runs it (`app.client:options`, the client's cvars), so that the page knows no cvar.

@@ -6,6 +6,7 @@ module app.client;
 import std;
 import nx.core;
 import nx.console;
+import nx.platform;
 import nx.settings;
 import cs.shared;
 import cs.client;
@@ -65,11 +66,83 @@ constexpr float kMaxFpsStep = 10.0F;
                                             }}};
 }
 
+/// An action the keys run: the text that names it, and its command.
+struct KeyAction {
+    std::string OptionsTexts::* name = nullptr;
+    std::string_view command{};
+};
+
+/// The actions the options list, in their order: those of the commands the client has.
+constexpr auto kKeyActions = std::to_array<KeyAction>({
+    {.name = &OptionsTexts::moveForward, .command = "+forward"},
+    {.name = &OptionsTexts::moveBack, .command = "+back"},
+    {.name = &OptionsTexts::moveLeft, .command = "+moveleft"},
+    {.name = &OptionsTexts::moveRight, .command = "+moveright"},
+    {.name = &OptionsTexts::jump, .command = "+jump"},
+    {.name = &OptionsTexts::duck, .command = "+duck"},
+    {.name = &OptionsTexts::walk, .command = "+speed"},
+    {.name = &OptionsTexts::use, .command = "+use"},
+    {.name = &OptionsTexts::fire, .command = "+attack"},
+    {.name = &OptionsTexts::secondaryFire, .command = "+attack2"},
+    {.name = &OptionsTexts::reload, .command = "+reload"},
+    {.name = &OptionsTexts::lastWeapon, .command = "lastinv"},
+    {.name = &OptionsTexts::buyMenu, .command = "buy"},
+    {.name = &OptionsTexts::buyEquipment, .command = "buyequip"},
+    {.name = &OptionsTexts::buyPrimaryAmmo, .command = "buyammo1"},
+    {.name = &OptionsTexts::buyPistolAmmo, .command = "buyammo2"},
+    {.name = &OptionsTexts::rebuy, .command = "rebuy"},
+    {.name = &OptionsTexts::showScores, .command = "+showscores"},
+    {.name = &OptionsTexts::toggleConsole, .command = "toggleconsole"},
+    {.name = &OptionsTexts::noclip, .command = "noclip"},
+});
+
+/// What stands between the names of an action's keys.
+constexpr std::string_view kKeySeparator = "  ";
+
+/// The names of the keys of `bindings` that run `command`, as the options write them: as `bind` names
+/// them, in capitals.
+[[nodiscard]] auto keyNamesOf(const nx::settings::KeyBindings& bindings, std::string_view command)
+    -> std::string {
+    std::string names;
+    for (const nx::console::KeyId key : bindings.keysOf(command)) {
+        const std::string_view name = nx::settings::nameOf(key).value_or("");
+        names += names.empty() ? "" : kKeySeparator;
+        names.append_range(name | std::views::transform(nx::toUpperAscii));
+    }
+    return names;
+}
+
+/// The keys of `action` in `bindings`, a key pressed read as `keymap` says (in_keymap).
+[[nodiscard]] auto keysOf(const KeyAction& action, nx::settings::KeyBindings& bindings,
+                          Cvar<nx::settings::KeyMapping> keymap) -> cs::OptionRow {
+    const std::string_view command = action.command;
+    return {.category = OptionCategory::Keyboard,
+            .name = action.name,
+            .control =
+                cs::OptionKeys{.keys = [&bindings, command] { return keyNamesOf(bindings, command); },
+                               .bind =
+                                   [&bindings, command, keymap](const nx::platform::WindowEvent& event) {
+                                       const std::optional<nx::console::KeyId> key =
+                                           nx::settings::pressedKeyOf(event, keymap.value());
+                                       // A key no bind can name is none the player can give.
+                                       if (!key || !nx::settings::nameOf(*key)) {
+                                           return false;
+                                       }
+                                       bindings.give(*key, std::string{command});
+                                       return true;
+                                   },
+                               .clear = [&bindings, command] { bindings.release(command); }}};
+}
+
 } // namespace
 
-auto clientOptionsOf(const ClientSettings& settings) -> std::vector<cs::OptionRow> {
+auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& bindings)
+    -> std::vector<cs::OptionRow> {
     const nx::settings::ClientCvars& client = settings.client;
     std::vector<cs::OptionRow> rows;
+    for (const KeyAction& action : kKeyActions) {
+        rows.push_back(keysOf(action, bindings, client.keyboard.keymap));
+    }
     rows.push_back(sliderOf(OptionCategory::Mouse, &OptionsTexts::sensitivity, client.mouse.sensitivity,
                             kLeastSensitivity, kMostSensitivity, kSensitivityStep, OptionValueStyle::Tenths));
     rows.push_back(reverseMouseOf(client.mouse.pitch));

@@ -75,6 +75,11 @@ public:
     }
     /// Whether the page of a new game is open.
     [[nodiscard]] inline auto showsNewGame() const noexcept -> bool { return page == Page::NewGame; }
+    /// Whether every key and button is the menu's, the one that opens the console among them: while an
+    /// action of the options waits for its key.
+    [[nodiscard]] inline auto takesEveryKey() const noexcept -> bool {
+        return page == Page::Options && options.isWaitingForKey();
+    }
     /// Whether the page of the options is open.
     [[nodiscard]] inline auto showsOptions() const noexcept -> bool { return page == Page::Options; }
 

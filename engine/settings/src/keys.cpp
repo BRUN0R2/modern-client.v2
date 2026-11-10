@@ -296,6 +296,25 @@ auto keyOf(const platform::KeyChanged& event, KeyMapping mapping) noexcept -> st
     return nameOf(key) ? std::optional{key} : std::nullopt;
 }
 
+auto pressedKeyOf(const platform::WindowEvent& event, KeyMapping mapping) noexcept
+    -> std::optional<console::KeyId> {
+    if (const auto* const key = std::get_if<platform::KeyChanged>(&event)) {
+        return key->isDown && !key->isRepeat ? keyOf(*key, mapping) : std::nullopt;
+    }
+    if (const auto* const button = std::get_if<platform::MouseButtonChanged>(&event)) {
+        return button->isDown ? keyOf(button->button) : std::nullopt;
+    }
+    if (const auto* const wheel = std::get_if<platform::MouseWheelMoved>(&event); wheel != nullptr) {
+        if (wheel->dy > 0.0F) {
+            return kWheelUp;
+        }
+        if (wheel->dy < 0.0F) {
+            return kWheelDown;
+        }
+    }
+    return std::nullopt;
+}
+
 auto keyOf(platform::MouseButton button) noexcept -> std::optional<console::KeyId> {
     using platform::MouseButton;
     switch (button) {

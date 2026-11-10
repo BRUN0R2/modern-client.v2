@@ -41,7 +41,8 @@ constexpr nx::EnumArray<MainMenuAction, std::string MainMenuTexts::*> kItemTexts
 /// The text of the options' that names each tab.
 constexpr nx::EnumArray<OptionCategory, std::string OptionsTexts::*> kTabTexts{
     nx::EnumArray<OptionCategory, std::string OptionsTexts::*>::Storage{
-        &OptionsTexts::mouse, &OptionsTexts::audio, &OptionsTexts::video, &OptionsTexts::game}};
+        &OptionsTexts::mouse, &OptionsTexts::keyboard, &OptionsTexts::audio, &OptionsTexts::video,
+        &OptionsTexts::game}};
 
 /// What the menu calls the item that does `action`, in the language of `texts`.
 [[nodiscard]] auto itemNameOf(const MainMenuTexts& texts, MainMenuAction action) noexcept
@@ -132,11 +133,23 @@ void paintOptions(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
                           .tall = track.tall},
                          kMenuGold);
             writeEnding(painter, rowFace, sliderText(*slider), end, control, kMenuInk);
+        } else if (const auto* const keys = std::get_if<ShownKeys>(&option.control)) {
+            // Waited for, it asks for its key; else its keys, or that it has none.
+            const std::string_view written = keys->isWaited       ? std::string_view{texts.options.pressAKey}
+                                             : keys->keys.empty() ? std::string_view{texts.options.noKey}
+                                                                  : std::string_view{keys->keys};
+            writeEnding(painter, rowFace, written, end, control,
+                        keys->isWaited       ? kMenuGold
+                        : keys->keys.empty() ? kMenuInkFaint
+                                             : kMenuInk);
         } else {
             const bool isOn = std::get<ShownSwitch>(option.control).isOn;
             writeEnding(painter, rowFace, isOn ? texts.options.on : texts.options.off, end, control,
                         isOn ? kMenuGold : kMenuInkFaint);
         }
+    }
+    if (const std::optional<nx::ui::PixelRect> thumb = layout.listThumb(shown.first, shown.count)) {
+        painter.fill(*thumb, kMenuInkFaint);
     }
 
     paintMenuOutline(painter, layout.backButton(), kMenuLine);
@@ -234,7 +247,12 @@ void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, cons
     };
     tell(texts.keyUpDown, texts.select);
     if (frame.options) {
-        tell(texts.keyLeftRight, texts.change);
+        if (frame.options->category == OptionCategory::Keyboard) {
+            tell(texts.keyEnter, texts.change);
+            tell(texts.keyDelete, texts.clear);
+        } else {
+            tell(texts.keyLeftRight, texts.change);
+        }
         tell(texts.keyEscape, texts.goBack);
         paintOptions(painter, layout, faces, written, *frame.options);
         return;

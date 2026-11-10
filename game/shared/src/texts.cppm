@@ -42,11 +42,15 @@ struct MainMenuTexts {
     std::string goBack{};
     std::string keyLeftRight{};
     std::string change{};
+    std::string keyDelete{};
+    std::string clear{};
 };
 
-/// What the options write: their tabs, their settings, and how a switch stands.
+/// What the options write: their tabs, their settings, how a switch stands, and the actions the keys run,
+/// with what an action that waits for its key and one that has none say.
 struct OptionsTexts {
     std::string mouse{};
+    std::string keyboard{};
     std::string audio{};
     std::string video{};
     std::string game{};
@@ -61,6 +65,28 @@ struct OptionsTexts {
     std::string rightHand{};
     std::string on{};
     std::string off{};
+    std::string pressAKey{};
+    std::string noKey{};
+    std::string moveForward{};
+    std::string moveBack{};
+    std::string moveLeft{};
+    std::string moveRight{};
+    std::string jump{};
+    std::string duck{};
+    std::string walk{};
+    std::string use{};
+    std::string fire{};
+    std::string secondaryFire{};
+    std::string reload{};
+    std::string lastWeapon{};
+    std::string buyMenu{};
+    std::string buyEquipment{};
+    std::string buyPrimaryAmmo{};
+    std::string buyPistolAmmo{};
+    std::string rebuy{};
+    std::string showScores{};
+    std::string toggleConsole{};
+    std::string noclip{};
 };
 
 /// Every text of the game, by the part that writes it.
@@ -115,6 +141,8 @@ struct nx::meta::Description<cs::MainMenuTexts> {
         nx::meta::field<&cs::MainMenuTexts::goBack>("goBack"),
         nx::meta::field<&cs::MainMenuTexts::keyLeftRight>("keyLeftRight"),
         nx::meta::field<&cs::MainMenuTexts::change>("change"),
+        nx::meta::field<&cs::MainMenuTexts::keyDelete>("keyDelete"),
+        nx::meta::field<&cs::MainMenuTexts::clear>("clear"),
     };
 };
 
@@ -123,6 +151,7 @@ struct nx::meta::Description<cs::OptionsTexts> {
     static constexpr std::string_view kName = "cs::OptionsTexts";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::OptionsTexts::mouse>("mouse"),
+        nx::meta::field<&cs::OptionsTexts::keyboard>("keyboard"),
         nx::meta::field<&cs::OptionsTexts::audio>("audio"),
         nx::meta::field<&cs::OptionsTexts::video>("video"),
         nx::meta::field<&cs::OptionsTexts::game>("game"),
@@ -137,6 +166,28 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::rightHand>("rightHand"),
         nx::meta::field<&cs::OptionsTexts::on>("on"),
         nx::meta::field<&cs::OptionsTexts::off>("off"),
+        nx::meta::field<&cs::OptionsTexts::pressAKey>("pressAKey"),
+        nx::meta::field<&cs::OptionsTexts::noKey>("noKey"),
+        nx::meta::field<&cs::OptionsTexts::moveForward>("moveForward"),
+        nx::meta::field<&cs::OptionsTexts::moveBack>("moveBack"),
+        nx::meta::field<&cs::OptionsTexts::moveLeft>("moveLeft"),
+        nx::meta::field<&cs::OptionsTexts::moveRight>("moveRight"),
+        nx::meta::field<&cs::OptionsTexts::jump>("jump"),
+        nx::meta::field<&cs::OptionsTexts::duck>("duck"),
+        nx::meta::field<&cs::OptionsTexts::walk>("walk"),
+        nx::meta::field<&cs::OptionsTexts::use>("use"),
+        nx::meta::field<&cs::OptionsTexts::fire>("fire"),
+        nx::meta::field<&cs::OptionsTexts::secondaryFire>("secondaryFire"),
+        nx::meta::field<&cs::OptionsTexts::reload>("reload"),
+        nx::meta::field<&cs::OptionsTexts::lastWeapon>("lastWeapon"),
+        nx::meta::field<&cs::OptionsTexts::buyMenu>("buyMenu"),
+        nx::meta::field<&cs::OptionsTexts::buyEquipment>("buyEquipment"),
+        nx::meta::field<&cs::OptionsTexts::buyPrimaryAmmo>("buyPrimaryAmmo"),
+        nx::meta::field<&cs::OptionsTexts::buyPistolAmmo>("buyPistolAmmo"),
+        nx::meta::field<&cs::OptionsTexts::rebuy>("rebuy"),
+        nx::meta::field<&cs::OptionsTexts::showScores>("showScores"),
+        nx::meta::field<&cs::OptionsTexts::toggleConsole>("toggleConsole"),
+        nx::meta::field<&cs::OptionsTexts::noclip>("noclip"),
     };
 };
 

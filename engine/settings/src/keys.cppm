@@ -44,6 +44,12 @@ inline constexpr console::KeyId kWheelUp{240};
 /// MOUSE1 to MOUSE5; none past the fifth button, which the original does not have.
 [[nodiscard]] auto keyOf(platform::MouseButton button) noexcept -> std::optional<console::KeyId>;
 
+/// The key `event` presses, in `mapping`: a key of the keyboard going down, the system's repeats left
+/// out; a mouse button going down; or the wheel turned, its key of the way it turned. None for any other
+/// event, and for a key the original has no number for.
+[[nodiscard]] auto pressedKeyOf(const platform::WindowEvent& event, KeyMapping mapping) noexcept
+    -> std::optional<console::KeyId>;
+
 /// The key `name` names, as `bind` reads it: one ASCII character (a letter in either case names its
 /// key, which types the small letter), or one of the original's names (SPACE, KP_END, MOUSE1,
 /// SEMICOLON...) in any case. None for anything else, and for a character whose key has no name to

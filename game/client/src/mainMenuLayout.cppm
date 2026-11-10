@@ -16,7 +16,7 @@ import :menuDesign;
 export namespace cs {
 
 /// How many tabs a page of the menu has across it: the options'.
-inline constexpr std::size_t kPageTabs = 4;
+inline constexpr std::size_t kPageTabs = 5;
 
 /// The main menu's parts on a screen.
 class MainMenuLayout {

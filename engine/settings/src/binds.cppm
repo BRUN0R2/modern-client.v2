@@ -14,6 +14,9 @@ import :keys;
 
 export namespace nx::settings {
 
+/// How many keys the options keep for an action, as the original's show two.
+inline constexpr std::size_t kMostKeysOfAnAction = 2;
+
 /// The command bound to each of the original's keys, as `bind` sets them.
 class KeyBindings {
 public:
@@ -26,6 +29,17 @@ public:
 
     /// Unbinds every key.
     void unbindAll() noexcept;
+
+    /// The keys that run `command` and nothing else, by their numbers from the lowest.
+    [[nodiscard]] auto keysOf(std::string_view command) const -> std::vector<console::KeyId>;
+
+    /// Gives `key` to `command`, as the original's options give an action a key: the key runs it and no
+    /// longer what it ran, and when kMostKeysOfAnAction keys ran it already they let go of it first, so that
+    /// the new key is its only one. Expects what bind expects.
+    void give(console::KeyId key, std::string command);
+
+    /// Unbinds every key that runs `command` and nothing else.
+    void release(std::string_view command) noexcept;
 
     /// `unbindall`, then a `bind "<key>" "<command>"` line for each bound key, by number: what
     /// config.cfg keeps, so that it gives back these binds and none other.

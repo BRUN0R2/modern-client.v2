@@ -78,6 +78,8 @@ struct Opened {
     auto mouse(const nx::platform::WindowEvent& event, MousePosition cursor) -> OptionsOutcome {
         return page.handle(event, cursor, layout);
     }
+    /// What the page shows on the list of the screen.
+    [[nodiscard]] auto shown() const -> cs::OptionsFrame { return page.frame(layout.listRows()); }
 
     cs::MainMenuLayout layout{kScreen, 2};
     cs::OptionsPage page;
@@ -89,7 +91,7 @@ constexpr MouseButtonChanged kLeftUp{.button = MouseButton::Left, .isDown = fals
 TEST(OptionsPageTest, OpensOnItsFirstTabWithTheTabsSelected) {
     Settings settings;
     Opened options{settings};
-    const cs::OptionsFrame frame = options.page.frame();
+    const cs::OptionsFrame frame = options.shown();
     EXPECT_EQ(frame.category, OptionCategory::Mouse);
     EXPECT_EQ(frame.selectedRow, std::nullopt);
     ASSERT_EQ(frame.rows.size(), 2U);
@@ -98,26 +100,28 @@ TEST(OptionsPageTest, OpensOnItsFirstTabWithTheTabsSelected) {
     ASSERT_NE(slider, nullptr);
     EXPECT_FLOAT_EQ(slider->value, 3.0F);
     EXPECT_FLOAT_EQ(slider->share, 0.5F) << "halfway from 1 to 5";
-    EXPECT_EQ(frame.rows[1].control, (std::variant<cs::ShownSlider, cs::ShownSwitch>{cs::ShownSwitch{}}));
+    EXPECT_EQ(frame.rows[1].control, (cs::ShownControl{cs::ShownSwitch{}}));
 }
 
 TEST(OptionsPageTest, LeftAndRightChangeTheTabWhileTheTabsAreSelected) {
     Settings settings;
     Opened options{settings};
     EXPECT_EQ(options.press(Key::Left), OptionsOutcome::Stays);
-    EXPECT_EQ(options.page.frame().category, OptionCategory::Mouse) << "the first stays the first";
+    EXPECT_EQ(options.shown().category, OptionCategory::Mouse) << "the first stays the first";
     std::ignore = options.press(Key::Right);
-    const cs::OptionsFrame audio = options.page.frame();
+    EXPECT_EQ(options.shown().category, OptionCategory::Keyboard);
+    std::ignore = options.press(Key::Right);
+    const cs::OptionsFrame audio = options.shown();
     EXPECT_EQ(audio.category, OptionCategory::Audio);
     ASSERT_EQ(audio.rows.size(), 1U);
     EXPECT_EQ(audio.rows[0].name, &OptionsTexts::volume);
     for (int press = 0; press < 5; ++press) {
         std::ignore = options.press(Key::Right);
     }
-    EXPECT_EQ(options.page.frame().category, OptionCategory::Game) << "the last stays the last";
-    EXPECT_TRUE(options.page.frame().rows.empty());
+    EXPECT_EQ(options.shown().category, OptionCategory::Game) << "the last stays the last";
+    EXPECT_TRUE(options.shown().rows.empty());
     std::ignore = options.press(Key::Down);
-    EXPECT_EQ(options.page.frame().selectedRow, std::nullopt) << "a tab of no rows selects none";
+    EXPECT_EQ(options.shown().selectedRow, std::nullopt) << "a tab of no rows selects none";
     EXPECT_FLOAT_EQ(settings.sensitivity, 3.0F);
 }
 
@@ -125,7 +129,7 @@ TEST(OptionsPageTest, TheArrowsSelectARowAndChangeIt) {
     Settings settings;
     Opened options{settings};
     std::ignore = options.press(Key::Down);
-    EXPECT_EQ(options.page.frame().selectedRow, 0U);
+    EXPECT_EQ(options.shown().selectedRow, 0U);
     std::ignore = options.press(Key::Right);
     EXPECT_FLOAT_EQ(settings.sensitivity, 3.5F) << "a step up";
     std::ignore = options.press(Key::Left);
@@ -135,11 +139,11 @@ TEST(OptionsPageTest, TheArrowsSelectARowAndChangeIt) {
         std::ignore = options.press(Key::Left);
     }
     EXPECT_FLOAT_EQ(settings.sensitivity, 1.0F) << "no lower than its least";
-    EXPECT_EQ(options.page.frame().category, OptionCategory::Mouse) << "the tab stays, a row selected";
+    EXPECT_EQ(options.shown().category, OptionCategory::Mouse) << "the tab stays, a row selected";
 
     std::ignore = options.press(Key::Down);
     std::ignore = options.press(Key::Down);
-    EXPECT_EQ(options.page.frame().selectedRow, 1U) << "the last stays the last";
+    EXPECT_EQ(options.shown().selectedRow, 1U) << "the last stays the last";
     std::ignore = options.press(Key::Right);
     EXPECT_TRUE(settings.isMouseReversed);
     std::ignore = options.press(Key::Left);
@@ -153,7 +157,7 @@ TEST(OptionsPageTest, TheArrowsSelectARowAndChangeIt) {
     std::ignore = options.press(Key::Enter);
     EXPECT_FLOAT_EQ(settings.sensitivity, 1.0F) << "Enter leaves a slider as it is";
     std::ignore = options.press(Key::Up);
-    EXPECT_EQ(options.page.frame().selectedRow, std::nullopt) << "the tabs are above the first row";
+    EXPECT_EQ(options.shown().selectedRow, std::nullopt) << "the tabs are above the first row";
 }
 
 TEST(OptionsPageTest, TheMouseShowsATabSwitchesASwitchAndDragsASlider) {
@@ -161,7 +165,7 @@ TEST(OptionsPageTest, TheMouseShowsATabSwitchesASwitchAndDragsASlider) {
     Opened options{settings};
     const cs::MainMenuLayout& layout = options.layout;
     EXPECT_EQ(options.mouse(MouseMoved{}, middleOf(layout.listRow(1))), OptionsOutcome::Stays);
-    EXPECT_EQ(options.page.frame().selectedRow, 1U);
+    EXPECT_EQ(options.shown().selectedRow, 1U);
     std::ignore = options.mouse(kLeftDown, middleOf(layout.listRow(1)));
     EXPECT_TRUE(settings.isMouseReversed);
     std::ignore = options.mouse(kLeftUp, middleOf(layout.listRow(1)));
@@ -186,11 +190,135 @@ TEST(OptionsPageTest, TheMouseShowsATabSwitchesASwitchAndDragsASlider) {
     std::ignore = options.mouse(kLeftDown, middleOf(layout.listRow(0)));
     EXPECT_FLOAT_EQ(settings.sensitivity, 1.0F) << "pressed on its name, it does not change";
 
-    std::ignore = options.mouse(kLeftDown, middleOf(layout.optionTab(1)));
-    EXPECT_EQ(options.page.frame().category, OptionCategory::Audio);
-    EXPECT_EQ(options.page.frame().selectedRow, std::nullopt);
+    std::ignore = options.mouse(kLeftDown, middleOf(layout.optionTab(2)));
+    EXPECT_EQ(options.shown().category, OptionCategory::Audio);
+    EXPECT_EQ(options.shown().selectedRow, std::nullopt);
     std::ignore = options.mouse(MouseMoved{}, middleOf(layout.listRow(1)));
-    EXPECT_EQ(options.page.frame().selectedRow, std::nullopt) << "a row the tab does not have";
+    EXPECT_EQ(options.shown().selectedRow, std::nullopt) << "a row the tab does not have";
+}
+
+/// The keys of the actions of the tests: those each has, and the events given to the one that waits.
+struct Actions {
+    std::vector<std::string> keys;
+    std::vector<nx::platform::WindowEvent> given;
+};
+
+/// `count` actions on the keyboard's tab over `actions`: each takes a key going down as its key, by the
+/// number of its position, and no other event.
+[[nodiscard]] auto actionsOf(Actions& actions, std::size_t count) -> std::vector<cs::OptionRow> {
+    actions.keys.assign(count, "");
+    std::vector<cs::OptionRow> rows;
+    for (std::size_t index = 0; index < count; ++index) {
+        rows.push_back(
+            {.category = OptionCategory::Keyboard,
+             .name = &OptionsTexts::jump,
+             .control = cs::OptionKeys{.keys = [&actions, index] { return actions.keys[index]; },
+                                       .bind =
+                                           [&actions, index](const nx::platform::WindowEvent& event) {
+                                               actions.given.push_back(event);
+                                               const auto* const key = std::get_if<KeyChanged>(&event);
+                                               if (key == nullptr || !key->isDown) {
+                                                   return false;
+                                               }
+                                               actions.keys[index] =
+                                                   std::format("KEY{}", std::to_underlying(key->key));
+                                               return true;
+                                           },
+                                       .clear = [&actions, index] { actions.keys[index].clear(); }}});
+    }
+    return rows;
+}
+
+TEST(OptionsPageTest, AnActionWaitsForItsKeyAndTakesTheNextOne) {
+    Actions actions;
+    cs::OptionsPage page{actionsOf(actions, 3)};
+    const cs::MainMenuLayout layout{kScreen, 2};
+    const auto send = [&](const nx::platform::WindowEvent& event, MousePosition cursor = kNowhere) {
+        return page.handle(event, cursor, layout);
+    };
+    const auto keysOf = [&](std::size_t row) {
+        return std::get<cs::ShownKeys>(page.frame(layout.listRows()).rows[row].control);
+    };
+    page.open();
+    std::ignore = send(pressed(Key::Right));
+    ASSERT_EQ(page.frame(layout.listRows()).category, OptionCategory::Keyboard);
+    std::ignore = send(pressed(Key::Down));
+    std::ignore = send(pressed(Key::Down));
+    EXPECT_FALSE(page.isWaitingForKey());
+    EXPECT_EQ(keysOf(1), (cs::ShownKeys{}));
+
+    std::ignore = send(pressed(Key::Enter));
+    EXPECT_TRUE(page.isWaitingForKey());
+    EXPECT_TRUE(keysOf(1).isWaited);
+    EXPECT_FALSE(keysOf(0).isWaited);
+    std::ignore = send(KeyChanged{.key = Key::Enter, .isDown = false});
+    std::ignore = send(MouseMoved{}, middleOf(layout.listRow(0)));
+    EXPECT_TRUE(page.isWaitingForKey()) << "what presses no key leaves it waiting";
+    EXPECT_EQ(page.frame(layout.listRows()).selectedRow, 1U) << "and the mouse selects nothing meanwhile";
+
+    EXPECT_EQ(send(pressed(Key::Down)), OptionsOutcome::Stays);
+    EXPECT_FALSE(page.isWaitingForKey());
+    EXPECT_EQ(keysOf(1).keys, std::format("KEY{}", std::to_underlying(Key::Down)))
+        << "even a key of the page's";
+    EXPECT_EQ(page.frame(layout.listRows()).selectedRow, 1U) << "which did nothing else";
+
+    std::ignore = send(pressed(Key::Enter));
+    EXPECT_EQ(send(pressed(Key::Escape)), OptionsOutcome::Stays) << "Escape leaves the action, not the page";
+    EXPECT_FALSE(page.isWaitingForKey());
+    EXPECT_EQ(keysOf(1).keys, std::format("KEY{}", std::to_underlying(Key::Down))) << "as it was";
+
+    std::ignore = send(pressed(Key::Delete));
+    EXPECT_EQ(keysOf(1).keys, "") << "Delete takes its keys";
+    std::ignore = send(pressed(Key::Left));
+    std::ignore = send(pressed(Key::Right));
+    EXPECT_EQ(page.frame(layout.listRows()).category, OptionCategory::Keyboard) << "an action has no steps";
+
+    actions.given.clear();
+    std::ignore = send(kLeftDown, middleOf(layout.listRow(2)));
+    EXPECT_TRUE(page.isWaitingForKey()) << "the button it is pressed with has it wait";
+    EXPECT_TRUE(actions.given.empty()) << "and is not given to it";
+    std::ignore = send(kLeftUp, middleOf(layout.listRow(2)));
+    EXPECT_TRUE(page.isWaitingForKey());
+    EXPECT_EQ(actions.given.size(), 1U) << "what follows is";
+}
+
+TEST(OptionsPageTest, AListLongerThanThePageScrolls) {
+    Actions actions;
+    const cs::MainMenuLayout layout{kScreen, 2};
+    const std::size_t listRows = layout.listRows();
+    const std::size_t count = listRows + 5;
+    cs::OptionsPage page{actionsOf(actions, count)};
+    const auto send = [&](const nx::platform::WindowEvent& event, MousePosition cursor = kNowhere) {
+        return page.handle(event, cursor, layout);
+    };
+    page.open();
+    std::ignore = send(pressed(Key::Right));
+    cs::OptionsFrame frame = page.frame(listRows);
+    EXPECT_EQ(frame.rows.size(), listRows);
+    EXPECT_EQ(frame.first, 0U);
+    EXPECT_EQ(frame.count, count);
+
+    for (std::size_t press = 0; press < count + 2; ++press) {
+        std::ignore = send(pressed(Key::Down));
+    }
+    frame = page.frame(listRows);
+    EXPECT_EQ(frame.first, 5U) << "the list follows what is selected";
+    EXPECT_EQ(frame.selectedRow, listRows - 1) << "the last stays the last";
+
+    std::ignore = send(nx::platform::MouseWheelMoved{.dy = 1.0F});
+    frame = page.frame(listRows);
+    EXPECT_EQ(frame.first, 2U) << "three rows a notch";
+    EXPECT_EQ(frame.selectedRow, std::nullopt) << "what is selected scrolled out of sight";
+    std::ignore = send(nx::platform::MouseWheelMoved{.dy = 9.0F});
+    EXPECT_EQ(page.frame(listRows).first, 0U) << "no further than its top";
+
+    std::ignore = send(nx::platform::MouseWheelMoved{.dy = -1.0F});
+    std::ignore = send(kLeftDown, middleOf(layout.listRow(0)));
+    EXPECT_TRUE(page.isWaitingForKey());
+    std::ignore = send(pressed(Key::Space));
+    EXPECT_EQ(actions.keys[3], std::format("KEY{}", std::to_underlying(Key::Space)))
+        << "the row pressed is the action scrolled to it";
+    EXPECT_EQ(page.frame(2).rows.size(), 2U) << "a shorter list shows fewer";
 }
 
 TEST(OptionsPageTest, EscapeAndItsButtonGoBack) {
@@ -229,6 +357,7 @@ TEST(OptionsPageTest, ItsItemOpensItOnTheMenuAndEscapeGoesBackToTheItems) {
     ASSERT_TRUE(menu.showsOptions());
     ASSERT_TRUE(menu.frameOf(cs::MenuGame::None, kScreen).options.has_value());
 
+    EXPECT_FALSE(menu.takesEveryKey());
     EXPECT_EQ(send(pressed(Key::Down)), std::nullopt);
     EXPECT_EQ(send(pressed(Key::Right)), std::nullopt);
     EXPECT_FLOAT_EQ(settings.sensitivity, 3.5F) << "the keys are the page's";

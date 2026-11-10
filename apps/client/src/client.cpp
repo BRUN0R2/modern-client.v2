@@ -176,7 +176,7 @@ private:
     /// Whether `key` is bound to `toggleconsole`.
     [[nodiscard]] auto togglesConsole(const nx::platform::KeyChanged& key) const -> bool;
     /// What `event` does in the main menu, open: the keys bound to `toggleconsole` open the console's
-    /// window over it, and the rest are the menu's.
+    /// window over it, unless the menu waits for a key to bind, and the rest are the menu's.
     void handleInMainMenu(const nx::platform::WindowEvent& event);
     /// Whether the buy menu, open, takes `event`.
     [[nodiscard]] auto isTakenByBuyMenu(const nx::platform::WindowEvent& event) -> bool;
@@ -382,7 +382,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
                         std::move(written.error()));
     }
     texts.emplace(std::move(*written));
-    mainMenu.emplace(*m_content, *texts, clientOptionsOf(*settings));
+    mainMenu.emplace(*m_content, *texts, clientOptionsOf(*settings, m_bindings));
     if (!mapAsked) {
         mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
     }
@@ -665,7 +665,7 @@ void Client::openMainMenu() {
 
 void Client::handleInMainMenu(const nx::platform::WindowEvent& event) {
     const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
-    if (key != nullptr && key->isDown && togglesConsole(*key)) {
+    if (key != nullptr && key->isDown && togglesConsole(*key) && !mainMenu->takesEveryKey()) {
         toggleConsole();
         return;
     }
