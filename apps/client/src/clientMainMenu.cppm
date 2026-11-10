@@ -47,6 +47,10 @@ public:
     /// While it is open: the menu over the frame, of the `size` it was loaded for, while `game`.
     void append(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size, cs::MenuGame game);
 
+    /// What tells over the frame, of the `size` it was loaded for, that the map `map` is loading.
+    void appendLoading(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size,
+                       std::string_view map);
+
 private:
     const nx::assets::Vfs* files; ///< The game's, which the picture behind the menu is read from.
     cs::MainMenu menu;

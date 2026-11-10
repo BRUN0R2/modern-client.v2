@@ -88,4 +88,9 @@ void ClientMainMenu::append(std::vector<nx::render::ScreenQuad>& quads, nx::rhi:
     }
 }
 
+void ClientMainMenu::appendLoading(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size,
+                                   std::string_view map) {
+    panel.appendLoading(quads, map, size);
+}
+
 } // namespace app

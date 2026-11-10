@@ -38,6 +38,7 @@ constexpr nx::EnumArray<MainMenuAction, std::string_view> kItemNames{
 constexpr std::string_view kMapsName = "MAP";
 constexpr std::string_view kNoMaps = "The game has no maps.";
 constexpr std::string_view kStart = "START";
+constexpr std::string_view kLoading = "LOADING";
 constexpr std::string_view kBack = "BACK";
 /// A key and what it does, as the menu's foot tells them.
 struct Hint {
@@ -119,9 +120,8 @@ void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
     writeInMiddle(painter, rowFace, kStart, layout.confirmButton(), canStart ? kOnMenuGold : kMenuInkFaint);
 }
 
-/// Draws the menu showing `frame` by `layout` with `painter`, in `faces`.
-void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
-               const MainMenuFrame& frame) {
+/// Writes the game's name where `layout` puts it, over its rule.
+void paintGameName(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces) {
     const nx::ui::TextFace& titleFace = faces[MainMenuFont::Title];
     const nx::ui::PixelPoint& title = layout.title();
     std::ignore = painter.text(titleFace, kGameName, title, kMenuInk);
@@ -130,21 +130,29 @@ void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, cons
                   .wide = layout.pixels(kRuleWide),
                   .tall = layout.pixels(kRuleTall)},
                  kMenuGold);
+}
 
-    const nx::ui::TextFace& itemFace = faces[MainMenuFont::Item];
+/// A row of the items' column in `rect`: `text` in `face`, lit with the gold bar on its left when `isLit`.
+void paintItemRow(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const nx::ui::TextFace& face,
+                  const nx::ui::PixelRect& rect, std::string_view text, bool isLit) {
+    if (isLit) {
+        painter.fill(rect, kMenuCellLit);
+        painter.fill({.x = rect.x, .y = rect.y, .wide = layout.pixels(kAccentBar), .tall = rect.tall},
+                     kMenuGold);
+    }
+    std::ignore = painter.text(face, text,
+                               {.x = rect.x + layout.pixels(kItemInset),
+                                .y = rect.y + ((rect.tall - face.atlas->lineHeight()) / kMiddleDivisor)},
+                               isLit ? kMenuInk : kMenuInkSoft);
+}
+
+/// Draws the menu showing `frame` by `layout` with `painter`, in `faces`.
+void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
+               const MainMenuFrame& frame) {
+    paintGameName(painter, layout, faces);
     for (const auto& [index, action] : std::views::enumerate(frame.items)) {
-        const nx::ui::PixelRect rect = layout.item(nx::narrow<std::size_t>(index));
-        const bool isSelected = frame.selected == action;
-        if (isSelected) {
-            painter.fill(rect, kMenuCellLit);
-            painter.fill({.x = rect.x, .y = rect.y, .wide = layout.pixels(kAccentBar), .tall = rect.tall},
-                         kMenuGold);
-        }
-        std::ignore =
-            painter.text(itemFace, kItemNames[action],
-                         {.x = rect.x + layout.pixels(kItemInset),
-                          .y = rect.y + ((rect.tall - itemFace.atlas->lineHeight()) / kMiddleDivisor)},
-                         isSelected ? kMenuInk : kMenuInkSoft);
+        paintItemRow(painter, layout, faces[MainMenuFont::Item], layout.item(nx::narrow<std::size_t>(index)),
+                     kItemNames[action], frame.selected == action);
     }
 
     const nx::ui::TextFace& hintFace = faces[MainMenuFont::Hint];
@@ -203,28 +211,55 @@ void MainMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const Mai
     nx::expects(isLoadedFor(size.height), "MainMenuPanel::append: its fonts loaded for the screen");
     shown.append(quads, Shown{.frame = frame, .size = size},
                  [&](std::vector<nx::render::ScreenQuad>& laidOut) {
-                     TextFaces textFaces;
-                     for (const MainMenuFont font : TextFaces::keys()) {
-                         textFaces[font] = faces[font]->textFace();
-                     }
-                     nx::ui::PanelPainter painter{laidOut, size};
                      const MainMenuLayout layout{size, frame.items.size()};
                      if (frame.game == MenuGame::Played) {
-                         painter.fill(layout.screen(), kMenuBackdrop);
+                         nx::ui::PanelPainter{laidOut, size}.fill(layout.screen(), kMenuBackdrop);
                      } else {
-                         painter.fill(layout.screen(), kGround);
-                         if (background) {
-                             laidOut.push_back(
-                                 {.image = &*background,
-                                  .source = {.width = background->width(), .height = background->height()},
-                                  .target = coveringRect(
-                                      {.width = background->width(), .height = background->height()}, size),
-                                  .filter = nx::render::ScreenFilter::Linear});
-                             painter.fill(layout.screen(), kBackgroundVeil);
-                         }
+                         appendGround(laidOut, size);
                      }
-                     paintMenu(painter, layout, textFaces, frame);
+                     nx::ui::PanelPainter painter{laidOut, size};
+                     paintMenu(painter, layout, textFaces(), frame);
                  });
+}
+
+void MainMenuPanel::appendLoading(std::vector<nx::render::ScreenQuad>& quads, std::string_view map,
+                                  nx::rhi::Extent2d size) {
+    nx::expects(isLoadedFor(size.height), "MainMenuPanel::appendLoading: its fonts loaded for the screen");
+    shownLoading.append(
+        quads, ShownLoading{.map = std::string{map}, .size = size},
+        [&](std::vector<nx::render::ScreenQuad>& laidOut) {
+            // Two rows where the items stand: what is going on, and the map.
+            constexpr std::size_t kRows = 2;
+            const MainMenuLayout layout{size, kRows};
+            const TextFaces shownFaces = textFaces();
+            appendGround(laidOut, size);
+            nx::ui::PanelPainter painter{laidOut, size};
+            paintGameName(painter, layout, shownFaces);
+            paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(0), kLoading, true);
+            paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(1), map, false);
+        });
+}
+
+auto MainMenuPanel::textFaces() const noexcept -> TextFaces {
+    TextFaces shownFaces;
+    for (const MainMenuFont font : TextFaces::keys()) {
+        shownFaces[font] = faces[font]->textFace();
+    }
+    return shownFaces;
+}
+
+void MainMenuPanel::appendGround(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size) const {
+    const nx::ui::PixelRect whole{.wide = nx::Pixels{nx::narrow<std::int32_t>(size.width)},
+                                  .tall = nx::Pixels{nx::narrow<std::int32_t>(size.height)}};
+    nx::ui::PanelPainter{quads, size}.fill(whole, kGround);
+    if (background) {
+        quads.push_back(
+            {.image = &*background,
+             .source = {.width = background->width(), .height = background->height()},
+             .target = coveringRect({.width = background->width(), .height = background->height()}, size),
+             .filter = nx::render::ScreenFilter::Linear});
+        nx::ui::PanelPainter{quads, size}.fill(whole, kBackgroundVeil);
+    }
 }
 
 } // namespace cs

@@ -183,6 +183,10 @@ public:
     /// frame. A failing command is reported and the run goes on with the next one.
     auto execute() -> BufferState;
 
+    /// Stops the run after the command running, as `wait` does: the rest of the buffer runs on the next
+    /// execute(). For a command whose work is done between two runs, such as one that loads a map.
+    inline void wait() noexcept { m_waitRequested = true; }
+
     /// Sets a cvar from text, as typing `name text` does: refused for ServerProtected cvars, for
     /// Cheat cvars while cheats are forbidden, and for text the cvar does not accept.
     [[nodiscard]] auto setCvar(std::string_view name, std::string_view text) -> Result<void, ConsoleError>;
