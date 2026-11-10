@@ -13,6 +13,7 @@ nxAddTest(nxAssetsTests
         blockCompressionTests.cpp
         sprTests.cpp
         spriteListTests.cpp
+        backgroundLayoutTests.cpp
         keyValuesTests.cpp
         schemeTests.cpp
         localizationTests.cpp

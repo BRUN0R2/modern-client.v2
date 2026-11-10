@@ -16,7 +16,8 @@ using cs::MainMenuAction;
 using cs::MainMenuItem;
 using cs::MainMenuListing;
 
-constexpr std::string_view kFonts = "font = { regular = \"Barlow\", strong = \"Barlow SemiBold\" }\n";
+constexpr std::string_view kFonts = "font = { regular = \"Barlow\", strong = \"Barlow SemiBold\" }\n"
+                                    "background = \"resource/BackgroundLayout.txt\"\n";
 constexpr std::string_view kQuit = "[[items]]\naction = \"quit\"\nlisted = \"always\"\n";
 constexpr std::string_view kResume = "[[items]]\naction = \"resumeGame\"\nlisted = \"inGame\"\n";
 
@@ -28,6 +29,7 @@ TEST(MainMenuLookTest, TheRepositorysReads) {
     ASSERT_TRUE(look.has_value()) << (look ? "" : nx::describe(look.error()));
     EXPECT_EQ(look->font.regular, "Barlow");
     EXPECT_EQ(look->font.strong, "Barlow SemiBold");
+    EXPECT_EQ(look->background, "resource/BackgroundLayout.txt") << "the original's own";
     const std::vector<MainMenuItem> expected{
         {.action = MainMenuAction::ResumeGame, .listed = MainMenuListing::InGame},
         {.action = MainMenuAction::Disconnect, .listed = MainMenuListing::InGame},
@@ -45,7 +47,11 @@ TEST(MainMenuLookTest, WhatTheMenuCouldNotShowIsRefused) {
     const std::string quit{kQuit};
     const std::string resume{kResume};
     EXPECT_FALSE(refused(fonts + resume + quit));
-    EXPECT_TRUE(refused("font = { regular = \"Barlow\", strong = \"\" }\n" + quit)) << "no font";
+    EXPECT_TRUE(refused("font = { regular = \"Barlow\", strong = \"\" }\nbackground = \"a.txt\"\n" + quit))
+        << "no font";
+    EXPECT_TRUE(
+        refused("font = { regular = \"Barlow\", strong = \"Barlow SemiBold\" }\nbackground = \"\"\n" + quit))
+        << "no background";
     EXPECT_TRUE(refused(fonts + quit + quit)) << "one action twice";
     EXPECT_TRUE(refused(fonts + resume)) << "nothing listed without a map";
     EXPECT_TRUE(refused(fonts)) << "no items";

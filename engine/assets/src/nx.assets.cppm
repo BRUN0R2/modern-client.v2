@@ -24,7 +24,9 @@ export import :bsp;
 export import :bspSurfaces;
 export import :blockCompression;
 export import :spr;
+export import :words; // nothing exported: what the readers of word lists share
 export import :spriteList;
+export import :backgroundLayout;
 export import :keyValues;
 export import :scheme;
 export import :localization;

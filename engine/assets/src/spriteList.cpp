@@ -8,59 +8,6 @@ import nx.core;
 
 namespace nx::assets {
 
-namespace {
-
-/// The words of a text, as the original's parser splits them: at whitespace, a word that starts
-/// with `"` running to the next `"`, and `//` starting a comment that runs to the end of the line.
-class Words {
-public:
-    explicit Words(std::string_view text) noexcept : m_rest{text} {}
-
-    /// The next word; none at the end of the text.
-    [[nodiscard]] auto next() noexcept -> std::optional<std::string_view> {
-        for (;;) {
-            const auto start = std::ranges::find_if_not(m_rest, isSpace);
-            m_rest = m_rest.substr(narrow<std::size_t>(start - m_rest.begin()));
-            if (!m_rest.starts_with("//")) {
-                break;
-            }
-            const std::size_t lineEnd = m_rest.find('\n');
-            m_rest = lineEnd == std::string_view::npos ? std::string_view{} : m_rest.substr(lineEnd);
-        }
-        if (m_rest.empty()) {
-            return std::nullopt;
-        }
-        if (m_rest.front() == '"') {
-            const std::size_t close = m_rest.find('"', 1);
-            const std::string_view word =
-                m_rest.substr(1, close == std::string_view::npos ? close : close - 1);
-            m_rest = close == std::string_view::npos ? std::string_view{} : m_rest.substr(close + 1);
-            return word;
-        }
-        const auto end = std::ranges::find_if(m_rest, isSpace);
-        const auto length = narrow<std::size_t>(end - m_rest.begin());
-        const std::string_view word = m_rest.substr(0, length);
-        m_rest = m_rest.substr(length);
-        return word;
-    }
-
-private:
-    [[nodiscard]] static constexpr auto isSpace(char character) noexcept -> bool {
-        return static_cast<unsigned char>(character) <= static_cast<unsigned char>(' ');
-    }
-
-    std::string_view m_rest;
-};
-
-/// `word` as a whole number; none for anything else.
-[[nodiscard]] auto wholeNumberOf(std::string_view word) noexcept -> std::optional<std::uint32_t> {
-    std::uint32_t value = 0;
-    const auto [end, error] = std::from_chars(word.data(), word.data() + word.size(), value);
-    return error == std::errc{} && end == word.data() + word.size() ? std::optional{value} : std::nullopt;
-}
-
-} // namespace
-
 auto parseSpriteList(std::string_view text) -> Result<std::vector<SpriteListEntry>, SpriteListError> {
     Words words{text};
     const std::optional<std::string_view> countWord = words.next();

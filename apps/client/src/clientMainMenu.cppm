@@ -8,6 +8,7 @@ import std;
 import nx.core;
 import nx.platform;
 import nx.console;
+import nx.assets;
 import nx.rhi;
 import nx.render;
 import nx.ui;
@@ -37,8 +38,8 @@ public:
                 nx::rhi::Extent2d size, cs::MenuGame game, nx::console::Console& console);
 
     /// Puts what draws it on the GPU in `list` with `screen`, its faces from `fonts`, for a screen of `size`,
-    /// when they are not there for that height. Errors: ContentUnavailable (the project's fonts cannot be
-    /// had), GpuFailed, with the cause.
+    /// when they are not there for that height, and its background the first time. Errors: ContentUnavailable
+    /// (the project's fonts cannot be had), GpuFailed, with the cause.
     [[nodiscard]] auto load(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
                             nx::rhi::CommandList& list, nx::rhi::Extent2d size)
         -> nx::Result<void, ClientError>;
@@ -47,6 +48,7 @@ public:
     void append(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size, cs::MenuGame game);
 
 private:
+    const nx::assets::Vfs* files; ///< The game's, which the picture behind the menu is read from.
     cs::MainMenu menu;
     cs::MainMenuPanel panel;
 };

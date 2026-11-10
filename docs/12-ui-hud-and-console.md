@@ -415,8 +415,17 @@ project's own look. Its items are data, `data/cstrike/mainMenu.toml`, as the ori
 over a map played alone), from the top. Today it lists going back to the map played and leaving it, both over a map
 alone, a new game, and ending the game; the options and the server browser come with what they open. It shows
 the game's name at the top left and the items down the left, the last a fixed way over the screen's foot, where
-the original's menu stands, with the keys under them: over the whole screen while no map is played, over the scene
+the original's menu stands, with the keys under them: over its background while no map is played, over the scene
 darkened while one is, which plays on under it, as a game of more than one player does.
+
+Its background is the active content's own: `background` in the menu's data names a background layout among the
+game's files, the original's `resource/BackgroundLayout.txt`, which places the pictures of the original's menu
+(`resource/background/800_<row>_<column>_loading.tga`, twelve tiles of a screen of 800 by 600) on a screen of
+its own size (`nx.assets:backgroundLayout`). They are put together into one picture as the menu is first drawn
+(`cs.client:menuBackground`), which covers the screen whole without changing its shape, its middle on the
+screen's and what is too wide or too tall left off the edges, where the original stretches it; and it is
+darkened, so that what the menu writes reads over it. A background that cannot be read is logged, and the menu
+shows over its own dark ground, as in a content that has none.
 
 Up and Down select the item before and the one after, around the ends; Enter chooses the one selected; the mouse
 selects the item it is over and its left button chooses it; Escape goes back to the map played. `next` opens on it

@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.platform;
 import nx.console;
+import nx.assets;
 import nx.rhi;
 import nx.render;
 import nx.ui;
@@ -35,7 +36,7 @@ constexpr char kQuote = '"';
 } // namespace
 
 ClientMainMenu::ClientMainMenu(const cs::GameContent& content)
-    : menu{content.mainMenu, playableMapsOf(content)}, panel{content.mainMenu} {}
+    : files{&content.vfs}, menu{content.mainMenu, playableMapsOf(content)}, panel{content.mainMenu} {}
 
 auto ClientMainMenu::isOpen() const noexcept -> bool {
     return menu.isOpen();
@@ -71,7 +72,7 @@ auto ClientMainMenu::load(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer
     if (panel.isLoadedFor(size.height)) {
         return {};
     }
-    if (auto loaded = panel.load(fonts, screen, list, size.height); !loaded) {
+    if (auto loaded = panel.load(fonts, *files, screen, list, size.height); !loaded) {
         const ClientError code = loaded.error().code == cs::MenuPanelError::GpuFailed
                                      ? ClientError::GpuFailed
                                      : ClientError::ContentUnavailable;

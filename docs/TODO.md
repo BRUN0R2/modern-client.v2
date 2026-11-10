@@ -581,7 +581,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] MOTD with restricted HTML
 - [x] The main menu ([12 §4](12-ui-hud-and-console.md#4-game-menus-and-screens)), the project's own look over the original's pattern: the items `data/cstrike/mainMenu.toml` lists, down the left under the game's name, those of a map played only over one (resume, disconnect), chosen by the arrows and Enter or by the mouse (`cs.client:mainMenu`, `:mainMenuLayout`, `:mainMenuPanel`); `next` opens on it without a map, Escape opens it over the map played, and its items run the console's commands (`app.client:mainMenu`, `disconnect`, `quit`); the look it shares with the buy menu (`cs.client:menuDesign`)
 - [x] The main menu's new game: the page beside the items, the game's maps listed (`cs::mapNamesOf`), chosen by the keys, the wheel or the mouse, played by the console's `map`
-- [ ] The main menu's background from the active content and its music; a loading screen, and what a new game sets besides its map (the original's `CreateMultiplayerGame*Page.res`: bots, rules)
+- [x] The main menu's background from the active content: the pictures the original's `resource/BackgroundLayout.txt` places (`nx.assets:backgroundLayout`), put together into one that covers the screen without changing its shape (`cs.client:menuBackground`)
+- [ ] `nxcheck` reading the installation's background layouts (it tells a file's reader by its folder and extension, and `resource/*.txt` are the localized strings')
+- [ ] The main menu's music; a loading screen, and what a new game sets besides its map (the original's `CreateMultiplayerGame*Page.res`: bots, rules)
 - [ ] Options and server browser
 - [ ] Complete console (history, autocomplete, suggestions): the window over `nx.console`; its history, completions and suggestions are in `nx.console` ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module))
 - [x] Binds with the original key names (`nx.settings`, above)

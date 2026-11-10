@@ -42,14 +42,16 @@ struct MainMenuItem {
     [[nodiscard]] inline auto operator==(const MainMenuItem&) const noexcept -> bool = default;
 };
 
-/// data/cstrike/mainMenu.toml: the families the menu writes in, and its items from the top.
+/// data/cstrike/mainMenu.toml: the families the menu writes in, the layout of the picture behind it among
+/// the game's files (the original's resource/BackgroundLayout.txt), and its items from the top.
 struct MainMenuLook {
     MenuFontFamilies font{};
+    std::string background{};
     std::vector<MainMenuItem> items{};
 };
 
-/// Reads `text`, the file `sourceName`: both families, and items of which none does what another does and
-/// one at least is always listed, so that the menu is never empty. Errors: DataInvalid.
+/// Reads `text`, the file `sourceName`: both families, a background, and items of which none does what
+/// another does and one at least is always listed, so that the menu is never empty. Errors: DataInvalid.
 [[nodiscard]] auto readMainMenuLook(std::string_view text, std::string_view sourceName)
     -> nx::Result<MainMenuLook, MainMenuLookError>;
 
@@ -69,6 +71,7 @@ struct nx::meta::Description<cs::MainMenuLook> {
     static constexpr std::string_view kName = "cs::MainMenuLook";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::MainMenuLook::font>("font"),
+        nx::meta::field<&cs::MainMenuLook::background>("background"),
         nx::meta::field<&cs::MainMenuLook::items>("items"),
     };
 };

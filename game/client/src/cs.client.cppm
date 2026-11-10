@@ -54,6 +54,7 @@ export import :audio;
 export import :weaponCommands;
 export import :buyCommands;
 export import :menuDesign;
+export import :menuBackground;
 export import :buyMenuLayout;
 export import :buyMenu;
 export import :buyMenuPanel;

@@ -18,7 +18,9 @@ nxAddModuleLibrary(nxAssets
         src/bspSurfaces.cppm
         src/blockCompression.cppm
         src/spr.cppm
+        src/words.cppm
         src/spriteList.cppm
+        src/backgroundLayout.cppm
         src/keyValues.cppm
         src/scheme.cppm
         src/localization.cppm
@@ -37,7 +39,9 @@ nxAddModuleLibrary(nxAssets
         src/bspSurfaces.cpp
         src/blockCompression.cpp
         src/spr.cpp
+        src/words.cpp
         src/spriteList.cpp
+        src/backgroundLayout.cpp
         src/keyValues.cpp
         src/scheme.cpp
         src/localization.cpp
