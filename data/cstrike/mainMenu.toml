@@ -4,10 +4,12 @@
 # What the main menu lists (docs/12-ui-hud-and-console.md, section 4), read into cs::MainMenuLook: the
 # project's own, as the original's resource/GameMenu.res lists its menu's.
 # `font` is what it writes in, of the project's own fonts (data/fonts/): `regular` for its text, `strong` for
-# what stands out. `items` are its items from the top: `action`, what the item does (`resumeGame`, `disconnect`,
+# what stands out. `background` is the layout of the picture behind it, among the game's files: the original's,
+# which places the pictures of its own menu's background. `items` are its items from the top: `action`, what the item does (`resumeGame`, `disconnect`,
 # `newGame`, `quit`), none twice; and `listed`, when the menu lists it: `always`, or `inGame` for over a map played alone.
 
 font = { regular = "Barlow", strong = "Barlow SemiBold" }
+background = "resource/BackgroundLayout.txt"
 
 [[items]]
 action = "resumeGame"

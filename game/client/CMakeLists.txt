@@ -43,6 +43,7 @@ nxAddModuleLibrary(csClient
         src/weaponCommands.cppm
         src/buyCommands.cppm
         src/menuDesign.cppm
+        src/menuBackground.cppm
         src/buyMenuLayout.cppm
         src/buyMenu.cppm
         src/buyMenuPanel.cppm
@@ -86,6 +87,7 @@ nxAddModuleLibrary(csClient
         src/weaponCommands.cpp
         src/buyCommands.cpp
         src/menuDesign.cpp
+        src/menuBackground.cpp
         src/buyMenuLayout.cpp
         src/buyMenu.cpp
         src/buyMenuPanel.cpp

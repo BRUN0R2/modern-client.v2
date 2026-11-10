@@ -6,6 +6,7 @@ module cs.client;
 import std;
 import nx.core;
 import nx.rhi;
+import nx.assets;
 import nx.render;
 import nx.ui;
 import cs.shared;
@@ -17,8 +18,12 @@ namespace {
 using nx::render::ScreenColor;
 using TextFaces = nx::EnumArray<MainMenuFont, nx::ui::TextFace>;
 
-/// What the menu covers the whole screen with while no map is played.
+constexpr nx::log::Category kLog{"client"};
+
+/// What the menu covers the whole screen with while no map is played, under its background.
 constexpr ScreenColor kGround{.red = 13, .green = 14, .blue = 16};
+/// What darkens the background, so that what the menu writes over it reads.
+constexpr ScreenColor kBackgroundVeil{.red = 6, .green = 7, .blue = 9, .alpha = 150};
 
 constexpr nx::EnumArray<MainMenuFont, MenuFontSize> kFontSizes{
     nx::EnumArray<MainMenuFont, MenuFontSize>::Storage{
@@ -117,8 +122,6 @@ void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
 /// Draws the menu showing `frame` by `layout` with `painter`, in `faces`.
 void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
                const MainMenuFrame& frame) {
-    painter.fill(layout.screen(), frame.game == MenuGame::Played ? kMenuBackdrop : kGround);
-
     const nx::ui::TextFace& titleFace = faces[MainMenuFont::Title];
     const nx::ui::PixelPoint& title = layout.title();
     std::ignore = painter.text(titleFace, kGameName, title, kMenuInk);
@@ -167,10 +170,22 @@ void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, cons
 
 MainMenuPanel::MainMenuPanel(const MainMenuLook& listed) noexcept : look{&listed} {}
 
-auto MainMenuPanel::load(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
-                         nx::rhi::CommandList& commands, std::uint32_t screenHeight)
-    -> nx::Result<void, MenuPanelError> {
+auto MainMenuPanel::load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
+                         nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,
+                         std::uint32_t screenHeight) -> nx::Result<void, MenuPanelError> {
     nx::expects(screenHeight > 0, "MainMenuPanel::load: a screen of some height");
+    if (!std::exchange(isBackgroundRead, true)) {
+        if (const auto picture = readMenuBackground(vfs, look->background); !picture) {
+            nx::log::warning(kLog, "the main menu shows no background: {}", nx::describe(picture.error()));
+        } else {
+            auto loaded = screen.loadImage(commands, picture->pixels, picture->width, picture->height,
+                                           look->background);
+            if (!loaded) {
+                return nx::fail(MenuPanelError::GpuFailed, look->background, std::move(loaded.error()));
+            }
+            background.emplace(std::move(*loaded));
+        }
+    }
     for (const MainMenuFont font : TextFaces::keys()) {
         auto face =
             makeMenuFace(fonts, screen, commands, look->font, kFontSizes[font], screenHeight, "mainMenu");
@@ -193,7 +208,22 @@ void MainMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const Mai
                          textFaces[font] = faces[font]->textFace();
                      }
                      nx::ui::PanelPainter painter{laidOut, size};
-                     paintMenu(painter, MainMenuLayout{size, frame.items.size()}, textFaces, frame);
+                     const MainMenuLayout layout{size, frame.items.size()};
+                     if (frame.game == MenuGame::Played) {
+                         painter.fill(layout.screen(), kMenuBackdrop);
+                     } else {
+                         painter.fill(layout.screen(), kGround);
+                         if (background) {
+                             laidOut.push_back(
+                                 {.image = &*background,
+                                  .source = {.width = background->width(), .height = background->height()},
+                                  .target = coveringRect(
+                                      {.width = background->width(), .height = background->height()}, size),
+                                  .filter = nx::render::ScreenFilter::Linear});
+                             painter.fill(layout.screen(), kBackgroundVeil);
+                         }
+                     }
+                     paintMenu(painter, layout, textFaces, frame);
                  });
 }
 

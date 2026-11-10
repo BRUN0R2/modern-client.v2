@@ -37,6 +37,7 @@ constexpr std::size_t kManyMaps = 40;
 /// out.
 [[nodiscard]] auto lookOf() -> cs::MainMenuLook {
     return {.font = {.regular = "Barlow", .strong = "Barlow SemiBold"},
+            .background = "resource/BackgroundLayout.txt",
             .items = {{.action = MainMenuAction::ResumeGame, .listed = MainMenuListing::InGame},
                       {.action = MainMenuAction::Disconnect, .listed = MainMenuListing::InGame},
                       {.action = MainMenuAction::NewGame, .listed = MainMenuListing::Always},

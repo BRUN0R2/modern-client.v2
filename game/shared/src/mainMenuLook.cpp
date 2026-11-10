@@ -20,11 +20,13 @@ auto readMainMenuLook(std::string_view text, std::string_view sourceName)
         return std::ranges::count(items, item.action, &MainMenuItem::action) == 1;
     });
     const bool isNeverEmpty = std::ranges::contains(items, MainMenuListing::Always, &MainMenuItem::listed);
-    if (!look->font.isComplete() || !isEachActionOnce || !isNeverEmpty) {
-        return nx::fail(MainMenuLookError::DataInvalid,
-                        std::format("{}: both font families, and items of which none does what another does "
-                                    "and one at least is always listed, are required",
-                                    sourceName));
+    if (!look->font.isComplete() || look->background.empty() || !isEachActionOnce || !isNeverEmpty) {
+        return nx::fail(
+            MainMenuLookError::DataInvalid,
+            std::format(
+                "{}: both font families, a background, and items of which none does what another does "
+                "and one at least is always listed, are required",
+                sourceName));
     }
     return std::move(*look);
 }
