@@ -441,9 +441,17 @@ new game** lists the game's maps, the `maps/<name>.bsp` of its own folders (`cs:
 and the installation's `cstrike/`, not those of its base, `valve/`), in the order of the alphabet: Up, Down, Page Up, Page Down, Home and End select one, the list following it; the wheel scrolls the list,
 three rows a notch, and a thumb down its right shows how far; the mouse selects the map it is pressed on. Enter, or
 `START`, plays the map selected by the console's `map <name>`, a map the console could not be told of left out;
-Escape, or `BACK`, goes back to the items, and another item chosen leaves the page. The map loads as the command
-runs, the frame held meanwhile, and one that cannot be loaded is told on the console alone: a loading screen comes
-with the rest of what a new game sets.
+Escape, or `BACK`, goes back to the items, and another item chosen leaves the page.
+
+**The loading screen.** A map takes seconds to load, and the frames wait for it. So `map` (and `nav_generate`,
+which plays the map again) only asks for the map: the next frame tells that it is loading, over the menu's
+background, the game's name where the menu writes it and `LOADING` and the map's name where its items stand; the
+frame after loads it, and the screen stays as told until the first frame of the map shows. The console's commands
+that follow on the same line run once the map is loaded, so that they act on it (`map de_dust2; bot_add`), held
+as a `wait` holds them (`nx::console::Console::wait`), as the original's run after its own loading. A map that
+cannot be loaded is reported as its command would report it, on the console, and the client stays where it was: on
+its menu when it plays no map. The screen does not move while the map loads: a bar that follows the loading comes
+with loading off the main thread.
 
 **The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, made as
 large as the screen (`MenuScale`); the sizes of text made of the families a menu's data names for that height

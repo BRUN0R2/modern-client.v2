@@ -53,7 +53,20 @@ public:
     void append(std::vector<nx::render::ScreenQuad>& quads, const MainMenuFrame& frame,
                 nx::rhi::Extent2d size);
 
+    /// Appends to `quads` what tells that the map `map` is loading, on a screen of `size`, the one its fonts
+    /// were loaded for: over the menu's background, covering the whole screen, the game's name where the
+    /// menu writes it and the map's where its items stand.
+    void appendLoading(std::vector<nx::render::ScreenQuad>& quads, std::string_view map,
+                       nx::rhi::Extent2d size);
+
 private:
+    /// What appendLoading laid out.
+    struct ShownLoading {
+        std::string map{};
+        nx::rhi::Extent2d size{};
+
+        [[nodiscard]] inline auto operator==(const ShownLoading&) const noexcept -> bool = default;
+    };
     /// What append laid out.
     struct Shown {
         MainMenuFrame frame{};
@@ -68,6 +81,13 @@ private:
     bool isBackgroundRead = false; ///< Whether load looked for the picture behind the menu.
     std::optional<nx::render::ScreenImage> background; ///< None for one that could not be read.
     nx::render::RetainedQuads<Shown> shown;
+    nx::render::RetainedQuads<ShownLoading> shownLoading;
+
+    /// The faces load made, as a painter writes with them.
+    [[nodiscard]] auto textFaces() const noexcept -> nx::EnumArray<MainMenuFont, nx::ui::TextFace>;
+    /// Appends to `quads` what the menu stands over while no map is played, on a screen of `size`: its
+    /// ground, and over it its background, covering the screen and darkened, when it has one.
+    void appendGround(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size) const;
 };
 
 } // namespace cs

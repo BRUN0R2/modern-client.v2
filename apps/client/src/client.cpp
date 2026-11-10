@@ -95,6 +95,14 @@ void look(nx::EulerAngles& view, const nx::platform::MouseMoved& moved,
                                         -cs::kMaxPitch.value(), cs::kMaxPitch.value())};
 }
 
+/// A map the console asked to play, loaded once a frame told the player so: its loading holds the frames
+/// for as long as it takes.
+struct MapAsked {
+    std::string name;
+    KeptMesh kept = KeptMesh::Read; ///< Whether the cache's mesh of its agents is read.
+    bool isToldLoading = false;     ///< Whether a frame showed that it is loading.
+};
+
 /// The client: the player's settings and console, the map it plays, and the window and GPU it plays
 /// it in. It stays where it is made: the console's commands and the binds' input point into it.
 class Client {
@@ -131,7 +139,17 @@ private:
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
+    /// Asks for the map a line names (map): loaded with the next frame but one (askForMap).
+    /// Errors: InvalidArguments.
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    /// Asks for the map `name`, its agents' mesh read from the cache or not as `kept` says: the next frame
+    /// tells that it is loading, the one after loads it, and the console's commands that follow run once
+    /// it is loaded, so that they act on it.
+    void askForMap(std::string name, KeptMesh kept);
+    /// Loads the map asked for, once a frame told that it is loading, to be played from this frame; one
+    /// that cannot be loaded is reported as its command would report it, and the client stays where it
+    /// was, on its menu when it plays no map.
+    void loadMapAsked();
     /// Builds the agents' mesh of the map played again, what the cache keeps of it left aside, and plays
     /// the map again on it from the next frame (nav_generate), as Condition Zero restarts the game once it
     /// analyzed a map. Errors: InvalidArguments, CommandFailed.
@@ -226,6 +244,7 @@ private:
     std::unique_ptr<Session> m_session;             ///< The map played.
     std::unique_ptr<Session> m_nextSession;         ///< The map `map` loaded, played from the next frame.
     bool isLeavingMap = false;                      ///< `disconnect` asked: no map from the next frame.
+    std::optional<MapAsked> mapAsked;               ///< Told as loading, then loaded.
     /// Made or changed since the scene put their view models on the GPU.
     std::vector<cs::WeaponIndex> m_changedWeapons;
     nx::Random m_bulletHoles{0, kBulletHoleStream};
@@ -353,7 +372,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
-    if (playedSession() == nullptr) {
+    if (!mapAsked) {
         mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
     }
     sounds->openNamedOutput();
@@ -491,15 +510,31 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
     if (line.arguments().size() != 1) {
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
-    const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name, settings->client.player, settings->game, *m_jobs,
-                                navigationData, KeptMesh::Read);
+    askForMap(line.arguments().front(), KeptMesh::Read);
+    return {};
+}
+
+void Client::askForMap(std::string name, KeptMesh kept) {
+    mapAsked = MapAsked{.name = std::move(name), .kept = kept};
+    m_console.wait();
+}
+
+void Client::loadMapAsked() {
+    if (!mapAsked || !mapAsked->isToldLoading) {
+        return;
+    }
+    const MapAsked asked = *std::exchange(mapAsked, std::nullopt);
+    auto session = startSession(*m_content, asked.name, settings->client.player, settings->game, *m_jobs,
+                                navigationData, asked.kept);
     if (!session) {
-        return std::unexpected{std::move(session.error())};
+        m_output.reportFailure(session.error());
+        if (!m_session && !mainMenu->isOpen()) {
+            openMainMenu(); // asked for as the client started: it opens on its menu after all
+        }
+        return;
     }
     m_nextSession = std::move(*session);
     isLeavingMap = false;
-    return {};
 }
 
 auto Client::generateNavigationCommand(const nx::console::CommandLine& line)
@@ -510,13 +545,7 @@ auto Client::generateNavigationCommand(const nx::console::CommandLine& line)
     if (!m_session) {
         return nx::fail(ConsoleError::CommandFailed, "nav_generate: load a map first");
     }
-    auto session = startSession(*m_content, m_session->map->name(), settings->client.player, settings->game,
-                                *m_jobs, navigationData, KeptMesh::Ignored);
-    if (!session) {
-        return std::unexpected{std::move(session.error())};
-    }
-    m_nextSession = std::move(*session);
-    isLeavingMap = false;
+    askForMap(std::string{m_session->map->name()}, KeptMesh::Ignored);
     return {};
 }
 
@@ -657,8 +686,12 @@ auto Client::run() -> nx::Result<void, ClientError> {
         if (auto read = readInput(); !read) {
             return read;
         }
-        // What the keys queued, and what a `wait` left, before the frame's commands are made.
-        std::ignore = m_console.execute();
+        loadMapAsked();
+        // What the keys queued, and what a `wait` left, before the frame's commands are made; held while
+        // a map asked for is not loaded yet, so that the commands after it act on it.
+        if (!mapAsked) {
+            std::ignore = m_console.execute();
+        }
         buyMenu->update();
         showCursorAsNeeded();
         sounds->update(m_isFocused);
@@ -687,6 +720,9 @@ auto Client::run() -> nx::Result<void, ClientError> {
         }
         if (auto drawn = drawFrame(commands->get()); !drawn) {
             return drawn;
+        }
+        if (mapAsked) {
+            mapAsked->isToldLoading = true; // by the frame drawn, or by none while the window shows none
         }
     }
     return finish();
@@ -866,7 +902,7 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
             m_output.window = m_consoleWindow->dialog();
         }
     }
-    if (mainMenu->isOpen()) {
+    if (mainMenu->isOpen() || mapAsked) {
         if (auto loaded = mainMenu->load(m_fonts, m_frames->screen(), list, frame.size); !loaded) {
             return loaded;
         }
@@ -974,6 +1010,9 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         buyMenu->appendNotice(m_screenQuads, size);
     }
     mainMenu->append(m_screenQuads, size, menuGame());
+    if (mapAsked) {
+        mainMenu->appendLoading(m_screenQuads, size, mapAsked->name);
+    }
     if (m_consoleWindow != nullptr && m_consoleWindow->dialog() != nullptr) {
         m_logSink->showIn(*m_consoleWindow->dialog());
         m_consoleWindow->paint(m_screenQuads, size);

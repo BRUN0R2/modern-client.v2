@@ -100,7 +100,7 @@ void Console::registerBuiltins() {
         [](Console& console, const CommandLine& line) { return console.alias(line); });
     add({.name = "wait", .description = "Runs the rest of the buffered commands on the next frame"},
         [](Console& console, const CommandLine&) -> Result<void, ConsoleError> {
-            console.m_waitRequested = true;
+            console.wait();
             return {};
         });
     add({.name = "exec", .description = "exec <file>: runs the commands of a config file"},

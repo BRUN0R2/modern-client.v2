@@ -236,6 +236,20 @@ TEST_F(ConsoleTest, WaitResumesOnTheNextExecute) {
     EXPECT_EQ(console.execute(), BufferState::Empty);
 }
 
+TEST_F(ConsoleTest, ACommandMayHoldTheRestForTheNextExecute) {
+    ASSERT_TRUE(console
+                    .registerCommand({.name = "load", .description = "Does its work between two runs."},
+                                     [](Console& held, const CommandLine&) -> nx::Result<void, ConsoleError> {
+                                         held.wait();
+                                         return {};
+                                     })
+                    .has_value());
+    EXPECT_EQ(run("echo before; load; echo after"), BufferState::Waiting);
+    EXPECT_EQ(output.lines, (Lines{"before"}));
+    EXPECT_EQ(console.execute(), BufferState::Empty);
+    EXPECT_EQ(output.lines, (Lines{"before", "after"}));
+}
+
 TEST_F(ConsoleTest, AWaitInsideAnAliasDelaysTheRestOfTheBuffer) {
     run(R"(alias jumpThrow "echo jump; wait; echo throw"; jumpThrow; echo next)");
     EXPECT_EQ(output.lines, (Lines{"jump"}));

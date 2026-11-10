@@ -583,7 +583,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] The main menu's new game: the page beside the items, the game's maps listed (`cs::mapNamesOf`), chosen by the keys, the wheel or the mouse, played by the console's `map`
 - [x] The main menu's background from the active content: the pictures the original's `resource/BackgroundLayout.txt` places (`nx.assets:backgroundLayout`), put together into one that covers the screen without changing its shape (`cs.client:menuBackground`)
 - [ ] `nxcheck` reading the installation's background layouts (it tells a file's reader by its folder and extension, and `resource/*.txt` are the localized strings')
-- [ ] The main menu's music; a loading screen, and what a new game sets besides its map (the original's `CreateMultiplayerGame*Page.res`: bots, rules)
+- [x] The loading screen: `map` and `nav_generate` ask for the map, a frame tells that it is loading over the menu's background, the next loads it, and the commands after it on the line run once it is loaded (`nx::console::Console::wait`)
+- [ ] A loading screen that moves (a bar that follows the loading), with maps loaded off the main thread; a failed load told on the menu, not on the console alone
+- [ ] The main menu's music; what a new game sets besides its map (the original's `CreateMultiplayerGame*Page.res`: bots, rules)
 - [ ] Options and server browser
 - [ ] Complete console (history, autocomplete, suggestions): the window over `nx.console`; its history, completions and suggestions are in `nx.console` ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module))
 - [x] Binds with the original key names (`nx.settings`, above)
