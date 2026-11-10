@@ -62,7 +62,7 @@ TEST(MenuBackgroundTest, ThePicturesArePutTogetherWhereTheLayoutPlacesThem) {
     const RgbaImage whole = cs::composeBackground(layout, tiles);
     ASSERT_EQ(whole.width, 6U);
     ASSERT_EQ(whole.height, 4U);
-    ASSERT_EQ(whole.pixels.size(), 6U * 4U * nx::assets::kRgbaBytes);
+    ASSERT_EQ(whole.pixels.size(), std::size_t{6} * 4 * nx::assets::kRgbaBytes);
     EXPECT_EQ(redAt(whole, 0, 0), 100);
     EXPECT_EQ(redAt(whole, 3, 1), 100);
     EXPECT_EQ(redAt(whole, 4, 1), 0) << "what no picture covers is black";
