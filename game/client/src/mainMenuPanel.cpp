@@ -36,7 +36,12 @@ constexpr std::string_view kGameName = "COUNTER-STRIKE";
 constexpr nx::EnumArray<MainMenuAction, std::string MainMenuTexts::*> kItemTexts{
     nx::EnumArray<MainMenuAction, std::string MainMenuTexts::*>::Storage{
         &MainMenuTexts::resumeGame, &MainMenuTexts::disconnect, &MainMenuTexts::newGame,
-        &MainMenuTexts::quit}};
+        &MainMenuTexts::options, &MainMenuTexts::quit}};
+
+/// The text of the options' that names each tab.
+constexpr nx::EnumArray<OptionCategory, std::string OptionsTexts::*> kTabTexts{
+    nx::EnumArray<OptionCategory, std::string OptionsTexts::*>::Storage{
+        &OptionsTexts::mouse, &OptionsTexts::audio, &OptionsTexts::video, &OptionsTexts::game}};
 
 /// What the menu calls the item that does `action`, in the language of `texts`.
 [[nodiscard]] auto itemNameOf(const MainMenuTexts& texts, MainMenuAction action) noexcept
@@ -53,6 +58,7 @@ constexpr std::int32_t kItemInset = 24;
 constexpr std::int32_t kHintKeyGap = 8;
 constexpr std::int32_t kHintGap = 28;
 constexpr std::int32_t kRowInset = 16;
+constexpr std::int32_t kTabRule = 2;     ///< Under the tab shown.
 constexpr std::int32_t kMapsNameGap = 6; ///< From the name of the list to its first row.
 /// What the room left is divided by to put a thing halfway into it.
 constexpr std::int32_t kMiddleDivisor = 2;
@@ -65,6 +71,76 @@ void writeInMiddle(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, 
                      {.x = rect.x + ((rect.wide - nx::ui::widthOf(*face.atlas, text)) / kMiddleDivisor),
                       .y = rect.y + ((rect.tall - face.atlas->lineHeight()) / kMiddleDivisor)},
                      color);
+}
+
+/// `text` in `face`, ending at `end`, halfway down `rect`, in `color`.
+void writeEnding(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, std::string_view text,
+                 nx::Pixels end, const nx::ui::PixelRect& rect, ScreenColor color) {
+    std::ignore = painter.text(face, text,
+                               {.x = end - nx::ui::widthOf(*face.atlas, text),
+                                .y = rect.y + ((rect.tall - face.atlas->lineHeight()) / kMiddleDivisor)},
+                               color);
+}
+
+/// Draws the options showing `shown` by `layout` with `painter`, in `faces`, writing `texts`.
+void paintOptions(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
+                  const Texts& texts, const OptionsFrame& shown) {
+    painter.fill(layout.page(), kMenuGlass);
+    paintMenuOutline(painter, layout.page(), kMenuLine);
+    std::ignore =
+        painter.text(faces[MainMenuFont::Item], texts.mainMenu.options, layout.pageTitle(), kMenuInk);
+
+    const nx::ui::TextFace& hintFace = faces[MainMenuFont::Hint];
+    const nx::ui::TextFace& rowFace = faces[MainMenuFont::Row];
+    for (const OptionCategory tab : nx::EnumArray<OptionCategory, bool>::keys()) {
+        const nx::ui::PixelRect rect = layout.optionTab(static_cast<std::size_t>(std::to_underlying(tab)));
+        const bool isShown = tab == shown.category;
+        painter.fill(rect, isShown ? kMenuCellLit : kMenuCell);
+        if (isShown) {
+            const nx::Pixels rule = layout.pixels(kTabRule);
+            painter.fill({.x = rect.x, .y = rect.y + rect.tall - rule, .wide = rect.wide, .tall = rule},
+                         kMenuGold);
+        }
+        // The tabs take the keys while no row is selected.
+        writeInMiddle(painter, hintFace, texts.options.*kTabTexts[tab], rect,
+                      isShown && !shown.selectedRow ? kMenuInk : kMenuInkSoft);
+    }
+
+    for (const auto& [index, option] : std::views::enumerate(shown.rows)) {
+        const auto row = nx::narrow<std::size_t>(index);
+        const nx::ui::PixelRect rect = layout.listRow(row);
+        const bool isSelected = shown.selectedRow == row;
+        if (isSelected) {
+            painter.fill(rect, kMenuCellLit);
+            painter.fill({.x = rect.x, .y = rect.y, .wide = layout.pixels(kAccentBar), .tall = rect.tall},
+                         kMenuGold);
+        }
+        std::ignore =
+            painter.text(rowFace, texts.options.*option.name,
+                         {.x = rect.x + layout.pixels(kRowInset),
+                          .y = rect.y + ((rect.tall - rowFace.atlas->lineHeight()) / kMiddleDivisor)},
+                         isSelected ? kMenuInk : kMenuInkSoft);
+        const nx::ui::PixelRect control = layout.optionControl(row);
+        const nx::Pixels end = control.x + control.wide;
+        if (const auto* const slider = std::get_if<ShownSlider>(&option.control)) {
+            const nx::ui::PixelRect track = layout.optionTrack(row);
+            painter.fill(track, kMenuLine);
+            painter.fill({.x = track.x,
+                          .y = track.y,
+                          .wide = nx::Pixels{static_cast<std::int32_t>(
+                              std::lround(static_cast<float>(track.wide.value()) * slider->share))},
+                          .tall = track.tall},
+                         kMenuGold);
+            writeEnding(painter, rowFace, sliderText(*slider), end, control, kMenuInk);
+        } else {
+            const bool isOn = std::get<ShownSwitch>(option.control).isOn;
+            writeEnding(painter, rowFace, isOn ? texts.options.on : texts.options.off, end, control,
+                        isOn ? kMenuGold : kMenuInkFaint);
+        }
+    }
+
+    paintMenuOutline(painter, layout.backButton(), kMenuLine);
+    writeInMiddle(painter, rowFace, texts.mainMenu.back, layout.backButton(), kMenuInkSoft);
 }
 
 /// Draws the page of a new game showing `page` by `layout` with `painter`, in `faces`, writing `texts`.
@@ -139,9 +215,10 @@ void paintItemRow(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
                                isLit ? kMenuInk : kMenuInkSoft);
 }
 
-/// Draws the menu showing `frame` by `layout` with `painter`, in `faces`, writing `texts`.
+/// Draws the menu showing `frame` by `layout` with `painter`, in `faces`, writing those of `written`.
 void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
-               const MainMenuTexts& texts, const MainMenuFrame& frame) {
+               const Texts& written, const MainMenuFrame& frame) {
+    const MainMenuTexts& texts = written.mainMenu;
     paintGameName(painter, layout, faces);
     for (const auto& [index, action] : std::views::enumerate(frame.items)) {
         paintItemRow(painter, layout, faces[MainMenuFont::Item], layout.item(nx::narrow<std::size_t>(index)),
@@ -156,6 +233,12 @@ void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, cons
         pen.x = painter.text(hintFace, what, pen, kMenuInkFaint) + layout.pixels(kHintGap);
     };
     tell(texts.keyUpDown, texts.select);
+    if (frame.options) {
+        tell(texts.keyLeftRight, texts.change);
+        tell(texts.keyEscape, texts.goBack);
+        paintOptions(painter, layout, faces, written, *frame.options);
+        return;
+    }
     if (frame.newGame) {
         tell(texts.keyEnter, texts.play);
         tell(texts.keyEscape, texts.goBack);
@@ -170,7 +253,7 @@ void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, cons
 
 } // namespace
 
-MainMenuPanel::MainMenuPanel(const MainMenuLook& listed, const MainMenuTexts& written) noexcept
+MainMenuPanel::MainMenuPanel(const MainMenuLook& listed, const Texts& written) noexcept
     : look{&listed}, texts{&written} {}
 
 auto MainMenuPanel::load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
@@ -230,7 +313,7 @@ void MainMenuPanel::appendLoading(std::vector<nx::render::ScreenQuad>& quads, st
                             nx::ui::PanelPainter painter{laidOut, size};
                             paintGameName(painter, layout, shownFaces);
                             paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(0),
-                                         texts->loading, true);
+                                         texts->mainMenu.loading, true);
                             paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(1), map,
                                          false);
                         });

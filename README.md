@@ -92,7 +92,7 @@ Shift walks, E uses, the arrows turn, the left button fires, the right one switc
 a burst, R reloads, Q draws the last weapon, the comma and the period buy ammo, the tilde opens the
 console); V flies through
 everything (`noclip`), and Escape opens the main menu, which goes back to the map, leaves it or ends
-the game; without a map, `next` opens on that menu, written in English or, with `+cl_language pt-BR`, in
+the game, and has the options of the mouse, the audio, the video and the game; without a map, `next` opens on that menu, written in English or, with `+cl_language pt-BR`, in
 Brazilian Portuguese. Its settings and binds are kept in `config.cfg`, in
 `%APPDATA%\Modern-Client.v2`. Keyboard binds follow the layout by default (`in_keymap keycode`);
 `in_keymap scancode` selects physical US positions instead. The mode can also be set on the command

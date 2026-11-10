@@ -34,6 +34,7 @@ TEST(MainMenuLookTest, TheRepositorysReads) {
         {.action = MainMenuAction::ResumeGame, .listed = MainMenuListing::InGame},
         {.action = MainMenuAction::Disconnect, .listed = MainMenuListing::InGame},
         {.action = MainMenuAction::NewGame, .listed = MainMenuListing::Always},
+        {.action = MainMenuAction::Options, .listed = MainMenuListing::Always},
         {.action = MainMenuAction::Quit, .listed = MainMenuListing::Always}};
     EXPECT_EQ(look->items, expected) << "in the order the original's menu lists them";
 }

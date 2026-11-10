@@ -23,6 +23,7 @@ enum class MainMenuAction : std::uint8_t {
     ResumeGame, ///< Closes the menu over the map played (the original's `ResumeGame`).
     Disconnect, ///< Leaves the map played (`Disconnect`).
     NewGame,    ///< Plays a map of the game's, chosen on its page (`OpenCreateMultiplayerGameDialog`).
+    Options,    ///< Changes the player's settings, on its page (`OpenOptionsDialog`).
     Quit,       ///< Ends the client (`Quit`).
     Count,
 };

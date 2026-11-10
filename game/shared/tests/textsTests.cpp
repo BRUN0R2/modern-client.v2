@@ -17,13 +17,18 @@ namespace {
 
 using cs::TextsError;
 
-/// A language's file that writes every text the main menu asks for, `quit` as `quit` says.
+/// A language's file that writes every text the game asks for, the main menu's `quit` as `quit` says.
 [[nodiscard]] auto fileWith(std::string_view quit) -> std::string {
     return std::format("[mainMenu]\n"
                        "resumeGame = \"a\"\ndisconnect = \"b\"\nnewGame = \"c\"\nquit = \"{}\"\nmap = \"e\"\n"
                        "noMaps = \"f\"\nstart = \"g\"\nback = \"h\"\nloading = \"i\"\nkeyUpDown = \"j\"\n"
                        "keyEnter = \"k\"\nkeyEscape = \"l\"\nselect = \"m\"\nchoose = \"n\"\nresume = \"o\"\n"
-                       "play = \"p\"\ngoBack = \"q\"\n",
+                       "play = \"p\"\ngoBack = \"q\"\noptions = \"r\"\nkeyLeftRight = \"s\"\nchange = \"t\"\n"
+                       "[options]\n"
+                       "mouse = \"a\"\naudio = \"b\"\nvideo = \"c\"\ngame = \"d\"\nsensitivity = \"e\"\n"
+                       "reverseMouse = \"f\"\nvolume = \"g\"\nplayUnfocused = \"h\"\nmaxFps = \"i\"\n"
+                       "showFps = \"j\"\ndrawHud = \"k\"\nautoSwitch = \"l\"\nrightHand = \"m\"\non = \"n\"\n"
+                       "off = \"o\"\n",
                        quit);
 }
 
@@ -51,6 +56,8 @@ TEST(TextsTest, ALanguageWritesItsOwnTexts) {
     ASSERT_TRUE(portuguese.has_value());
     EXPECT_EQ(english->mainMenu.newGame, "NEW GAME");
     EXPECT_EQ(portuguese->mainMenu.newGame, "NOVO JOGO");
+    EXPECT_EQ(english->options.on, "ON");
+    EXPECT_EQ(portuguese->options.on, "LIGADO");
     EXPECT_EQ(portuguese->mainMenu.noMaps, "O jogo não tem mapas.") << "UTF-8, as the file is";
 }
 
@@ -62,6 +69,10 @@ TEST(TextsTest, AFileThatDoesNotWriteEveryTextIsRefused) {
     std::string lacking = fileWith("d");
     lacking.erase(lacking.find("goBack"));
     EXPECT_EQ(errorOf(lacking), TextsError::DataInvalid) << "a text left out";
+    std::string emptyInAnotherPart = fileWith("d");
+    emptyInAnotherPart.replace(emptyInAnotherPart.find("off = \"o\""), std::string_view{"off = \"o\""}.size(),
+                               "off = \"\"");
+    EXPECT_EQ(errorOf(emptyInAnotherPart), TextsError::DataInvalid) << "every part is read through";
     EXPECT_EQ(errorOf(""), TextsError::DataInvalid) << "no part at all";
 }
 

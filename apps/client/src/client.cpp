@@ -382,7 +382,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
                         std::move(written.error()));
     }
     texts.emplace(std::move(*written));
-    mainMenu.emplace(*m_content, texts->mainMenu);
+    mainMenu.emplace(*m_content, *texts, clientOptionsOf(*settings));
     if (!mapAsked) {
         mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
     }

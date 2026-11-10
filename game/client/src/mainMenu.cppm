@@ -15,6 +15,7 @@ import nx.rhi;
 import nx.platform;
 import cs.shared;
 import :mainMenuLayout;
+import :optionsPage;
 
 export namespace cs {
 
@@ -48,30 +49,34 @@ struct NewGamePage {
 };
 
 /// All the menu shows: whether over a map played, its items from the top, the one selected (none while none
-/// of those listed is), and the page of a new game while it is open.
+/// of those listed is), and the page of a new game or of the options while it is open.
 struct MainMenuFrame {
     MenuGame game{};
     std::vector<MainMenuAction> items{};
     std::optional<MainMenuAction> selected{};
     std::optional<NewGamePage> newGame{};
+    std::optional<OptionsFrame> options{};
 
     [[nodiscard]] inline auto operator==(const MainMenuFrame&) const noexcept -> bool = default;
 };
 
-/// The menu's state, as the keys and the mouse change it: whether it is open, the item selected, and on the
-/// page of a new game the map selected and how far its list is scrolled.
+/// The menu's state, as the keys and the mouse change it: whether it is open, the item selected, the page
+/// open beside the items, and on that of a new game the map selected and how far its list is scrolled.
 class MainMenu {
 public:
     /// The menu of what `listed` lists, which must outlive it, a new game played on one of `playable`, the
-    /// names of the game's maps in the order its page lists them.
-    MainMenu(const MainMenuLook& listed, std::vector<std::string> playable) noexcept;
+    /// names of the game's maps in the order its page lists them, and its options those of `settings`.
+    MainMenu(const MainMenuLook& listed, std::vector<std::string> playable,
+             std::vector<OptionRow> settings) noexcept;
 
     [[nodiscard]] inline auto isOpen() const noexcept -> bool { return isShown; }
     [[nodiscard]] inline auto selected() const noexcept -> const std::optional<MainMenuAction>& {
         return selection;
     }
     /// Whether the page of a new game is open.
-    [[nodiscard]] inline auto showsNewGame() const noexcept -> bool { return isChoosingMap; }
+    [[nodiscard]] inline auto showsNewGame() const noexcept -> bool { return page == Page::NewGame; }
+    /// Whether the page of the options is open.
+    [[nodiscard]] inline auto showsOptions() const noexcept -> bool { return page == Page::Options; }
 
     /// Opens on its items, the first listed while `game` selected.
     void open(MenuGame game);
@@ -83,8 +88,9 @@ public:
     /// Escape chooses to go back to the map played, when the menu lists that. The item of a new game opens
     /// its page, where Up, Down, Page Up, Page Down, Home and End select a map, the wheel scrolls the list,
     /// the mouse selects the map it is pressed on, Enter and the page's button play the map selected, and
-    /// Escape and its other button go back to the items. Returns what the menu asks for, if anything: the
-    /// menu stays as it is, whoever runs it doing that.
+    /// Escape and its other button go back to the items. The item of the options opens theirs, which takes
+    /// the keys and the mouse off the items (OptionsPage::handle). Returns what the menu asks for, if
+    /// anything: the menu stays as it is, whoever runs it doing that.
     [[nodiscard]] auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                               nx::rhi::Extent2d size, MenuGame game) -> std::optional<MainMenuRequest>;
 
@@ -97,6 +103,15 @@ private:
         Before,
         After,
     };
+    /// What is open beside the items.
+    enum class Page : std::uint8_t {
+        Items, ///< Nothing: the keys are the items'.
+        NewGame,
+        Options,
+    };
+
+    /// Goes back to the items when the options ask for it.
+    void leaveOptionsIf(OptionsOutcome outcome) noexcept;
 
     /// Selects the item `step` of the one selected among `items`, around their ends; the first or the last
     /// when none of them is.
@@ -127,9 +142,10 @@ private:
     std::vector<std::string> maps;
     bool isShown = false;
     std::optional<MainMenuAction> selection;
-    bool isChoosingMap = false;
+    Page page = Page::Items;
     std::size_t selectedMap = 0;
     std::size_t firstMapShown = 0;
+    OptionsPage options;
 };
 
 } // namespace cs

@@ -413,7 +413,7 @@ Without the historical limits on text channels and message size:
 project's own look. Its items are data, `data/cstrike/mainMenu.toml`, as the original lists its menu's in
 `resource/GameMenu.res`: what each does (`action`) and when the menu lists it (`listed`: `always`, or `inGame` for
 over a map played alone), from the top. Today it lists going back to the map played and leaving it, both over a map
-alone, a new game, and ending the game; the options and the server browser come with what they open. It shows
+alone, a new game, the options, and ending the game; the server browser comes with what it opens. It shows
 the game's name at the top left and the items down the left, the last a fixed way over the screen's foot, where
 the original's menu stands, with the keys under them: over its background while no map is played, over the scene
 darkened while one is, which plays on under it, as a game of more than one player does.
@@ -443,6 +443,24 @@ and the installation's `cstrike/`, not those of its base, `valve/`), in the orde
 three rows a notch, and a thumb down its right shows how far; the mouse selects the map it is pressed on. Enter, or
 `START`, plays the map selected by the console's `map <name>`, a map the console could not be told of left out;
 Escape, or `BACK`, goes back to the items, and another item chosen leaves the page.
+
+**The options** (`cs.client:optionsPage`) list the player's settings by what they set, each on a tab: the
+mouse, the audio, the video and the game. A row names a setting and has what changes it: a slider, its value
+written after its track, or a switch, which says whether it is on. Today: `sensitivity` and the mouse reversed
+(`m_pitch` below zero, as the original's option sets it); `volume` and the sound while the window is not focused
+(`s_play_unfocused`); the most frames a second (`fps_max`, to the 100 it gives without `fps_override`),
+`cl_showfps` and `hud_draw`; `_cl_autowepswitch` and `cl_righthand`. A setting is set as it is changed, takes
+effect at once, and is kept by `config.cfg` as every archived cvar is: there is nothing to apply or to cancel,
+where the original has `OK`, `Cancel` and `Apply`. Only what takes effect at once is listed: the settings read
+as the game or a map starts (`gl_vsync`, `gamma`, `brightness`, `r_fidelity`, `cl_language`), the player's name
+and the keys come with what lets them be changed there.
+
+Left and Right change the tab while the tabs are selected, as they are when the page opens; Down selects the
+first row and Up, from it, the tabs again. On a row, Left and Right move a slider by a step and switch a switch
+over, and Enter switches a switch over too. The mouse selects the row it is over; its left button shows the tab
+it is pressed on, switches a switch over, and sets a slider to where it is pressed on its track, which follows
+it until the button comes up. Escape, or `BACK`, goes back to the items. What a row reads and sets is given to
+the menu by what runs it (`app.client:options`, the client's cvars), so that the page knows no cvar.
 
 **The loading screen.** A map takes seconds to load, and the frames wait for it. So `map` (and `nav_generate`,
 which plays the map again) only asks for the map: the next frame tells that it is loading, over the menu's

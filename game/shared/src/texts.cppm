@@ -25,6 +25,7 @@ struct MainMenuTexts {
     std::string resumeGame{};
     std::string disconnect{};
     std::string newGame{};
+    std::string options{};
     std::string quit{};
     std::string map{};
     std::string noMaps{};
@@ -39,11 +40,33 @@ struct MainMenuTexts {
     std::string resume{};
     std::string play{};
     std::string goBack{};
+    std::string keyLeftRight{};
+    std::string change{};
+};
+
+/// What the options write: their tabs, their settings, and how a switch stands.
+struct OptionsTexts {
+    std::string mouse{};
+    std::string audio{};
+    std::string video{};
+    std::string game{};
+    std::string sensitivity{};
+    std::string reverseMouse{};
+    std::string volume{};
+    std::string playUnfocused{};
+    std::string maxFps{};
+    std::string showFps{};
+    std::string drawHud{};
+    std::string autoSwitch{};
+    std::string rightHand{};
+    std::string on{};
+    std::string off{};
 };
 
 /// Every text of the game, by the part that writes it.
 struct Texts {
     MainMenuTexts mainMenu{};
+    OptionsTexts options{};
 };
 
 /// Whether `language` is a language tag a file can be named after: letters, digits and `-` between them
@@ -75,6 +98,7 @@ struct nx::meta::Description<cs::MainMenuTexts> {
         nx::meta::field<&cs::MainMenuTexts::resumeGame>("resumeGame"),
         nx::meta::field<&cs::MainMenuTexts::disconnect>("disconnect"),
         nx::meta::field<&cs::MainMenuTexts::newGame>("newGame"),
+        nx::meta::field<&cs::MainMenuTexts::options>("options"),
         nx::meta::field<&cs::MainMenuTexts::quit>("quit"),
         nx::meta::field<&cs::MainMenuTexts::map>("map"),
         nx::meta::field<&cs::MainMenuTexts::noMaps>("noMaps"),
@@ -89,6 +113,30 @@ struct nx::meta::Description<cs::MainMenuTexts> {
         nx::meta::field<&cs::MainMenuTexts::resume>("resume"),
         nx::meta::field<&cs::MainMenuTexts::play>("play"),
         nx::meta::field<&cs::MainMenuTexts::goBack>("goBack"),
+        nx::meta::field<&cs::MainMenuTexts::keyLeftRight>("keyLeftRight"),
+        nx::meta::field<&cs::MainMenuTexts::change>("change"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::OptionsTexts> {
+    static constexpr std::string_view kName = "cs::OptionsTexts";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::OptionsTexts::mouse>("mouse"),
+        nx::meta::field<&cs::OptionsTexts::audio>("audio"),
+        nx::meta::field<&cs::OptionsTexts::video>("video"),
+        nx::meta::field<&cs::OptionsTexts::game>("game"),
+        nx::meta::field<&cs::OptionsTexts::sensitivity>("sensitivity"),
+        nx::meta::field<&cs::OptionsTexts::reverseMouse>("reverseMouse"),
+        nx::meta::field<&cs::OptionsTexts::volume>("volume"),
+        nx::meta::field<&cs::OptionsTexts::playUnfocused>("playUnfocused"),
+        nx::meta::field<&cs::OptionsTexts::maxFps>("maxFps"),
+        nx::meta::field<&cs::OptionsTexts::showFps>("showFps"),
+        nx::meta::field<&cs::OptionsTexts::drawHud>("drawHud"),
+        nx::meta::field<&cs::OptionsTexts::autoSwitch>("autoSwitch"),
+        nx::meta::field<&cs::OptionsTexts::rightHand>("rightHand"),
+        nx::meta::field<&cs::OptionsTexts::on>("on"),
+        nx::meta::field<&cs::OptionsTexts::off>("off"),
     };
 };
 
@@ -97,5 +145,6 @@ struct nx::meta::Description<cs::Texts> {
     static constexpr std::string_view kName = "cs::Texts";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::Texts::mainMenu>("mainMenu"),
+        nx::meta::field<&cs::Texts::options>("options"),
     };
 };
