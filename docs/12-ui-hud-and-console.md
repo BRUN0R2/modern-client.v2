@@ -433,7 +433,8 @@ when no map is played, and comes back to it as the map is left; over a map playe
 bound to that key, as in the original, the keys held for the game let go and the cursor shown. The keys bound to
 `toggleconsole` open the console's window over it; the other keys run no bind while it is open. An item does what
 the console's command does, queued as a bind queues its own (`app.client:mainMenu`): `disconnect`, `quit`. The
-fonts it writes in are the project's own; a client that cannot have them does not start.
+fonts it writes in are the project's own; a client that cannot have them does not start. What it writes is in
+the player's language ([§7](#7-localization)), but the game's name.
 
 An item that has more to ask opens a page beside the items, where the original opens a window: as tall as from the
 game's name to the last item's foot, with what it is for on a button at its foot and another that goes back. **A
@@ -755,11 +756,25 @@ a sound heard everywhere, as the original's do ([11 §2](11-audio.md#2-architect
 
 ## 7. Localization
 
-- UI strings in per-language files (`locale/pt-BR.toml`, `locale/en.toml`), with typed keys
-  generated for C++ and Rook. A nonexistent key is a build error, not empty text.
+- UI strings in per-language files (`locale/pt-BR.toml`, `locale/en.toml`), with typed keys. A nonexistent
+  key is a build error, not empty text.
 - `titles.txt` and the original texts are still read and can be overridden by a
   translation.
-- Plugins have their own locale files ([14](14-rook-language.md#12-strings-formatting-and-translation)).
+- Plugins have their own locale files ([14](14-rook-language.md#12-strings-formatting-and-translation)),
+  read by `rookc`.
+
+**Today** (`cs.shared:texts`, [ADR-0035](adr/0035-texts-as-typed-data.md)): a text is a field. `cs::Texts` has
+a struct for each part that writes (`MainMenuTexts`, the first) and a `std::string` for each of its texts, so
+that code reads `texts.mainMenu.newGame` and a text no struct declares does not compile; no keys are
+generated. A language is a file, `data/cstrike/locale/<language>.toml`, named after its tag (`en`, `pt-BR`,
+the two there are): a table for each part and a key for each text, read as the rest of the game's data is
+(`nx.data`). A file that lacks a text, writes one empty or has one the game does not ask for is refused: a
+language is whole or it is not offered, and a test reads every language of the repository. `cl_language`
+(archived, `en` unless chosen) names the language; it is read as `next` starts, once the player's files and
+the command line ran, and one the data does not have stops the start, telling the languages there are and
+how to choose again (`next +cl_language en`). A change takes the next start, as the original's does. The
+main menu writes by it; the buy menu's and the HUD's own texts are constants still, in English, until they
+move to it. Texts with values in them, and the original's own (`titles.txt`), come with what writes them.
 
 ## 8. Accessibility
 

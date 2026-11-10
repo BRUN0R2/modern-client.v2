@@ -30,6 +30,7 @@ export import :buying;
 export import :menuFonts;
 export import :buyMenuLook;
 export import :mainMenuLook;
+export import :texts;
 export import :materials;
 export import :footsteps;
 export import :breath;

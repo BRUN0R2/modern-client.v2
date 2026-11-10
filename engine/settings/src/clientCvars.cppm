@@ -78,6 +78,9 @@ enum class GamePlayers : std::uint8_t {
 
 /// `name`'s default: the engine's name for a player, which Steam replaces with its persona's.
 inline constexpr std::string_view kDefaultPlayerName = "Player";
+/// The language a player who chose none is written to in (`cl_language`): English, the one the game's own
+/// texts are written in first.
+inline constexpr std::string_view kDefaultLanguage = "en";
 
 /// The player's own settings, which the game reads.
 struct PlayerCvars {
@@ -85,6 +88,9 @@ struct PlayerCvars {
     console::Cvar<std::string> name;
     /// `_cl_autowepswitch`: a weapon given heavier than the one held is drawn.
     console::Cvar<bool> autoWeaponSwitch;
+    /// `cl_language`: the language the game writes to the player in, by its tag ("en", "pt-BR"): one of
+    /// those the game's data has, read as the game starts.
+    console::Cvar<std::string> language;
 };
 
 /// What is heard.
