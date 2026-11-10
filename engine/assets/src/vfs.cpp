@@ -85,6 +85,7 @@ auto VfsPath::parseGoldsrc(std::string_view text) -> Result<VfsPath, VfsError> {
 
 auto Vfs::create(std::span<const std::filesystem::path> mounts) -> Result<Vfs, VfsError> {
     Vfs vfs;
+    vfs.mounted = mounts.size();
     for (std::size_t mount = 0; mount < mounts.size(); ++mount) {
         const std::filesystem::path& root = mounts[mount];
         auto listed = platform::listFiles(root);
@@ -131,6 +132,14 @@ auto Vfs::nativePath(const VfsPath& path) const -> Result<std::filesystem::path,
         return fail(VfsError::NotFound, std::format("{:?}", path.text()));
     }
     return found->second.native;
+}
+
+auto Vfs::mountOf(const VfsPath& path) const -> Result<std::size_t, VfsError> {
+    const auto found = m_files.find(path.m_key);
+    if (found == m_files.end()) {
+        return fail(VfsError::NotFound, std::format("{:?}", path.text()));
+    }
+    return found->second.mount;
 }
 
 auto Vfs::paths() const -> std::vector<VfsPath> {

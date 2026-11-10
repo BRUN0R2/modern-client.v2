@@ -63,6 +63,13 @@ struct MenuFace {
                                 MenuFontSize size, std::uint32_t screenHeight, std::string_view label)
     -> nx::Result<MenuFace, MenuPanelError>;
 
+/// How thick an outline and a rule of a menu are drawn.
+inline constexpr nx::Pixels kMenuLineThick{1};
+
+/// Draws with `painter` the edges of `rect`, kMenuLineThick thick, in `color`.
+void paintMenuOutline(nx::ui::PanelPainter& painter, const nx::ui::PixelRect& rect,
+                      nx::render::ScreenColor color);
+
 // The colors: warm white text, dark glass over the scene, and the gold that stands out.
 inline constexpr nx::render::ScreenColor kMenuInk{.red = 244, .green = 240, .blue = 231};
 inline constexpr nx::render::ScreenColor kMenuInkSoft{.red = 244, .green = 240, .blue = 231, .alpha = 168};
@@ -70,6 +77,8 @@ inline constexpr nx::render::ScreenColor kMenuInkFaint{.red = 244, .green = 240,
 inline constexpr nx::render::ScreenColor kMenuLine{.red = 255, .green = 255, .blue = 255, .alpha = 31};
 inline constexpr nx::render::ScreenColor kMenuCell{.red = 255, .green = 255, .blue = 255, .alpha = 13};
 inline constexpr nx::render::ScreenColor kMenuCellLit{.red = 255, .green = 255, .blue = 255, .alpha = 28};
+/// What a panel of a menu is filled with, over the scene or the menu's ground.
+inline constexpr nx::render::ScreenColor kMenuGlass{.red = 13, .green = 14, .blue = 16, .alpha = 199};
 /// What darkens the scene under a menu.
 inline constexpr nx::render::ScreenColor kMenuBackdrop{.red = 6, .green = 7, .blue = 9, .alpha = 184};
 inline constexpr nx::render::ScreenColor kMenuGold{.red = 242, .green = 179, .blue = 61};

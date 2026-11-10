@@ -21,22 +21,29 @@ using TextFaces = nx::EnumArray<MainMenuFont, nx::ui::TextFace>;
 constexpr ScreenColor kGround{.red = 13, .green = 14, .blue = 16};
 
 constexpr nx::EnumArray<MainMenuFont, MenuFontSize> kFontSizes{
-    nx::EnumArray<MainMenuFont, MenuFontSize>::Storage{MenuFontSize{.units = 84.0F, .isStrong = true},
-                                                       MenuFontSize{.units = 34.0F, .isStrong = true},
-                                                       MenuFontSize{.units = 18.0F, .isStrong = false}}};
+    nx::EnumArray<MainMenuFont, MenuFontSize>::Storage{
+        MenuFontSize{.units = 84.0F, .isStrong = true}, MenuFontSize{.units = 34.0F, .isStrong = true},
+        MenuFontSize{.units = 26.0F, .isStrong = false}, MenuFontSize{.units = 18.0F, .isStrong = false}}};
 
 // What it writes.
 constexpr std::string_view kGameName = "COUNTER-STRIKE";
 constexpr nx::EnumArray<MainMenuAction, std::string_view> kItemNames{
-    nx::EnumArray<MainMenuAction, std::string_view>::Storage{"RESUME GAME", "DISCONNECT", "QUIT"}};
+    nx::EnumArray<MainMenuAction, std::string_view>::Storage{"RESUME GAME", "DISCONNECT", "NEW GAME",
+                                                             "QUIT"}};
+constexpr std::string_view kMapsName = "MAP";
+constexpr std::string_view kNoMaps = "The game has no maps.";
+constexpr std::string_view kStart = "START";
+constexpr std::string_view kBack = "BACK";
 /// A key and what it does, as the menu's foot tells them.
 struct Hint {
     std::string_view key{};
     std::string_view what{};
 };
-constexpr std::array kHints{Hint{.key = "UP / DOWN", .what = "Select"},
-                            Hint{.key = "ENTER", .what = "Choose"}};
+constexpr Hint kSelectHint{.key = "UP / DOWN", .what = "Select"};
+constexpr Hint kChooseHint{.key = "ENTER", .what = "Choose"};
 constexpr Hint kResumeHint{.key = "ESC", .what = "Resume"};
+constexpr Hint kStartHint{.key = "ENTER", .what = "Start"};
+constexpr Hint kBackHint{.key = "ESC", .what = "Back"};
 
 // In the design's units: what the layout leaves to what draws in it.
 constexpr std::int32_t kRuleGap = 14;
@@ -46,8 +53,66 @@ constexpr std::int32_t kAccentBar = 4;
 constexpr std::int32_t kItemInset = 24;
 constexpr std::int32_t kHintKeyGap = 8;
 constexpr std::int32_t kHintGap = 28;
+constexpr std::int32_t kRowInset = 16;
+constexpr std::int32_t kMapsNameGap = 6; ///< From the name of the list to its first row.
 /// What the room left is divided by to put a thing halfway into it.
 constexpr std::int32_t kMiddleDivisor = 2;
+
+/// `text` in `face` in the middle of `rect`, in `color`.
+void writeInMiddle(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, std::string_view text,
+                   const nx::ui::PixelRect& rect, ScreenColor color) {
+    std::ignore =
+        painter.text(face, text,
+                     {.x = rect.x + ((rect.wide - nx::ui::widthOf(*face.atlas, text)) / kMiddleDivisor),
+                      .y = rect.y + ((rect.tall - face.atlas->lineHeight()) / kMiddleDivisor)},
+                     color);
+}
+
+/// Draws the page of a new game showing `page` by `layout` with `painter`, in `faces`.
+void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
+                  const NewGamePage& page) {
+    painter.fill(layout.page(), kMenuGlass);
+    paintMenuOutline(painter, layout.page(), kMenuLine);
+    std::ignore = painter.text(faces[MainMenuFont::Item], kItemNames[MainMenuAction::NewGame],
+                               layout.pageTitle(), kMenuInk);
+
+    const nx::ui::TextFace& hintFace = faces[MainMenuFont::Hint];
+    const nx::ui::TextFace& rowFace = faces[MainMenuFont::Row];
+    const nx::ui::PixelRect top = layout.listRow(0);
+    std::ignore = painter.text(
+        hintFace, kMapsName,
+        {.x = top.x, .y = top.y - layout.pixels(kMapsNameGap) - hintFace.atlas->lineHeight()}, kMenuInkFaint);
+    const auto rowText = [&](const nx::ui::PixelRect& rect, std::string_view text, ScreenColor color) {
+        std::ignore =
+            painter.text(rowFace, text,
+                         {.x = rect.x + layout.pixels(kRowInset),
+                          .y = rect.y + ((rect.tall - rowFace.atlas->lineHeight()) / kMiddleDivisor)},
+                         color);
+    };
+    if (page.rows.empty()) {
+        rowText(top, kNoMaps, kMenuInkFaint);
+    }
+    for (const auto& [index, name] : std::views::enumerate(page.rows)) {
+        const auto row = nx::narrow<std::size_t>(index);
+        const nx::ui::PixelRect rect = layout.listRow(row);
+        const bool isSelected = page.selectedRow == row;
+        if (isSelected) {
+            painter.fill(rect, kMenuCellLit);
+            painter.fill({.x = rect.x, .y = rect.y, .wide = layout.pixels(kAccentBar), .tall = rect.tall},
+                         kMenuGold);
+        }
+        rowText(rect, name, isSelected ? kMenuInk : kMenuInkSoft);
+    }
+    if (const std::optional<nx::ui::PixelRect> thumb = layout.listThumb(page.first, page.count)) {
+        painter.fill(*thumb, kMenuInkFaint);
+    }
+
+    paintMenuOutline(painter, layout.backButton(), kMenuLine);
+    writeInMiddle(painter, rowFace, kBack, layout.backButton(), kMenuInkSoft);
+    const bool canStart = !page.rows.empty();
+    painter.fill(layout.confirmButton(), canStart ? kMenuGold : kMenuCell);
+    writeInMiddle(painter, rowFace, kStart, layout.confirmButton(), canStart ? kOnMenuGold : kMenuInkFaint);
+}
 
 /// Draws the menu showing `frame` by `layout` with `painter`, in `faces`.
 void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
@@ -85,7 +150,14 @@ void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, cons
         pen.x = painter.text(hintFace, hint.key, pen, kMenuInkSoft) + layout.pixels(kHintKeyGap);
         pen.x = painter.text(hintFace, hint.what, pen, kMenuInkFaint) + layout.pixels(kHintGap);
     };
-    std::ranges::for_each(kHints, tell);
+    tell(kSelectHint);
+    if (frame.newGame) {
+        tell(kStartHint);
+        tell(kBackHint);
+        paintNewGame(painter, layout, faces, *frame.newGame);
+        return;
+    }
+    tell(kChooseHint);
     if (std::ranges::contains(frame.items, MainMenuAction::ResumeGame)) {
         tell(kResumeHint);
     }

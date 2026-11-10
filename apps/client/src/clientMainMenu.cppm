@@ -21,8 +21,9 @@ namespace app {
 /// by the console's commands as the original's menu does.
 class ClientMainMenu {
 public:
-    /// The menu of what `listed` lists, which must outlive it.
-    explicit ClientMainMenu(const cs::MainMenuLook& listed) noexcept;
+    /// The menu of what the main menu of `content` lists, a new game played on one of its maps; `content`
+    /// must outlive it.
+    explicit ClientMainMenu(const cs::GameContent& content);
 
     [[nodiscard]] auto isOpen() const noexcept -> bool;
     /// Opens over the map played, or over none (`game`).
@@ -31,7 +32,7 @@ public:
 
     /// What `event` does to the menu, open, while `game`, the mouse at `mouse` on a screen of `size`: the
     /// item it chooses goes back to the map played, or queues its command in `console` (`disconnect`,
-    /// `quit`), which runs it in its turn.
+    /// `quit`, `map <name>` for a new game on the map chosen), which runs it in its turn.
     void handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition mouse,
                 nx::rhi::Extent2d size, cs::MenuGame game, nx::console::Console& console);
 

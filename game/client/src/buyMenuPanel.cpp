@@ -20,9 +20,8 @@ using TextFaces = nx::EnumArray<BuyMenuFont, nx::ui::TextFace>;
 
 constexpr nx::log::Category kLog{"client"};
 
-// The colors, besides the menus' (cs.client:menuDesign): the glass of its panels, what warns, and each
-// team's accent, the Terrorists' the menus' gold.
-constexpr ScreenColor kGlass{.red = 13, .green = 14, .blue = 16, .alpha = 199};
+// The colors, besides the menus' (cs.client:menuDesign): what warns, and each team's accent, the
+// Terrorists' the menus' gold.
 constexpr ScreenColor kDanger{.red = 244, .green = 101, .blue = 79};
 constexpr ScreenColor kDangerGlass{.red = 60, .green = 22, .blue = 18, .alpha = 216};
 constexpr nx::EnumArray<Team, ScreenColor> kAccents{
@@ -96,8 +95,6 @@ constexpr std::int32_t kNoticeOverMenu = 54;
 constexpr std::int32_t kNoticeOverGame = 300;
 constexpr std::int32_t kNoticePadX = 18;
 constexpr std::int32_t kNoticePadY = 8;
-/// How thick an outline and a rule are drawn.
-constexpr nx::Pixels kLineThick{1};
 /// What the room left is divided by to put a thing halfway into it.
 constexpr std::int32_t kMiddleDivisor = 2;
 /// A padding on each side of the notice: left and right, top and bottom.
@@ -128,20 +125,8 @@ public:
 
     void fill(const nx::ui::PixelRect& rect, ScreenColor color) { painter.fill(rect, color); }
 
-    /// `rect`'s edges, kLineThick thick, in `color`.
-    void outline(const nx::ui::PixelRect& rect, ScreenColor color) {
-        const nx::Pixels side = rect.tall - (2 * kLineThick);
-        painter.fill({.x = rect.x, .y = rect.y, .wide = rect.wide, .tall = kLineThick}, color);
-        painter.fill(
-            {.x = rect.x, .y = rect.y + rect.tall - kLineThick, .wide = rect.wide, .tall = kLineThick},
-            color);
-        painter.fill({.x = rect.x, .y = rect.y + kLineThick, .wide = kLineThick, .tall = side}, color);
-        painter.fill({.x = rect.x + rect.wide - kLineThick,
-                      .y = rect.y + kLineThick,
-                      .wide = kLineThick,
-                      .tall = side},
-                     color);
-    }
+    /// `rect`'s edges in `color` (paintMenuOutline).
+    void outline(const nx::ui::PixelRect& rect, ScreenColor color) { paintMenuOutline(painter, rect, color); }
 
     /// `rect` filled with `color`, a bar in the team's accent on its left when `isLit`.
     void cell(const nx::ui::PixelRect& rect, ScreenColor color, bool isLit) {
@@ -409,7 +394,7 @@ void paintGunFacts(Paint& paint, const nx::ui::PixelRect& inner, nx::Pixels y, c
                                   kMenuInk);
     }
     y += paint.lineOf(BuyMenuFont::Caption) + paint.lineOf(BuyMenuFont::Strong) + paint.px(kStatGap);
-    paint.fill({.x = inner.x, .y = y, .wide = inner.wide, .tall = kLineThick}, kMenuLine);
+    paint.fill({.x = inner.x, .y = y, .wide = inner.wide, .tall = kMenuLineThick}, kMenuLine);
     y += paint.px(kStatGap);
     std::ignore = paint.write(BuyMenuFont::Body, gun.ammoName, inner.x, y, kMenuInkSoft);
     paint.writeEnding(BuyMenuFont::Body,
@@ -420,7 +405,7 @@ void paintGunFacts(Paint& paint, const nx::ui::PixelRect& inner, nx::Pixels y, c
 void paintDetail(Paint& paint, const BuyMenuFrame& frame) {
     const BuyMenuLayout& layout = paint.layout();
     const nx::ui::PixelRect& panel = layout.detail();
-    paint.fill(panel, kGlass);
+    paint.fill(panel, kMenuGlass);
     paint.outline(panel, kMenuLine);
     if (!frame.detail) {
         return;
@@ -479,7 +464,7 @@ void paintDetail(Paint& paint, const BuyMenuFrame& frame) {
 /// A tile of what the player carries: its name, what it says and its picture, when it has one.
 void paintTile(Paint& paint, const nx::ui::PixelRect& tile, std::string_view name, std::string_view text,
                std::string_view picture, bool isCarried) {
-    paint.fill(tile, kGlass);
+    paint.fill(tile, kMenuGlass);
     paint.outline(tile, kMenuLine);
     nx::Pixels x = tile.x + paint.px(kInsetLeft);
     if (!picture.empty()) {
@@ -521,7 +506,7 @@ void paintCarried(Paint& paint, const BuyMenuFrame& frame) {
 
     if (frame.again) {
         const nx::ui::PixelRect tile = layout.againTile();
-        paint.fill(tile, kGlass);
+        paint.fill(tile, kMenuGlass);
         paint.outline(tile, kMenuLine);
         const nx::Pixels pen =
             paint.keyBadge("R", tile.x + paint.px(kInsetLeft), tile, false) + paint.px(kTextGap);
@@ -684,7 +669,7 @@ void BuyMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const BuyM
     const ScreenColor accent = kAccents[frame.team];
     nx::ui::PanelPainter painter{quads, size};
     painter.fill({.x = bar.x, .y = bar.y, .wide = fill.whole, .tall = bar.tall}, accent);
-    painter.fill({.x = bar.x + fill.whole, .y = bar.y, .wide = kLineThick, .tall = bar.tall},
+    painter.fill({.x = bar.x + fill.whole, .y = bar.y, .wide = kMenuLineThick, .tall = bar.tall},
                  fadedBy(accent, fill.nextPixel));
 }
 

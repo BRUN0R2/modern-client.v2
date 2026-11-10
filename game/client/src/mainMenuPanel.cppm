@@ -21,6 +21,7 @@ export namespace cs {
 enum class MainMenuFont : std::uint8_t {
     Title,
     Item,
+    Row,
     Hint,
     Count,
 };

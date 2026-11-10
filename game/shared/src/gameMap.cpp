@@ -30,6 +30,9 @@ constexpr std::string_view kMapParametersClass = "info_map_parameters";
 constexpr std::int32_t kOnlyCounterTerroristsBuy = 1;
 constexpr std::int32_t kOnlyTerroristsBuy = 2;
 constexpr std::int32_t kNoOneBuys = 3;
+/// Where the game's maps are among its files, and what their files end in.
+constexpr std::string_view kMapsFolder = "maps/";
+constexpr std::string_view kMapExtension = ".bsp";
 
 } // namespace
 
@@ -122,9 +125,30 @@ auto spawnGame(const nx::assets::BspView& map, const nx::game::EntityClasses& cl
     return {};
 }
 
+auto mapNamesOf(const nx::assets::Vfs& vfs, std::size_t gameMounts) -> std::vector<std::string> {
+    const auto lowered = [](std::string_view text) {
+        return text | std::views::transform(nx::toLowerAscii) | std::ranges::to<std::string>();
+    };
+    std::vector<std::string> names;
+    for (const nx::assets::VfsPath& path : vfs.paths()) {
+        const std::string text = lowered(path.text());
+        if (!text.starts_with(kMapsFolder) || !text.ends_with(kMapExtension)) {
+            continue;
+        }
+        const std::string_view name =
+            path.text().substr(kMapsFolder.size(), text.size() - kMapsFolder.size() - kMapExtension.size());
+        // A map of the base's folders is its base game's, not the game's.
+        if (!name.contains('/') && vfs.mountOf(path).value_or(gameMounts) < gameMounts) {
+            names.emplace_back(name);
+        }
+    }
+    std::ranges::sort(names, {}, lowered);
+    return names;
+}
+
 auto GameMap::load(const nx::assets::Vfs& vfs, std::string_view name)
     -> nx::Result<std::unique_ptr<GameMap>, GameMapError> {
-    const auto path = nx::assets::VfsPath::parse(std::format("maps/{}.bsp", name));
+    const auto path = nx::assets::VfsPath::parse(std::format("{}{}{}", kMapsFolder, name, kMapExtension));
     if (!path) {
         return nx::fail(GameMapError::Unreadable, std::string{name}, path.error());
     }

@@ -22,6 +22,7 @@ enum class MainMenuLookError : std::uint8_t {
 enum class MainMenuAction : std::uint8_t {
     ResumeGame, ///< Closes the menu over the map played (the original's `ResumeGame`).
     Disconnect, ///< Leaves the map played (`Disconnect`).
+    NewGame,    ///< Plays a map of the game's, chosen on its page (`OpenCreateMultiplayerGameDialog`).
     Quit,       ///< Ends the client (`Quit`).
     Count,
 };

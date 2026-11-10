@@ -9,9 +9,9 @@ id = "cstrikeOriginal"
 isRedistributable = false        # never sent to clients; they need their own copy
 steamAppId = 10                  # Counter-Strike on Steam
 steamInstallFolder = "Half-Life" # Steam names the folder after the base game of CS 1.6
-# Directories of the installation, mounted in this order, highest priority first: valve/ holds the
-# base files CS 1.6 itself loads (halflife.wad, decals.wad), nothing of Half-Life as a game
-# (ADR-0017).
+# Directories of the installation, mounted in this order, highest priority first: the game's own, then
+# its base. valve/ holds the base files CS 1.6 itself loads (halflife.wad, decals.wad), nothing of
+# Half-Life as a game (ADR-0017): its maps are not listed among the game's.
 mounts = ["cstrike", "valve"]
 
 # Files that must exist, as <mount>/<logical path>, whatever the case of their letters. A missing
