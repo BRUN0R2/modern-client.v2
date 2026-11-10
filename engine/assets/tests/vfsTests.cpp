@@ -133,6 +133,13 @@ TEST(VfsTest, ListsEveryPathOnceAsItsMountSpellsIt) {
                        std::ranges::to<std::vector>();
     EXPECT_EQ(texts, (std::vector<std::string>{"maps/de_dust2.bsp", "Sound/Radio/Go.wav"}));
 
+    EXPECT_EQ(vfs.mountCount(), 2U);
+    EXPECT_EQ(vfs.mountOf(pathOf("sound/radio/go.wav")), 0U) << "read from the mount of the highest priority";
+    EXPECT_EQ(vfs.mountOf(pathOf("maps/de_dust2.bsp")), 1U);
+    const auto unmounted = vfs.mountOf(pathOf("maps/de_nuke.bsp"));
+    ASSERT_FALSE(unmounted.has_value());
+    EXPECT_EQ(unmounted.error().code, VfsError::NotFound);
+
     const auto native = vfs.nativePath(pathOf("sound/radio/go.wav"));
     ASSERT_TRUE(native.has_value()) << nx::describe(native.error());
     EXPECT_EQ(*native, addons.path() / "Sound/Radio/Go.wav");

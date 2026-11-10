@@ -145,4 +145,9 @@ private:
     std::vector<std::optional<nx::assets::SurfaceExtent>> m_surfaceExtents; ///< By face.
 };
 
+/// The names of the game's maps among the files of `vfs`: those of the maps/<name>.bsp read from its first
+/// `gameMounts` mounts, the game's own (GameContent::gameMounts), the folders under maps/ left aside, in the
+/// order of the alphabet whatever the case of their letters. GameMap::load plays each.
+[[nodiscard]] auto mapNamesOf(const nx::assets::Vfs& vfs, std::size_t gameMounts) -> std::vector<std::string>;
+
 } // namespace cs

@@ -120,12 +120,18 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
         nx::log::info(kLog, "the user's own content: {}", nx::platform::toUtf8(*addons));
         mounts.push_back(*addons);
     }
+    // The game's own: the user's content, and the first of the installation's folders, over its base.
+    const std::size_t gameMounts = mounts.size() + std::min<std::size_t>(installation->mounts().size(), 1);
     std::ranges::copy(installation->mounts(), std::back_inserter(mounts));
     auto vfs = nx::assets::Vfs::create(mounts);
     if (!vfs) {
         return nx::fail(GameContentError::Unavailable, std::move(vfs.error()));
     }
-    return readGameContent(data, std::move(*vfs));
+    auto content = readGameContent(data, std::move(*vfs));
+    if (content) {
+        content->gameMounts = gameMounts;
+    }
+    return content;
 }
 
 auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
@@ -206,7 +212,9 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
         return std::unexpected{std::move(stepIndicator.error())};
     }
     TextureMaterials materials = readTextureMaterials(vfs);
+    const std::size_t gameMounts = vfs.mountCount();
     return GameContent{.vfs = std::move(vfs),
+                       .gameMounts = gameMounts,
                        .entityClasses = std::move(*classes),
                        .weapons = std::move(*weapons),
                        .loadouts = std::move(*loadouts),

@@ -88,7 +88,7 @@ installation, the result is `ContentError::InstallNotFound`. The app number and 
 `data/content/goldsrcCstrike.toml` (`steamAppId`, `steamInstallFolder`).
 
 **Validation** (`nx::assets::GoldsrcInstall::open`) checks the installation against
-`data/content/goldsrcCstrike.toml`: its mounts (`cstrike`, then `valve`) and its essential
+`data/content/goldsrcCstrike.toml`: its mounts (`cstrike`, the game's own, then `valve`, its base, whose files it reads and whose maps are not its own: `cs::GameContent::gameMounts`) and its essential
 files, written `<mount>/<logical path>` (`cstrike/liblist.gam`, `valve/halflife.wad`, player
 models, `cstrike/sprites/hud.txt`, official maps), each found in the mount it names whatever
 the case of its letters. A missing mount yields `ContentError::InstallNotFound`; missing files

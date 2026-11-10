@@ -5,7 +5,7 @@
 # project's own, as the original's resource/GameMenu.res lists its menu's.
 # `font` is what it writes in, of the project's own fonts (data/fonts/): `regular` for its text, `strong` for
 # what stands out. `items` are its items from the top: `action`, what the item does (`resumeGame`, `disconnect`,
-# `quit`), none twice; and `listed`, when the menu lists it: `always`, or `inGame` for over a map played alone.
+# `newGame`, `quit`), none twice; and `listed`, when the menu lists it: `always`, or `inGame` for over a map played alone.
 
 font = { regular = "Barlow", strong = "Barlow SemiBold" }
 
@@ -16,6 +16,10 @@ listed = "inGame"
 [[items]]
 action = "disconnect"
 listed = "inGame"
+
+[[items]]
+action = "newGame"
+listed = "always"
 
 [[items]]
 action = "quit"

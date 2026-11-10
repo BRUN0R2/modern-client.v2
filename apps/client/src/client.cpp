@@ -328,7 +328,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = buyMenu->registerCommands(m_console, m_content->weapons); !registered) {
         return registered;
     }
-    mainMenu.emplace(m_content->mainMenu);
+    mainMenu.emplace(*m_content);
     if (auto registered = registerZombieCommands(m_console, *m_content, dataFolder, *m_jobs,
                                                  [this] { return playedSession(); });
         !registered) {

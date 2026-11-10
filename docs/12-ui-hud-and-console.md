@@ -413,7 +413,7 @@ Without the historical limits on text channels and message size:
 project's own look. Its items are data, `data/cstrike/mainMenu.toml`, as the original lists its menu's in
 `resource/GameMenu.res`: what each does (`action`) and when the menu lists it (`listed`: `always`, or `inGame` for
 over a map played alone), from the top. Today it lists going back to the map played and leaving it, both over a map
-alone, and ending the game; the new game, the options and the server browser come with what they open. It shows
+alone, a new game, and ending the game; the options and the server browser come with what they open. It shows
 the game's name at the top left and the items down the left, the last a fixed way over the screen's foot, where
 the original's menu stands, with the keys under them: over the whole screen while no map is played, over the scene
 darkened while one is, which plays on under it, as a game of more than one player does.
@@ -425,6 +425,16 @@ bound to that key, as in the original, the keys held for the game let go and the
 `toggleconsole` open the console's window over it; the other keys run no bind while it is open. An item does what
 the console's command does, queued as a bind queues its own (`app.client:mainMenu`): `disconnect`, `quit`. The
 fonts it writes in are the project's own; a client that cannot have them does not start.
+
+An item that has more to ask opens a page beside the items, where the original opens a window: as tall as from the
+game's name to the last item's foot, with what it is for on a button at its foot and another that goes back. **A
+new game** lists the game's maps, the `maps/<name>.bsp` of its own folders (`cs::mapNamesOf`: the user's content
+and the installation's `cstrike/`, not those of its base, `valve/`), in the order of the alphabet: Up, Down, Page Up, Page Down, Home and End select one, the list following it; the wheel scrolls the list,
+three rows a notch, and a thumb down its right shows how far; the mouse selects the map it is pressed on. Enter, or
+`START`, plays the map selected by the console's `map <name>`, a map the console could not be told of left out;
+Escape, or `BACK`, goes back to the items, and another item chosen leaves the page. The map loads as the command
+runs, the frame held meanwhile, and one that cannot be loaded is told on the console alone: a loading screen comes
+with the rest of what a new game sets.
 
 **The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, made as
 large as the screen (`MenuScale`); the sizes of text made of the families a menu's data names for that height

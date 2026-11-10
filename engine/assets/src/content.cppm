@@ -27,11 +27,13 @@ enum class ContentError : std::uint8_t {
 /// data/content/goldsrcCstrike.toml: the Counter-Strike 1.6 installation as a content source.
 /// Only names: no Valve asset is part of the repository (ADR-0015).
 struct GoldsrcInstallDesc {
-    std::string id;                          ///< Names the source to servers and clients.
-    bool isRedistributable = false;          ///< Whether servers may send its files to clients.
-    std::uint32_t steamAppId = 0;            ///< The Steam application that installs it.
-    std::string steamInstallFolder;          ///< Its folder under steamapps/common.
-    std::vector<std::string> mounts;         ///< Directories of the installation, highest priority first.
+    std::string id;                 ///< Names the source to servers and clients.
+    bool isRedistributable = false; ///< Whether servers may send its files to clients.
+    std::uint32_t steamAppId = 0;   ///< The Steam application that installs it.
+    std::string steamInstallFolder; ///< Its folder under steamapps/common.
+    /// Directories of the installation, highest priority first: the game's own, then those of its base,
+    /// whose files it reads and whose maps are not its own.
+    std::vector<std::string> mounts;
     std::vector<std::string> essentialFiles; ///< `<mount>/<logical path>` of each file it must have.
 };
 

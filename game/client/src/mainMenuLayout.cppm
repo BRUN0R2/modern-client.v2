@@ -4,7 +4,7 @@
 /// Where the main menu's parts go on a screen (docs/12-ui-hud-and-console.md, section 4): what its mouse
 /// reaches and what draws it read one layout, the menus' design (cs.client:menuDesign) on the screen, the
 /// game's name at its top left and the items down its left, the last a fixed way over its foot, where the
-/// original lists its menu's.
+/// original lists its menu's; and beside them the page an item opens, where the original opens a window.
 export module cs.client:mainMenuLayout;
 
 import std;
@@ -38,6 +38,26 @@ public:
     /// Where the keys are told: their line's top left.
     [[nodiscard]] inline auto hints() const noexcept -> const nx::ui::PixelPoint& { return hintsPoint; }
 
+    /// The page an item opens, beside the items: as tall as from the game's name to the last item's foot,
+    /// no wider than the screen leaves it.
+    [[nodiscard]] inline auto page() const noexcept -> const nx::ui::PixelRect& { return pageRect; }
+    /// Where the page's name is written: its line's top left.
+    [[nodiscard]] auto pageTitle() const noexcept -> nx::ui::PixelPoint;
+    /// How many rows of a list the page shows at once, one at least.
+    [[nodiscard]] auto listRows() const noexcept -> std::size_t;
+    /// The row at `row` of those the page's list shows, from the top.
+    [[nodiscard]] auto listRow(std::size_t row) const noexcept -> nx::ui::PixelRect;
+    /// The row of the list the point at `x`, `y` is over (as itemAt); none when it is over none.
+    [[nodiscard]] auto listRowAt(float x, float y) const noexcept -> std::optional<std::size_t>;
+    /// What shows how far the list is scrolled, down its right: the part of its track that stands for the
+    /// rows shown, from `first`, of `count`; none when the list shows them all.
+    [[nodiscard]] auto listThumb(std::size_t first, std::size_t count) const noexcept
+        -> std::optional<nx::ui::PixelRect>;
+    /// What does what the page is for, at its foot on the right.
+    [[nodiscard]] auto confirmButton() const noexcept -> nx::ui::PixelRect;
+    /// What goes back to the items, before it.
+    [[nodiscard]] auto backButton() const noexcept -> nx::ui::PixelRect;
+
 private:
     MenuScale scale;
     std::size_t itemCount = 0;
@@ -45,6 +65,7 @@ private:
     nx::ui::PixelPoint titlePoint{};
     nx::ui::PixelRect firstItem{};
     nx::ui::PixelPoint hintsPoint{};
+    nx::ui::PixelRect pageRect{};
 };
 
 } // namespace cs

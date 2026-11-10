@@ -3,7 +3,8 @@
 
 // A map as the game plays it: the spawn points of each team and the team a player first stands with,
 // what its rounds are played for, where and whether its players buy, its hostages as the game reads them,
-// and the map read whole, the BSP seed of the fuzz corpus given other entities.
+// the map read whole, the BSP seed of the fuzz corpus given other entities, and the names of the maps
+// among the game's files.
 
 #include <gtest/gtest.h>
 
@@ -16,6 +17,7 @@ import nx.game;
 import cs.shared;
 
 #include "boxMap.hpp"
+#include "temporaryDirectory.hpp"
 
 namespace {
 
@@ -210,6 +212,24 @@ TEST(GameMapTest, ATextureOfNoMaterialIsConcrete) {
     EXPECT_EQ(map->materialAlong(cs::TextureMaterials{}, nx::assets::kWorldModel,
                                  {.x = 32.0F, .y = 32.0F, .z = 32.0F}, {.x = 32.0F, .y = 32.0F, .z = -32.0F}),
               cs::TextureMaterial::Concrete);
+}
+
+TEST(MapNamesTest, AreThoseOfTheMapsFilesInTheOrderOfTheAlphabet) {
+    const nx::test::TemporaryDirectory files;
+    for (const std::string_view file :
+         {"maps/de_dust2.bsp", "maps/cs_italy.BSP", "maps/De_aztec.bsp", "maps/de_dust2.txt",
+          "maps/graphs/de_old.bsp", "models/maps/x.bsp", "de_root.bsp"}) {
+        files.write(file, "");
+    }
+    const nx::test::TemporaryDirectory base;
+    base.write("maps/c1a0.bsp", "");
+    base.write("maps/de_dust2.bsp", "");
+    const auto vfs = nx::assets::Vfs::create(std::array{files.path(), base.path()});
+    ASSERT_TRUE(vfs.has_value()) << (vfs ? "" : nx::describe(vfs.error()));
+    EXPECT_EQ(cs::mapNamesOf(*vfs, 1), (std::vector<std::string>{"cs_italy", "De_aztec", "de_dust2"}))
+        << "the maps of the game's own maps/ alone, as their files spell them, whatever their letters' case";
+    EXPECT_EQ(cs::mapNamesOf(*vfs, 2).size(), 4U) << "every mount the game's own";
+    EXPECT_TRUE(cs::mapNamesOf(*vfs, 0).empty());
 }
 
 } // namespace

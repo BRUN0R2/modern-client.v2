@@ -32,6 +32,22 @@ auto MenuScale::pixels(std::int32_t units) const noexcept -> nx::Pixels {
                : nx::Pixels{};
 }
 
+void paintMenuOutline(nx::ui::PanelPainter& painter, const nx::ui::PixelRect& rect,
+                      nx::render::ScreenColor color) {
+    constexpr std::int32_t kEdgesAcross = 2; // the top and the bottom, which the sides stand between
+    const nx::Pixels side = rect.tall - (kEdgesAcross * kMenuLineThick);
+    painter.fill({.x = rect.x, .y = rect.y, .wide = rect.wide, .tall = kMenuLineThick}, color);
+    painter.fill(
+        {.x = rect.x, .y = rect.y + rect.tall - kMenuLineThick, .wide = rect.wide, .tall = kMenuLineThick},
+        color);
+    painter.fill({.x = rect.x, .y = rect.y + kMenuLineThick, .wide = kMenuLineThick, .tall = side}, color);
+    painter.fill({.x = rect.x + rect.wide - kMenuLineThick,
+                  .y = rect.y + kMenuLineThick,
+                  .wide = kMenuLineThick,
+                  .tall = side},
+                 color);
+}
+
 auto makeMenuFace(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
                   nx::rhi::CommandList& commands, const MenuFontFamilies& families, MenuFontSize size,
                   std::uint32_t screenHeight, std::string_view label)

@@ -97,6 +97,13 @@ public:
     /// The path of every file, as its mount spells it, in the order of their lookup keys.
     [[nodiscard]] auto paths() const -> std::vector<VfsPath>;
 
+    /// How many mounts it was made of.
+    [[nodiscard]] inline auto mountCount() const noexcept -> std::size_t { return mounted; }
+
+    /// The mount the file at `path` is read from, by its place in their order: 0 for the one of the
+    /// highest priority. Errors: NotFound.
+    [[nodiscard]] auto mountOf(const VfsPath& path) const -> Result<std::size_t, VfsError>;
+
     /// The native file `path` resolves to, for diagnostics: content is read with readAll.
     /// Errors: NotFound.
     [[nodiscard]] auto nativePath(const VfsPath& path) const -> Result<std::filesystem::path, VfsError>;
@@ -111,6 +118,7 @@ private:
     Vfs() = default;
 
     std::unordered_map<std::string, File> m_files; // by VfsPath key
+    std::size_t mounted = 0;
 };
 
 } // namespace nx::assets
