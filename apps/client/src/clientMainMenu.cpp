@@ -44,6 +44,10 @@ auto ClientMainMenu::isOpen() const noexcept -> bool {
     return menu.isOpen();
 }
 
+auto ClientMainMenu::takesEveryKey() const noexcept -> bool {
+    return menu.takesEveryKey();
+}
+
 void ClientMainMenu::open(cs::MenuGame game) {
     menu.open(game);
 }

@@ -137,4 +137,27 @@ TEST(KeysTest, EveryNameReadsBackAsItsKey) {
     EXPECT_EQ(named, std::size_t{92 + 91}) << "the printable characters but \" and ;, and the 91 names";
 }
 
+TEST(KeysTest, AnEventPressesTheKeyItNames) {
+    using nx::platform::KeyChanged;
+    using nx::platform::MouseButtonChanged;
+    using nx::platform::MouseWheelMoved;
+    using nx::settings::KeyMapping;
+    using nx::settings::pressedKeyOf;
+    const auto pressed = [](const nx::platform::WindowEvent& event) {
+        return pressedKeyOf(event, KeyMapping::Scancode);
+    };
+    EXPECT_EQ(pressed(KeyChanged{.key = Key::Space, .isDown = true}), keyNamed("SPACE"));
+    EXPECT_EQ(pressed(KeyChanged{.key = Key::Space, .isDown = false}), std::nullopt) << "coming up";
+    EXPECT_EQ(pressed(KeyChanged{.key = Key::Space, .isDown = true, .isRepeat = true}), std::nullopt)
+        << "the system's repeat";
+    EXPECT_EQ(pressed(KeyChanged{.key = Key::PrintScreen, .isDown = true}), std::nullopt)
+        << "a key the original has no number for";
+    EXPECT_EQ(pressed(MouseButtonChanged{.button = MouseButton::Right, .isDown = true}), keyNamed("MOUSE2"));
+    EXPECT_EQ(pressed(MouseButtonChanged{.button = MouseButton::Right, .isDown = false}), std::nullopt);
+    EXPECT_EQ(pressed(MouseWheelMoved{.dy = 1.0F}), nx::settings::kWheelUp);
+    EXPECT_EQ(pressed(MouseWheelMoved{.dy = -0.25F}), nx::settings::kWheelDown);
+    EXPECT_EQ(pressed(MouseWheelMoved{.dy = 0.0F}), std::nullopt);
+    EXPECT_EQ(pressed(nx::platform::MouseMoved{}), std::nullopt);
+}
+
 } // namespace

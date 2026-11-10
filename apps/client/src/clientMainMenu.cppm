@@ -28,6 +28,9 @@ public:
                    std::vector<cs::OptionRow> settings);
 
     [[nodiscard]] auto isOpen() const noexcept -> bool;
+    /// Whether every key is the menu's, the one that opens the console among them
+    /// (cs::MainMenu::takesEveryKey).
+    [[nodiscard]] auto takesEveryKey() const noexcept -> bool;
     /// Opens over the map played, or over none (`game`).
     void open(cs::MenuGame game);
     void close() noexcept;

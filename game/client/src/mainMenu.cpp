@@ -58,6 +58,9 @@ auto MainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mous
         return std::nullopt;
     }
     if (const auto* const wheel = std::get_if<nx::platform::MouseWheelMoved>(&event)) {
+        if (page == Page::Options) {
+            leaveOptionsIf(options.handle(event, cursor, layout));
+        }
         if (page == Page::NewGame) {
             // Away from the user scrolls up, as a list does.
             scrollMaps(-static_cast<std::ptrdiff_t>(std::lround(wheel->dy * kRowsANotch)), layout.listRows());
@@ -66,7 +69,7 @@ auto MainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mous
     }
     if (const auto* const button = std::get_if<nx::platform::MouseButtonChanged>(&event)) {
         const bool isPress = button->isDown && button->button == nx::platform::MouseButton::Left;
-        if (isPress && layout.itemAt(cursor.x, cursor.y)) {
+        if (isPress && layout.itemAt(cursor.x, cursor.y) && !takesEveryKey()) {
             return click(cursor, layout, items);
         }
         if (page == Page::Options) {
@@ -252,7 +255,7 @@ auto MainMenu::frameOf(MenuGame game, nx::rhi::Extent2d size) const -> MainMenuF
         frame.newGame = std::move(shownMaps);
     }
     if (page == Page::Options) {
-        frame.options = options.frame();
+        frame.options = options.frame(MainMenuLayout{size, frame.items.size()}.listRows());
     }
     return frame;
 }

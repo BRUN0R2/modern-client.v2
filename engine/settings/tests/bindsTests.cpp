@@ -84,6 +84,32 @@ TEST(BindsTest, BindAndUnbindSetWhatKeysRun) {
     }
 }
 
+TEST(BindsTest, AnActionKeepsTwoKeysAsTheOriginalsOptionsDo) {
+    nx::settings::KeyBindings bindings;
+    EXPECT_TRUE(bindings.keysOf("+jump").empty());
+    bindings.give(named("SPACE"), "+jump");
+    bindings.give(named("MOUSE2"), "+jump");
+    EXPECT_EQ(bindings.keysOf("+jump"), (std::vector{named("SPACE"), named("MOUSE2")}))
+        << "by their numbers from the lowest";
+    bindings.give(named("SPACE"), "+jump");
+    EXPECT_EQ(bindings.keysOf("+jump").size(), 2U) << "a key it has already changes nothing";
+
+    bindings.give(named("j"), "+jump");
+    EXPECT_EQ(bindings.keysOf("+jump"), std::vector{named("j")}) << "a third takes the place of both";
+    EXPECT_EQ(bindings.commandOf(named("SPACE")), "");
+
+    bindings.bind(named("w"), "+forward");
+    bindings.give(named("w"), "+jump");
+    EXPECT_EQ(bindings.commandOf(named("w")), "+jump") << "the key no longer runs what it ran";
+    EXPECT_TRUE(bindings.keysOf("+forward").empty());
+
+    bindings.bind(named("k"), "+jump; wait");
+    bindings.release("+jump");
+    EXPECT_TRUE(bindings.keysOf("+jump").empty());
+    EXPECT_EQ(bindings.commandOf(named("k")), "+jump; wait") << "a key that runs more is another's";
+    EXPECT_TRUE(bindings.keysOf("").empty()) << "the keys that run nothing are no action's";
+}
+
 TEST(BindsTest, AWrongBindChangesNothing) {
     Keys keys;
     keys.run("bind; bind SPACEBAR +jump; bind x say\"quoted\"; unbind; unbind w s; unbind SPACEBAR");

@@ -15,6 +15,11 @@ export namespace nx {
     return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
 }
 
+/// `character` as a capital when it is an ASCII small letter; any other byte unchanged.
+[[nodiscard]] constexpr auto toUpperAscii(char character) noexcept -> char {
+    return character >= 'a' && character <= 'z' ? static_cast<char>(character - 'a' + 'A') : character;
+}
+
 /// The ASCII characters, from 0 to 127; DEL, the last, a control character.
 inline constexpr std::size_t kAsciiCount = 128;
 inline constexpr char kAsciiDelete = '\x7F';

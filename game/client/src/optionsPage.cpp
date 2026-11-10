@@ -13,6 +13,12 @@ namespace cs {
 
 namespace {
 
+static_assert(nx::EnumArray<OptionCategory, bool>::size() == kPageTabs,
+              "a tab of the page for each category");
+
+/// How many rows of the list a notch of the wheel scrolls.
+constexpr float kRowsANotch = 3.0F;
+
 /// The value of `slider` nearest `value` that is a whole number of its steps from its least, within its
 /// range.
 [[nodiscard]] auto steppedValueOf(const OptionSlider& slider, float value) noexcept -> float {
@@ -25,17 +31,23 @@ namespace {
     return std::clamp((value - slider.minimum) / (slider.maximum - slider.minimum), 0.0F, 1.0F);
 }
 
-[[nodiscard]] auto shownOf(const OptionRow& row) -> ShownOption {
+/// How `row` shows, waiting for its key or not.
+[[nodiscard]] auto shownOf(const OptionRow& row, bool isWaited) -> ShownOption {
     if (const auto* const slider = std::get_if<OptionSlider>(&row.control)) {
         const float value = slider->value();
         return {.name = row.name,
                 .control =
                     ShownSlider{.value = value, .style = slider->style, .share = shareOf(*slider, value)}};
     }
+    if (const auto* const keys = std::get_if<OptionKeys>(&row.control)) {
+        return {.name = row.name, .control = ShownKeys{.keys = keys->keys(), .isWaited = isWaited}};
+    }
     return {.name = row.name, .control = ShownSwitch{.isOn = std::get<OptionSwitch>(row.control).isOn()}};
 }
 
 } // namespace
+
+ShownOption::~ShownOption() = default;
 
 auto sliderText(const ShownSlider& slider) -> std::string {
     constexpr float kPercentsOfOne = 100.0F;
@@ -53,9 +65,15 @@ auto sliderText(const ShownSlider& slider) -> std::string {
 OptionsPage::OptionsPage(std::vector<OptionRow> listed) noexcept : rows{std::move(listed)} {}
 
 void OptionsPage::open() noexcept {
-    category = OptionCategory::Mouse;
-    selectedRow.reset();
+    show(OptionCategory::Mouse);
+}
+
+void OptionsPage::show(OptionCategory tab) noexcept {
+    category = tab;
+    selected.reset();
+    firstShown = 0;
     draggedRow.reset();
+    waitingRow.reset();
 }
 
 auto OptionsPage::shownRows() const -> std::vector<const OptionRow*> {
@@ -63,25 +81,56 @@ auto OptionsPage::shownRows() const -> std::vector<const OptionRow*> {
            std::views::transform([](const OptionRow& row) { return &row; }) | std::ranges::to<std::vector>();
 }
 
-auto OptionsPage::frame() const -> OptionsFrame {
-    OptionsFrame shown{.category = category, .selectedRow = selectedRow};
-    for (const OptionRow* const row : shownRows()) {
-        shown.rows.push_back(shownOf(*row));
+auto OptionsPage::firstShownOf(std::size_t listRows) const -> std::size_t {
+    const std::size_t count = shownRows().size();
+    return std::min(firstShown, count - std::min(count, listRows));
+}
+
+auto OptionsPage::frame(std::size_t listRows) const -> OptionsFrame {
+    const std::vector<const OptionRow*> all = shownRows();
+    const std::size_t first = firstShownOf(listRows);
+    OptionsFrame shown{.category = category, .first = first, .count = all.size()};
+    for (std::size_t index = first; index < std::min(all.size(), first + listRows); ++index) {
+        shown.rows.push_back(shownOf(*all[index], waitingRow == index));
+    }
+    if (selected && *selected >= first && *selected < first + shown.rows.size()) {
+        shown.selectedRow = *selected - first;
     }
     return shown;
 }
 
+void OptionsPage::select(std::size_t index, std::size_t listRows) noexcept {
+    selected = index;
+    if (index < firstShown) {
+        firstShown = index;
+    } else if (index >= firstShown + listRows) {
+        firstShown = index + 1 - listRows;
+    }
+}
+
 void OptionsPage::change(std::int32_t steps) {
-    const std::vector<const OptionRow*> shown = shownRows();
-    if (!selectedRow || *selectedRow >= shown.size()) {
+    const std::vector<const OptionRow*> all = shownRows();
+    if (!selected || *selected >= all.size()) {
         return;
     }
-    const OptionRow& row = *shown[*selectedRow];
+    const OptionRow& row = *all[*selected];
     if (const auto* const slider = std::get_if<OptionSlider>(&row.control)) {
         slider->set(steppedValueOf(*slider, slider->value() + (static_cast<float>(steps) * slider->step)));
-    } else {
-        const OptionSwitch& toggled = std::get<OptionSwitch>(row.control);
-        toggled.set(!toggled.isOn());
+    } else if (const auto* const toggled = std::get_if<OptionSwitch>(&row.control)) {
+        toggled->set(!toggled->isOn());
+    }
+}
+
+void OptionsPage::activate() {
+    const std::vector<const OptionRow*> all = shownRows();
+    if (!selected || *selected >= all.size()) {
+        return;
+    }
+    const OptionControl& control = all[*selected]->control;
+    if (std::holds_alternative<OptionKeys>(control)) {
+        waitingRow = selected;
+    } else if (std::holds_alternative<OptionSwitch>(control)) {
+        change(1);
     }
 }
 
@@ -92,17 +141,40 @@ void OptionsPage::drag(const OptionSlider& slider, const nx::ui::PixelRect& trac
     slider.set(steppedValueOf(slider, slider.minimum + (share * (slider.maximum - slider.minimum))));
 }
 
+void OptionsPage::giveKey(const nx::platform::WindowEvent& event) {
+    const std::vector<const OptionRow*> all = shownRows();
+    const auto* const key = std::get_if<nx::platform::KeyChanged>(&event);
+    const bool isLeft = key != nullptr && key->isDown && key->key == nx::platform::Key::Escape;
+    if (isLeft || *waitingRow >= all.size() || std::get<OptionKeys>(all[*waitingRow]->control).bind(event)) {
+        waitingRow.reset();
+    }
+}
+
 auto OptionsPage::handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                          const MainMenuLayout& layout) -> OptionsOutcome {
-    const std::vector<const OptionRow*> shown = shownRows();
+    if (waitingRow) {
+        giveKey(event);
+        return OptionsOutcome::Stays;
+    }
+    const std::vector<const OptionRow*> all = shownRows();
+    const std::size_t listRows = layout.listRows();
+    const std::size_t first = firstShownOf(listRows);
     if (std::holds_alternative<nx::platform::MouseMoved>(event)) {
-        if (draggedRow && *draggedRow < shown.size()) {
-            drag(std::get<OptionSlider>(shown[*draggedRow]->control), layout.optionTrack(*draggedRow),
+        if (draggedRow && *draggedRow >= first && *draggedRow < all.size()) {
+            drag(std::get<OptionSlider>(all[*draggedRow]->control), layout.optionTrack(*draggedRow - first),
                  cursor.x);
         } else if (const std::optional<std::size_t> row = layout.listRowAt(cursor.x, cursor.y);
-                   row && *row < shown.size()) {
-            selectedRow = row;
+                   row && first + *row < all.size()) {
+            selected = first + *row;
         }
+        return OptionsOutcome::Stays;
+    }
+    if (const auto* const wheel = std::get_if<nx::platform::MouseWheelMoved>(&event)) {
+        // Away from the user scrolls up, as a list does.
+        const auto last = static_cast<std::ptrdiff_t>(all.size() - std::min(all.size(), listRows));
+        const auto by = -static_cast<std::ptrdiff_t>(std::lround(wheel->dy * kRowsANotch));
+        firstShown = static_cast<std::size_t>(
+            std::clamp(static_cast<std::ptrdiff_t>(first) + by, std::ptrdiff_t{0}, last));
         return OptionsOutcome::Stays;
     }
     if (const auto* const button = std::get_if<nx::platform::MouseButtonChanged>(&event)) {
@@ -116,7 +188,7 @@ auto OptionsPage::handle(const nx::platform::WindowEvent& event, nx::platform::M
         return click(cursor, layout);
     }
     const auto* const key = std::get_if<nx::platform::KeyChanged>(&event);
-    return key != nullptr && key->isDown ? press(*key) : OptionsOutcome::Stays;
+    return key != nullptr && key->isDown ? press(*key, listRows) : OptionsOutcome::Stays;
 }
 
 auto OptionsPage::click(nx::platform::MousePosition cursor, const MainMenuLayout& layout) -> OptionsOutcome {
@@ -125,63 +197,74 @@ auto OptionsPage::click(nx::platform::MousePosition cursor, const MainMenuLayout
     }
     for (const OptionCategory tab : nx::EnumArray<OptionCategory, bool>::keys()) {
         if (layout.optionTab(static_cast<std::size_t>(std::to_underlying(tab))).holds(cursor.x, cursor.y)) {
-            category = tab;
-            selectedRow.reset();
+            show(tab);
             return OptionsOutcome::Stays;
         }
     }
-    const std::vector<const OptionRow*> shown = shownRows();
+    const std::vector<const OptionRow*> all = shownRows();
+    const std::size_t first = firstShownOf(layout.listRows());
     const std::optional<std::size_t> row = layout.listRowAt(cursor.x, cursor.y);
-    if (!row || *row >= shown.size()) {
+    if (!row || first + *row >= all.size()) {
         return OptionsOutcome::Stays;
     }
-    selectedRow = row;
-    if (const auto* const slider = std::get_if<OptionSlider>(&shown[*row]->control)) {
+    selected = first + *row;
+    if (const auto* const slider = std::get_if<OptionSlider>(&all[*selected]->control)) {
         const nx::ui::PixelRect track = layout.optionTrack(*row);
         if (cursor.x >= static_cast<float>(track.x.value())) {
             drag(*slider, track, cursor.x);
-            draggedRow = row;
+            draggedRow = selected;
         }
     } else {
-        change(1);
+        activate();
     }
     return OptionsOutcome::Stays;
 }
 
-auto OptionsPage::press(const nx::platform::KeyChanged& key) -> OptionsOutcome {
+auto OptionsPage::press(const nx::platform::KeyChanged& key, std::size_t listRows) -> OptionsOutcome {
     using nx::platform::Key;
-    const std::size_t count = shownRows().size();
+    const std::vector<const OptionRow*> all = shownRows();
     constexpr auto kTabs = nx::EnumArray<OptionCategory, bool>::size();
     const auto tab = static_cast<std::size_t>(std::to_underlying(category));
     switch (key.key) {
     case Key::Up:
-        // The tabs are above the first row.
-        selectedRow = selectedRow && *selectedRow > 0 ? std::optional{*selectedRow - 1} : std::nullopt;
+        // The tabs are above the first setting.
+        if (selected && *selected > 0) {
+            select(*selected - 1, listRows);
+        } else {
+            selected.reset();
+        }
         break;
     case Key::Down:
-        if (count > 0) {
-            selectedRow = selectedRow ? std::min(*selectedRow + 1, count - 1) : 0;
+        if (!all.empty()) {
+            select(selected ? std::min(*selected + 1, all.size() - 1) : 0, listRows);
         }
         break;
     case Key::Left:
-        if (selectedRow) {
+        if (selected) {
             change(-1);
         } else {
-            category = static_cast<OptionCategory>(tab - std::min<std::size_t>(tab, 1));
+            show(static_cast<OptionCategory>(tab - std::min<std::size_t>(tab, 1)));
         }
         break;
     case Key::Right:
-        if (selectedRow) {
+        if (selected) {
             change(1);
         } else {
-            category = static_cast<OptionCategory>(std::min(tab + 1, kTabs - 1));
+            show(static_cast<OptionCategory>(std::min(tab + 1, kTabs - 1)));
         }
         break;
     case Key::Enter:
     case Key::KeypadEnter:
-        if (!key.isRepeat && selectedRow && *selectedRow < count &&
-            std::holds_alternative<OptionSwitch>(shownRows()[*selectedRow]->control)) {
-            change(1);
+        if (!key.isRepeat) {
+            activate();
+        }
+        break;
+    case Key::Delete:
+    case Key::Backspace:
+        if (selected && *selected < all.size()) {
+            if (const auto* const keys = std::get_if<OptionKeys>(&all[*selected]->control)) {
+                keys->clear();
+            }
         }
         break;
     case Key::Escape:
