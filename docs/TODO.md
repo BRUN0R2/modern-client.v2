@@ -589,7 +589,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] Options and server browser
 - [ ] Complete console (history, autocomplete, suggestions): the window over `nx.console`; its history, completions and suggestions are in `nx.console` ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module))
 - [x] Binds with the original key names (`nx.settings`, above)
-- [ ] Localization with typed keys
+- [x] Localization with typed keys ([12 §7](12-ui-hud-and-console.md#7-localization), [ADR-0035](adr/0035-texts-as-typed-data.md)): a text is a field of `cs::Texts`, a language a file of `data/cstrike/locale/` that writes every one (`en`, `pt-BR`), chosen by `cl_language` as the client starts; the main menu writes by it
+- [ ] The buy menu's and the HUD's own texts in the languages' files; texts with values in them, their placeholders typed; the original's texts (`titles.txt`) read and overridden; the system's language for a player who chose none
 - [ ] Spectator (free, chase, first person, overview) and `mp_forcecamera`
 
 ### Maps

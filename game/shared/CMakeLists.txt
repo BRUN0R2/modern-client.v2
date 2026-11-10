@@ -22,6 +22,7 @@ nxAddModuleLibrary(csShared
         src/menuFonts.cppm
         src/buyMenuLook.cppm
         src/mainMenuLook.cppm
+        src/texts.cppm
         src/materials.cppm
         src/footsteps.cppm
         src/breath.cppm
@@ -55,6 +56,7 @@ nxAddModuleLibrary(csShared
         src/buying.cpp
         src/buyMenuLook.cpp
         src/mainMenuLook.cpp
+        src/texts.cpp
         src/materials.cpp
         src/footsteps.cpp
         src/breath.cpp

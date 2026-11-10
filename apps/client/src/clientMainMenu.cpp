@@ -35,8 +35,8 @@ constexpr char kQuote = '"';
 
 } // namespace
 
-ClientMainMenu::ClientMainMenu(const cs::GameContent& content)
-    : files{&content.vfs}, menu{content.mainMenu, playableMapsOf(content)}, panel{content.mainMenu} {}
+ClientMainMenu::ClientMainMenu(const cs::GameContent& content, const cs::MainMenuTexts& texts)
+    : files{&content.vfs}, menu{content.mainMenu, playableMapsOf(content)}, panel{content.mainMenu, texts} {}
 
 auto ClientMainMenu::isOpen() const noexcept -> bool {
     return menu.isOpen();

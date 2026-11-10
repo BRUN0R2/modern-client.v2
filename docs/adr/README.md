@@ -43,6 +43,7 @@ says where.
 | [0032](0032-gpu-crowds.md) | The GPU animates, culls and draws the crowds | Accepted |
 | [0033](0033-rook-compiler-and-types.md) | A separate Rook compiler, and types that rule out what Pawn left to run time | Accepted |
 | [0034](0034-rook-modern-only.md) | Rook looks like AMX Pawn and is new inside: one spelling, nothing ported, typed to the maximum | Accepted |
+| [0035](0035-texts-as-typed-data.md) | The game's texts are typed data: a field for each text, a file for each language | Accepted |
 
 ## Template
 

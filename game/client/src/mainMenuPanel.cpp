@@ -30,26 +30,19 @@ constexpr nx::EnumArray<MainMenuFont, MenuFontSize> kFontSizes{
         MenuFontSize{.units = 84.0F, .isStrong = true}, MenuFontSize{.units = 34.0F, .isStrong = true},
         MenuFontSize{.units = 26.0F, .isStrong = false}, MenuFontSize{.units = 18.0F, .isStrong = false}}};
 
-// What it writes.
+/// The game's name, the same in every language.
 constexpr std::string_view kGameName = "COUNTER-STRIKE";
-constexpr nx::EnumArray<MainMenuAction, std::string_view> kItemNames{
-    nx::EnumArray<MainMenuAction, std::string_view>::Storage{"RESUME GAME", "DISCONNECT", "NEW GAME",
-                                                             "QUIT"}};
-constexpr std::string_view kMapsName = "MAP";
-constexpr std::string_view kNoMaps = "The game has no maps.";
-constexpr std::string_view kStart = "START";
-constexpr std::string_view kLoading = "LOADING";
-constexpr std::string_view kBack = "BACK";
-/// A key and what it does, as the menu's foot tells them.
-struct Hint {
-    std::string_view key{};
-    std::string_view what{};
-};
-constexpr Hint kSelectHint{.key = "UP / DOWN", .what = "Select"};
-constexpr Hint kChooseHint{.key = "ENTER", .what = "Choose"};
-constexpr Hint kResumeHint{.key = "ESC", .what = "Resume"};
-constexpr Hint kStartHint{.key = "ENTER", .what = "Start"};
-constexpr Hint kBackHint{.key = "ESC", .what = "Back"};
+/// The text of the menu's that names each item.
+constexpr nx::EnumArray<MainMenuAction, std::string MainMenuTexts::*> kItemTexts{
+    nx::EnumArray<MainMenuAction, std::string MainMenuTexts::*>::Storage{
+        &MainMenuTexts::resumeGame, &MainMenuTexts::disconnect, &MainMenuTexts::newGame,
+        &MainMenuTexts::quit}};
+
+/// What the menu calls the item that does `action`, in the language of `texts`.
+[[nodiscard]] auto itemNameOf(const MainMenuTexts& texts, MainMenuAction action) noexcept
+    -> std::string_view {
+    return texts.*kItemTexts[action];
+}
 
 // In the design's units: what the layout leaves to what draws in it.
 constexpr std::int32_t kRuleGap = 14;
@@ -74,19 +67,18 @@ void writeInMiddle(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, 
                      color);
 }
 
-/// Draws the page of a new game showing `page` by `layout` with `painter`, in `faces`.
+/// Draws the page of a new game showing `page` by `layout` with `painter`, in `faces`, writing `texts`.
 void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
-                  const NewGamePage& page) {
+                  const MainMenuTexts& texts, const NewGamePage& page) {
     painter.fill(layout.page(), kMenuGlass);
     paintMenuOutline(painter, layout.page(), kMenuLine);
-    std::ignore = painter.text(faces[MainMenuFont::Item], kItemNames[MainMenuAction::NewGame],
-                               layout.pageTitle(), kMenuInk);
+    std::ignore = painter.text(faces[MainMenuFont::Item], texts.newGame, layout.pageTitle(), kMenuInk);
 
     const nx::ui::TextFace& hintFace = faces[MainMenuFont::Hint];
     const nx::ui::TextFace& rowFace = faces[MainMenuFont::Row];
     const nx::ui::PixelRect top = layout.listRow(0);
     std::ignore = painter.text(
-        hintFace, kMapsName,
+        hintFace, texts.map,
         {.x = top.x, .y = top.y - layout.pixels(kMapsNameGap) - hintFace.atlas->lineHeight()}, kMenuInkFaint);
     const auto rowText = [&](const nx::ui::PixelRect& rect, std::string_view text, ScreenColor color) {
         std::ignore =
@@ -96,7 +88,7 @@ void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
                          color);
     };
     if (page.rows.empty()) {
-        rowText(top, kNoMaps, kMenuInkFaint);
+        rowText(top, texts.noMaps, kMenuInkFaint);
     }
     for (const auto& [index, name] : std::views::enumerate(page.rows)) {
         const auto row = nx::narrow<std::size_t>(index);
@@ -114,10 +106,11 @@ void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
     }
 
     paintMenuOutline(painter, layout.backButton(), kMenuLine);
-    writeInMiddle(painter, rowFace, kBack, layout.backButton(), kMenuInkSoft);
+    writeInMiddle(painter, rowFace, texts.back, layout.backButton(), kMenuInkSoft);
     const bool canStart = !page.rows.empty();
     painter.fill(layout.confirmButton(), canStart ? kMenuGold : kMenuCell);
-    writeInMiddle(painter, rowFace, kStart, layout.confirmButton(), canStart ? kOnMenuGold : kMenuInkFaint);
+    writeInMiddle(painter, rowFace, texts.start, layout.confirmButton(),
+                  canStart ? kOnMenuGold : kMenuInkFaint);
 }
 
 /// Writes the game's name where `layout` puts it, over its rule.
@@ -146,37 +139,39 @@ void paintItemRow(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
                                isLit ? kMenuInk : kMenuInkSoft);
 }
 
-/// Draws the menu showing `frame` by `layout` with `painter`, in `faces`.
+/// Draws the menu showing `frame` by `layout` with `painter`, in `faces`, writing `texts`.
 void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
-               const MainMenuFrame& frame) {
+               const MainMenuTexts& texts, const MainMenuFrame& frame) {
     paintGameName(painter, layout, faces);
     for (const auto& [index, action] : std::views::enumerate(frame.items)) {
         paintItemRow(painter, layout, faces[MainMenuFont::Item], layout.item(nx::narrow<std::size_t>(index)),
-                     kItemNames[action], frame.selected == action);
+                     itemNameOf(texts, action), frame.selected == action);
     }
 
+    // A key and what it does, one after the other along the menu's foot.
     const nx::ui::TextFace& hintFace = faces[MainMenuFont::Hint];
     nx::ui::PixelPoint pen = layout.hints();
-    const auto tell = [&](const Hint& hint) {
-        pen.x = painter.text(hintFace, hint.key, pen, kMenuInkSoft) + layout.pixels(kHintKeyGap);
-        pen.x = painter.text(hintFace, hint.what, pen, kMenuInkFaint) + layout.pixels(kHintGap);
+    const auto tell = [&](std::string_view key, std::string_view what) {
+        pen.x = painter.text(hintFace, key, pen, kMenuInkSoft) + layout.pixels(kHintKeyGap);
+        pen.x = painter.text(hintFace, what, pen, kMenuInkFaint) + layout.pixels(kHintGap);
     };
-    tell(kSelectHint);
+    tell(texts.keyUpDown, texts.select);
     if (frame.newGame) {
-        tell(kStartHint);
-        tell(kBackHint);
-        paintNewGame(painter, layout, faces, *frame.newGame);
+        tell(texts.keyEnter, texts.play);
+        tell(texts.keyEscape, texts.goBack);
+        paintNewGame(painter, layout, faces, texts, *frame.newGame);
         return;
     }
-    tell(kChooseHint);
+    tell(texts.keyEnter, texts.choose);
     if (std::ranges::contains(frame.items, MainMenuAction::ResumeGame)) {
-        tell(kResumeHint);
+        tell(texts.keyEscape, texts.resume);
     }
 }
 
 } // namespace
 
-MainMenuPanel::MainMenuPanel(const MainMenuLook& listed) noexcept : look{&listed} {}
+MainMenuPanel::MainMenuPanel(const MainMenuLook& listed, const MainMenuTexts& written) noexcept
+    : look{&listed}, texts{&written} {}
 
 auto MainMenuPanel::load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
                          nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,
@@ -218,26 +213,27 @@ void MainMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const Mai
                          appendGround(laidOut, size);
                      }
                      nx::ui::PanelPainter painter{laidOut, size};
-                     paintMenu(painter, layout, textFaces(), frame);
+                     paintMenu(painter, layout, textFaces(), *texts, frame);
                  });
 }
 
 void MainMenuPanel::appendLoading(std::vector<nx::render::ScreenQuad>& quads, std::string_view map,
                                   nx::rhi::Extent2d size) {
     nx::expects(isLoadedFor(size.height), "MainMenuPanel::appendLoading: its fonts loaded for the screen");
-    shownLoading.append(
-        quads, ShownLoading{.map = std::string{map}, .size = size},
-        [&](std::vector<nx::render::ScreenQuad>& laidOut) {
-            // Two rows where the items stand: what is going on, and the map.
-            constexpr std::size_t kRows = 2;
-            const MainMenuLayout layout{size, kRows};
-            const TextFaces shownFaces = textFaces();
-            appendGround(laidOut, size);
-            nx::ui::PanelPainter painter{laidOut, size};
-            paintGameName(painter, layout, shownFaces);
-            paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(0), kLoading, true);
-            paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(1), map, false);
-        });
+    shownLoading.append(quads, ShownLoading{.map = std::string{map}, .size = size},
+                        [&](std::vector<nx::render::ScreenQuad>& laidOut) {
+                            // Two rows where the items stand: what is going on, and the map.
+                            constexpr std::size_t kRows = 2;
+                            const MainMenuLayout layout{size, kRows};
+                            const TextFaces shownFaces = textFaces();
+                            appendGround(laidOut, size);
+                            nx::ui::PanelPainter painter{laidOut, size};
+                            paintGameName(painter, layout, shownFaces);
+                            paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(0),
+                                         texts->loading, true);
+                            paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(1), map,
+                                         false);
+                        });
 }
 
 auto MainMenuPanel::textFaces() const noexcept -> TextFaces {

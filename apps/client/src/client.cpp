@@ -259,7 +259,8 @@ private:
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     ClientHud hud;                                      ///< What it draws over the scene of the map played.
     std::optional<ClientBuyMenu> buyMenu;               ///< Made with the game's content.
-    std::optional<ClientMainMenu> mainMenu;             ///< Made with the game's content.
+    std::optional<cs::Texts> texts;         ///< What the client writes, in the language of `cl_language`.
+    std::optional<ClientMainMenu> mainMenu; ///< Made with the game's content and the texts.
     bool isCursorShown = false;
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
@@ -347,7 +348,6 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = buyMenu->registerCommands(m_console, m_content->weapons); !registered) {
         return registered;
     }
-    mainMenu.emplace(*m_content);
     if (auto registered = registerZombieCommands(m_console, *m_content, dataFolder, *m_jobs,
                                                  [this] { return playedSession(); });
         !registered) {
@@ -372,6 +372,17 @@ auto Client::start() -> nx::Result<void, ClientError> {
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
+    // The language the player's files and the command line chose, once they ran.
+    const std::string& language = settings->client.player.language.value();
+    auto written = cs::openTexts(dataFolder, language);
+    if (!written) {
+        return nx::fail(ClientError::ContentUnavailable,
+                        std::format("cl_language {:?}: start with +cl_language {} to choose again", language,
+                                    nx::settings::kDefaultLanguage),
+                        std::move(written.error()));
+    }
+    texts.emplace(std::move(*written));
+    mainMenu.emplace(*m_content, texts->mainMenu);
     if (!mapAsked) {
         mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
     }

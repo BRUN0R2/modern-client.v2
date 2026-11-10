@@ -54,6 +54,8 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_EQ(cvars->video.multiplayerDecals.value(), 300);
     EXPECT_TRUE(cvars->player.autoWeaponSwitch.value());
     EXPECT_EQ(cvars->player.name.value(), "Player") << "the engine's, which Steam replaces";
+    EXPECT_EQ(cvars->player.language.value(), "en");
+    EXPECT_EQ(cvars->player.language.name(), "cl_language");
     EXPECT_FLOAT_EQ(cvars->audio.volume.value(), 0.7F);
     EXPECT_EQ(cvars->audio.device.value(), "") << "the system's default output";
     EXPECT_FALSE(cvars->audio.playUnfocused.value()) << "silent unfocused, as the original";
@@ -65,7 +67,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     for (const std::string_view name :
          {"sensitivity", "m_yaw", "m_pitch", "fps_max", "fps_override", "gl_vsync", "gamma", "brightness",
           "hud_draw", "cl_showfps", "r_decals", "mp_decals", "_cl_autowepswitch", "name", "volume",
-          "s_device", "s_play_unfocused", "in_keymap"}) {
+          "s_device", "s_play_unfocused", "in_keymap", "cl_language"}) {
         EXPECT_NE(archived.find(std::format("{} \"", name)), std::string::npos) << name;
     }
     EXPECT_EQ(archived.find("texgamma"), std::string::npos);

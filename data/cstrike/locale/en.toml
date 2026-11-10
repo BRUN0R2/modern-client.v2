@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# What the game writes to the player, in English (docs/12-ui-hud-and-console.md, section 7; ADR-0035), read
+# into cs::Texts: a table for each part that writes, a key for each of its texts. Every language's file
+# writes every text, and none the game does not ask for: `cl_language` chooses the file by its name.
+
+[mainMenu]
+resumeGame = "RESUME GAME"
+disconnect = "DISCONNECT"
+newGame = "NEW GAME"
+quit = "QUIT"
+map = "MAP"
+noMaps = "The game has no maps."
+start = "START"
+back = "BACK"
+loading = "LOADING"
+keyUpDown = "UP / DOWN"
+keyEnter = "ENTER"
+keyEscape = "ESC"
+select = "Select"
+choose = "Choose"
+resume = "Resume"
+play = "Start"
+goBack = "Back"

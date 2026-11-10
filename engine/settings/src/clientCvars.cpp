@@ -175,7 +175,13 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                               .defaultValue = std::string{kDefaultPlayerName},
                               .description = "The name you ask the server for as you join.",
                               .flags = kArchived});
-    for (auto* const registered : {&device, &playerName}) {
+    auto language = console.registerCvar(CvarDesc<std::string>{
+        .name = "cl_language",
+        .defaultValue = std::string{kDefaultLanguage},
+        .description =
+            "The language the game is written in, by its tag (en, pt-BR); read as the game starts.",
+        .flags = kArchived});
+    for (auto* const registered : {&device, &playerName, &language}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -188,22 +194,23 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
     if (!fidelity) {
         return std::unexpected{std::move(fidelity.error())};
     }
-    return ClientCvars{.keyboard = {.keymap = *keymap},
-                       .mouse = {.sensitivity = *sensitivity, .yaw = *yaw, .pitch = *pitch},
-                       .video = {.fpsMax = *fpsMax,
-                                 .fpsOverride = *fpsOverride,
-                                 .vsync = *vsync,
-                                 .gamma = *gamma,
-                                 .brightness = *brightness,
-                                 .textureGamma = *textureGamma,
-                                 .lightGamma = *lightGamma,
-                                 .hudDraw = *hudDraw,
-                                 .showFps = *showFps,
-                                 .fidelity = *fidelity,
-                                 .decals = *decals,
-                                 .multiplayerDecals = *multiplayerDecals},
-                       .player = {.name = *playerName, .autoWeaponSwitch = *autoWeaponSwitch},
-                       .audio = {.volume = *volume, .device = *device, .playUnfocused = *playUnfocused}};
+    return ClientCvars{
+        .keyboard = {.keymap = *keymap},
+        .mouse = {.sensitivity = *sensitivity, .yaw = *yaw, .pitch = *pitch},
+        .video = {.fpsMax = *fpsMax,
+                  .fpsOverride = *fpsOverride,
+                  .vsync = *vsync,
+                  .gamma = *gamma,
+                  .brightness = *brightness,
+                  .textureGamma = *textureGamma,
+                  .lightGamma = *lightGamma,
+                  .hudDraw = *hudDraw,
+                  .showFps = *showFps,
+                  .fidelity = *fidelity,
+                  .decals = *decals,
+                  .multiplayerDecals = *multiplayerDecals},
+        .player = {.name = *playerName, .autoWeaponSwitch = *autoWeaponSwitch, .language = *language},
+        .audio = {.volume = *volume, .device = *device, .playUnfocused = *playUnfocused}};
 }
 
 auto frameIntervalOf(const VideoCvars& video, GamePlayers players) -> Seconds {
