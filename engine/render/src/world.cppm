@@ -258,6 +258,10 @@ public:
                     DecalLife life = DecalLife::Temporary) -> std::uint32_t;
     /// The decals of the world and of its brush entities.
     [[nodiscard]] inline auto decals() const noexcept -> const DecalPool& { return *m_decals; }
+    /// Takes the decals of `previous`, a world of the same map and decals, in place of its own: those a
+    /// world made again of its map, by another picture, still shows. Their faces and lightmaps are where
+    /// they were, which neither the picture nor how its colors are drawn moves.
+    void keepDecalsOf(const BspWorld& previous);
     /// Takes the next decals within `limit`, as DecalPool::setLimit does: `r_decals` as it is now.
     inline void setDecalLimit(std::size_t limit) { m_decals->setLimit(limit); }
 

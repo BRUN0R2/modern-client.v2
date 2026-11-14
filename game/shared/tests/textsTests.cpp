@@ -33,7 +33,6 @@ using cs::TextsError;
         "off = \"o\"\nkeyboard = \"p\"\npressAKey = \"q\"\nnoKey = \"r\"\n"
         "vsync = \"x\"\ngamma = \"x\"\nbrightness = \"x\"\nfidelity = \"x\"\n"
         "fidelityLegacy = \"x\"\nfidelityEnhanced = \"x\"\nlanguage = \"x\"\nonNextStart = \"x\"\n"
-        "onNextMap = \"x\"\n"
         "moveForward = \"x\"\n"
         "moveBack = \"x\"\n"
         "moveLeft = \"x\"\n"

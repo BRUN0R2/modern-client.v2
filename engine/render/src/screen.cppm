@@ -240,6 +240,13 @@ public:
                                  std::uint32_t width, std::uint32_t height, std::string_view label)
         -> Result<ScreenImage, ScreenError>;
 
+    /// The original's picture the palettes of the pictures it loads go through (loadSprite, loadPicture,
+    /// loadFont).
+    [[nodiscard]] inline auto gamma() const noexcept -> const GammaSettings& { return gammaSettings; }
+    /// Puts the palettes of the pictures it loads from now on through `gamma`; those it loaded before keep
+    /// the picture they were made by, until they are loaded again.
+    void setGamma(const GammaSettings& gamma);
+
     /// Writes `draw`'s rectangles for the frame in flight, for record to draw before the next prepare;
     /// their pictures must last until then. Errors: GpuFailed (room for more rectangles).
     [[nodiscard]] auto prepare(const ScreenDraw& draw) -> Result<void, ScreenError>;
@@ -263,6 +270,7 @@ private:
         -> Result<ScreenImage, ScreenError>;
 
     rhi::Device* m_device;
+    GammaSettings gammaSettings{}; ///< What m_textureGamma is made of.
     ChannelTable m_textureGamma{};
     rhi::OwnedShader m_shader;
     rhi::OwnedBindGroupLayout m_frameLayout;

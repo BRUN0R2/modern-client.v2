@@ -1247,6 +1247,15 @@ auto BspWorld::shootDecal(DecalImageIndex image, Vec3 center, const DecalTarget&
         .image = image, .size = m_decalSizes[image.value], .model = on.model, .center = local, .life = life});
 }
 
+void BspWorld::keepDecalsOf(const BspWorld& previous) {
+    expects(previous.m_map == m_map && previous.m_decalSizes.size() == m_decalSizes.size(),
+            "BspWorld::keepDecalsOf: a world of the same map and decals");
+    m_decals = previous.m_decals;
+    for (FrameSlot& slot : m_frameSlots) {
+        slot.decalRevision.reset(); // another pool's revisions: each frame writes its decals again
+    }
+}
+
 auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
     if (slot.decalRevision == m_decals->revision()) {
         return {};

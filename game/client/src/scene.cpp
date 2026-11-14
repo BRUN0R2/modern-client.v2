@@ -188,6 +188,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                 std::move(*particles),  std::move(*blood),
                 std::move(*overlay)};
     scene.m_look = look;
+    scene.gammaSettings = gamma;
     scene.lightCurve = nx::render::lightGammaTable(gamma);
     scene.m_playerModels = std::move(*playerModels);
     auto bloodModels = level.bloodSprites().load(scene.m_sprites, commands, 0);

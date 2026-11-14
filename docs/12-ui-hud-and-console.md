@@ -453,11 +453,11 @@ writes the one chosen; or the keys of an action. Today: `sensitivity` and the mo
 `gl_vsync`, `cl_showfps`, `hud_draw`, how the picture is made (`r_fidelity`), `gamma` and `brightness`;
 `_cl_autowepswitch`, `cl_righthand` and the language (`cl_language`, among those the game's data has). A
 setting is set as it is changed and kept by `config.cfg` as every archived cvar is: there is nothing to apply
-or to cancel, where the original has `OK`, `Cancel` and `Apply`. Most take effect at once, `gl_vsync` among
-them (§5.1). Those that do not say so: while one is selected, a line between the list and the page's buttons
-tells when its change takes effect (`cs::TakesEffect`): `r_fidelity` on the next map; `gamma`, `brightness` and
-the language the next time the game starts. The language is written by its tag (`en`, `pt-BR`); set from the console to one the game's
-data does not have, the row shows none chosen. The player's name comes with what lets it be typed there.
+or to cancel, where the original has `OK`, `Cancel` and `Apply`. All but the language take effect at once
+(§5.1), the picture's among them. The language says so: while it is selected, a line between the list and the
+page's buttons tells that it takes effect the next time the game starts (`cs::TakesEffect`). It is written by
+its tag (`en`, `pt-BR`); set from the console to one the game's data does not have, the row shows none
+chosen. The player's name comes with what lets it be typed there.
 
 **The keys** list the actions of the commands the client has, each with the keys that run it, as `bind` names
 them: moving, jumping, ducking, walking, using, firing, the weapon's special function, reloading, the last
@@ -613,11 +613,9 @@ reads them as it starts and writes `config.cfg` as it ends. A change from the co
 effect as soon as what reads it reads it again: `in_keymap` with the next key press, the mouse's
 as the mouse moves, `fps_max`, `fps_override`, `hud_draw`, `cl_showfps`, `r_decals`, `volume` and
 `s_play_unfocused` with the next frame, `gl_vsync` between two frames (the swapchain made again as it
-changes, `rhi::Swapchain::setPresentMode`), `_cl_autowepswitch` with the next weapon given, `r_fidelity` with
-the next map, and the picture's gamma (`gamma`, `brightness`, `texgamma`, `lightgamma`) when `next` starts
-again: every texture is made by it as it is read, the HUD's as the first frame is drawn and a map's as it is
-loaded, so that `next` keeps the values it started with for all it draws, and a map loaded later is made as
-the HUD was.
+changes, `rhi::Swapchain::setPresentMode`), the picture (`gamma`, `brightness`, `texgamma`, `lightgamma`,
+`r_fidelity`) between two frames too, what it made made again of it, the decals kept
+([05 §11](05-rendering.md#11-visual-fidelity)), and `_cl_autowepswitch` with the next weapon given.
 `config.cfg` keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
 `cl_crosshair_translucent` (1), and `cl_righthand` (1, the weapons in the right hand, else in the

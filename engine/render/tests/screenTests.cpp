@@ -108,9 +108,10 @@ private:
     std::optional<OffscreenTarget> m_target;
 };
 
-/// The color index `index` of the palette shows, through the texture gamma.
-[[nodiscard]] auto shown(std::size_t index) -> std::array<int, 3> {
-    const auto gamma = nx::render::textureGammaTable({});
+/// The color index `index` of the palette shows, through the texture gamma of `picture`.
+[[nodiscard]] auto shown(std::size_t index, const nx::render::GammaSettings& picture = {})
+    -> std::array<int, 3> {
+    const auto gamma = nx::render::textureGammaTable(picture);
     return {gamma[(index * 1) % 256], gamma[(index * 2) % 256], gamma[(index * 3) % 256]};
 }
 
@@ -167,6 +168,39 @@ TEST(ScreenRendererTest, EachTexelLandsOnThePixelItCovers) {
     EXPECT_EQ(pixelAt(drawn, 13, 9), (Pixel{0, 0, 0, 0})) << "index 255 masked: what is behind";
     EXPECT_EQ(pixelAt(drawn, 9, 6), (Pixel{0, 0, 0, 0})) << "nothing left of it";
     EXPECT_EQ(pixelAt(drawn, 10, 10), (Pixel{0, 0, 0, 0})) << "nothing under it";
+    EXPECT_EQ(screen.validationErrors(), 0U);
+}
+
+TEST(ScreenRendererTest, APictureGoesThroughThePictureTheRendererHadWhenItWasLoaded) {
+    Screen screen;
+    if (!screen.isReady()) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> palette = paletteBytes();
+    const std::vector<std::byte> pixels = pictureBytes();
+    const nx::assets::WadPicture picture{.width = 4, .height = 4, .pixels = pixels, .palette = palette};
+    const auto load = [&] {
+        return screen.load([&](nx::rhi::CommandList& commands) {
+            return screen.renderer().loadPicture(commands, picture, nx::render::PictureMask::Opaque,
+                                                 "picture");
+        });
+    };
+    const nx::render::ScreenImage before = load();
+    const nx::render::GammaSettings darker{.gamma = 1.8F, .textureGamma = 3.0F};
+    screen.renderer().setGamma(darker);
+    EXPECT_EQ(screen.renderer().gamma(), darker);
+    const nx::render::ScreenImage after = load();
+    const std::array quads{ScreenQuad{.image = &before,
+                                      .source = {.x = 0, .y = 0, .width = 4, .height = 4},
+                                      .target = {.x = 0.0F, .y = 0.0F, .width = 4.0F, .height = 4.0F}},
+                           ScreenQuad{.image = &after,
+                                      .source = {.x = 0, .y = 0, .width = 4, .height = 4},
+                                      .target = {.x = 8.0F, .y = 0.0F, .width = 4.0F, .height = 4.0F}}};
+    const std::vector<std::byte> drawn = screen.draw(quads);
+
+    expectRgb(pixelAt(drawn, 2, 1), shown(16), "loaded before: the picture it was loaded by");
+    expectRgb(pixelAt(drawn, 10, 1), shown(16, darker), "loaded after: the new one");
+    EXPECT_NE(shown(16), shown(16, darker));
     EXPECT_EQ(screen.validationErrors(), 0U);
 }
 

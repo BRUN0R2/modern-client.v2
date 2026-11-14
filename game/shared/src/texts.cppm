@@ -67,7 +67,6 @@ struct OptionsTexts {
     std::string fidelityEnhanced{};
     std::string language{};
     std::string onNextStart{};
-    std::string onNextMap{};
     std::string showFps{};
     std::string drawHud{};
     std::string autoSwitch{};
@@ -177,7 +176,6 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::fidelityEnhanced>("fidelityEnhanced"),
         nx::meta::field<&cs::OptionsTexts::language>("language"),
         nx::meta::field<&cs::OptionsTexts::onNextStart>("onNextStart"),
-        nx::meta::field<&cs::OptionsTexts::onNextMap>("onNextMap"),
         nx::meta::field<&cs::OptionsTexts::showFps>("showFps"),
         nx::meta::field<&cs::OptionsTexts::drawHud>("drawHud"),
         nx::meta::field<&cs::OptionsTexts::autoSwitch>("autoSwitch"),

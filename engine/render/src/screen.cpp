@@ -182,7 +182,7 @@ auto spriteQuad(const ScreenImage& image, assets::SpriteRect source, float x, fl
 auto ScreenRenderer::create(rhi::Device& device, const ScreenRendererDesc& desc)
     -> Result<ScreenRenderer, ScreenError> {
     ScreenRenderer renderer{device};
-    renderer.m_textureGamma = textureGammaTable(desc.gamma);
+    renderer.setGamma(desc.gamma);
     if (auto made = renderer.createPipelines(desc); !made) {
         return fail(ScreenError::GpuFailed, std::move(made.error()));
     }
@@ -194,6 +194,11 @@ auto ScreenRenderer::create(rhi::Device& device, const ScreenRendererDesc& desc)
         }
     }
     return renderer;
+}
+
+void ScreenRenderer::setGamma(const GammaSettings& gamma) {
+    gammaSettings = gamma;
+    m_textureGamma = textureGammaTable(gamma);
 }
 
 auto ScreenRenderer::createPipelines(const ScreenRendererDesc& desc) -> Result<void, rhi::RhiError> {

@@ -49,8 +49,6 @@ constexpr nx::EnumArray<OptionCategory, std::string OptionsTexts::*> kTabTexts{
 [[nodiscard]] auto takesEffectText(const OptionsTexts& texts, TakesEffect takesEffect) noexcept
     -> std::optional<std::string_view> {
     switch (takesEffect) {
-    case TakesEffect::OnNextMap:
-        return texts.onNextMap;
     case TakesEffect::OnNextStart:
         return texts.onNextStart;
     case TakesEffect::AtOnce:
