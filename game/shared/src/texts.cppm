@@ -59,6 +59,15 @@ struct OptionsTexts {
     std::string volume{};
     std::string playUnfocused{};
     std::string maxFps{};
+    std::string vsync{};
+    std::string gamma{};
+    std::string brightness{};
+    std::string fidelity{};
+    std::string fidelityLegacy{};
+    std::string fidelityEnhanced{};
+    std::string language{};
+    std::string onNextStart{};
+    std::string onNextMap{};
     std::string showFps{};
     std::string drawHud{};
     std::string autoSwitch{};
@@ -160,6 +169,15 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::volume>("volume"),
         nx::meta::field<&cs::OptionsTexts::playUnfocused>("playUnfocused"),
         nx::meta::field<&cs::OptionsTexts::maxFps>("maxFps"),
+        nx::meta::field<&cs::OptionsTexts::vsync>("vsync"),
+        nx::meta::field<&cs::OptionsTexts::gamma>("gamma"),
+        nx::meta::field<&cs::OptionsTexts::brightness>("brightness"),
+        nx::meta::field<&cs::OptionsTexts::fidelity>("fidelity"),
+        nx::meta::field<&cs::OptionsTexts::fidelityLegacy>("fidelityLegacy"),
+        nx::meta::field<&cs::OptionsTexts::fidelityEnhanced>("fidelityEnhanced"),
+        nx::meta::field<&cs::OptionsTexts::language>("language"),
+        nx::meta::field<&cs::OptionsTexts::onNextStart>("onNextStart"),
+        nx::meta::field<&cs::OptionsTexts::onNextMap>("onNextMap"),
         nx::meta::field<&cs::OptionsTexts::showFps>("showFps"),
         nx::meta::field<&cs::OptionsTexts::drawHud>("drawHud"),
         nx::meta::field<&cs::OptionsTexts::autoSwitch>("autoSwitch"),

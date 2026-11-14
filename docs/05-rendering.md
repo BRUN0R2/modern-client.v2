@@ -75,7 +75,7 @@ express**. The vocabulary is close to WebGPU's.
 (`beginFrame` waits until the frame before is taken to the GPU and for the frame's slot, and gives
 its `CommandList`; `submitFrame` hands the frame to the device's submission thread, which submits it
 and presents it, [ADR-0029](adr/0029-submission-thread.md)), the swapchain with its recreation on
-resize and while minimized, and generational
+resize, while minimized and as it is asked to present otherwise (`Swapchain::setPresentMode`), and generational
 handles (`HandlePool`: a stale handle is a contract violation) to buffers (device memory, or mapped
 memory to upload and read back, through VMA), textures (with mip levels, and arrays of layers that
 shaders sample as `Texture2DArray`), samplers, shaders, bind group layouts and
@@ -111,7 +111,7 @@ if (!lightmapAtlas) {
 | Loader | `volk` |
 | Memory | Vulkan Memory Allocator (VMA) |
 | Frames in flight | 2 (default) or 3, configurable (`r_frames_in_flight`) |
-| Present | `vid_vsync 0/1`, `r_present_mode immediate/mailbox/fifo` |
+| Present | `gl_vsync` 0 or 1: Immediate or Fifo (Fifo where the surface lacks Immediate), the swapchain made again between two frames as it changes |
 | Submission | A thread of the device's own (`nx::platform::Thread`) submits the frames in the order they were handed and shows them: the only user of the queue and the swapchain while it has frames ([ADR-0029](adr/0029-submission-thread.md)). The frame's pass that draws to the window's image is recorded into a secondary command buffer, which that thread runs inside its own render pass on the image it acquired; it acquires the next image once it has shown a frame, before it takes the next one |
 | Pipeline cache | Persisted on disk per GPU/driver, invalidated by UUID. Today: `next` gives the device what its GPU learned last time (`vulkan::DeviceDesc::pipelineCache`, from `pipelineCache.bin` in the cache folder, `nx::platform::cacheDirectory`: `%LOCALAPPDATA%\Modern-Client.v2`, or `$XDG_CACHE_HOME`/`~/.cache` `modern-client.v2`), kept only when its header names the same vendor, device and cache UUID, and writes what it learned there as it ends (`Device::pipelineCache`, written whole or not at all) |
 | Parallel recording | One `VkCommandPool` per worker per frame in flight |

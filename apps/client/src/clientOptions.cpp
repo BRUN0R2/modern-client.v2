@@ -27,8 +27,13 @@ constexpr float kSensitivityStep = 0.1F;
 constexpr float kMostVolume = 1.0F;
 constexpr float kVolumeStep = 0.05F;
 constexpr float kLeastMaxFps = 30.0F;
-constexpr float kMostMaxFps = 100.0F; ///< The most fps_max gives without fps_override.
 constexpr float kMaxFpsStep = 10.0F;
+constexpr float kPictureStep = 0.1F; ///< Of gamma and brightness.
+
+/// The text of the options' that writes each way the picture is made (r_fidelity).
+using FidelityTexts = nx::EnumArray<nx::settings::Fidelity, std::string OptionsTexts::*>;
+constexpr FidelityTexts kFidelityTexts{
+    FidelityTexts::Storage{&OptionsTexts::fidelityLegacy, &OptionsTexts::fidelityEnhanced}};
 
 /// A slider of `cvar` from `minimum` to `maximum` by `step`, named by `name` on the tab of `category`.
 [[nodiscard]] auto sliderOf(OptionCategory category, std::string OptionsTexts::* name, Cvar<float> cvar,
@@ -64,6 +69,54 @@ constexpr float kMaxFpsStep = 10.0F;
                                                 const float size = std::abs(pitch.value());
                                                 pitch.setAccepted(isReversed ? -size : size);
                                             }}};
+}
+
+/// `row`, a change of which takes effect as `takesEffect` says.
+[[nodiscard]] auto takingEffect(cs::TakesEffect takesEffect, cs::OptionRow row) -> cs::OptionRow {
+    row.takesEffect = takesEffect;
+    return row;
+}
+
+/// A choice of `cvar` among `choices`, at least one, each written as `written` writes the one at its place:
+/// none is chosen while the cvar is set to another.
+template <class Value>
+[[nodiscard]] auto choiceOf(Cvar<Value> cvar, std::vector<Value> choices, std::vector<std::string> written)
+    -> cs::OptionChoice {
+    nx::expects(!choices.empty() && choices.size() == written.size(), "choiceOf: a text for each choice");
+    return {.values = std::move(written),
+            .chosen = [cvar, choices]() -> std::optional<std::size_t> {
+                const auto found = std::ranges::find(choices, cvar.value());
+                if (found == choices.end()) {
+                    return std::nullopt;
+                }
+                return nx::narrow<std::size_t>(std::ranges::distance(choices.begin(), found));
+            },
+            .choose = [cvar, choices = std::move(choices)](
+                          std::size_t index) { cvar.setAccepted(choices[index]); }};
+}
+
+/// The choice of how the picture is made (`fidelity`, r_fidelity), each way written as `texts` writes it;
+/// read as a map is loaded.
+[[nodiscard]] auto fidelityOf(Cvar<nx::settings::Fidelity> fidelity, const OptionsTexts& texts)
+    -> cs::OptionRow {
+    return {.category = OptionCategory::Video,
+            .name = &OptionsTexts::fidelity,
+            .control =
+                choiceOf(fidelity, FidelityTexts::keys() | std::ranges::to<std::vector>(),
+                         kFidelityTexts | std::views::transform([&texts](std::string OptionsTexts::* way) {
+                             return texts.*way;
+                         }) | std::ranges::to<std::vector>()),
+            .takesEffect = cs::TakesEffect::OnNextMap};
+}
+
+/// The choice of the language (`language`, cl_language) among `languages`, each written by its tag; read
+/// as the game starts.
+[[nodiscard]] auto languageOf(Cvar<std::string> language, const std::vector<std::string>& languages)
+    -> cs::OptionRow {
+    return {.category = OptionCategory::Game,
+            .name = &OptionsTexts::language,
+            .control = choiceOf(language, languages, languages),
+            .takesEffect = cs::TakesEffect::OnNextStart};
 }
 
 /// An action the keys run: the text that names it, and its command.
@@ -136,7 +189,8 @@ constexpr std::string_view kKeySeparator = "  ";
 
 } // namespace
 
-auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& bindings)
+auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& bindings,
+                     const cs::OptionsTexts& texts, const std::vector<std::string>& languages)
     -> std::vector<cs::OptionRow> {
     const nx::settings::ClientCvars& client = settings.client;
     std::vector<cs::OptionRow> rows;
@@ -150,11 +204,23 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
                             kMostVolume, kVolumeStep, OptionValueStyle::Percent));
     rows.push_back(switchOf(OptionCategory::Audio, &OptionsTexts::playUnfocused, client.audio.playUnfocused));
     rows.push_back(sliderOf(OptionCategory::Video, &OptionsTexts::maxFps, client.video.fpsMax, kLeastMaxFps,
-                            kMostMaxFps, kMaxFpsStep, OptionValueStyle::Whole));
+                            nx::settings::kMostFpsWithoutOverride, kMaxFpsStep, OptionValueStyle::Whole));
+    rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::vsync, client.video.vsync));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::showFps, client.video.showFps));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::drawHud, client.video.hudDraw));
+    rows.push_back(fidelityOf(client.video.fidelity, texts));
+    rows.push_back(takingEffect(cs::TakesEffect::OnNextStart,
+                                sliderOf(OptionCategory::Video, &OptionsTexts::gamma, client.video.gamma,
+                                         nx::settings::kLeastGamma, nx::settings::kMostGamma, kPictureStep,
+                                         OptionValueStyle::Tenths)));
+    rows.push_back(
+        takingEffect(cs::TakesEffect::OnNextStart,
+                     sliderOf(OptionCategory::Video, &OptionsTexts::brightness, client.video.brightness,
+                              nx::settings::kLeastBrightness, nx::settings::kMostBrightness, kPictureStep,
+                              OptionValueStyle::Tenths)));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::autoSwitch, client.player.autoWeaponSwitch));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::rightHand, settings.hud.rightHand));
+    rows.push_back(languageOf(client.player.language, languages));
     return rows;
 }
 

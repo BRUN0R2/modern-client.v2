@@ -38,4 +38,7 @@ void savePipelineCache(const nx::rhi::Device& device);
 [[nodiscard]] auto openVideo(const ClientOptions& options, bool isVsync,
                              std::span<const std::byte> pipelineCache) -> nx::Result<Video, ClientError>;
 
+/// How the frames are shown as `isVsync` (gl_vsync) asks: waiting for the display's refresh, or at once.
+[[nodiscard]] auto presentModeOf(bool isVsync) noexcept -> nx::rhi::PresentMode;
+
 } // namespace app

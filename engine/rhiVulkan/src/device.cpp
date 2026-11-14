@@ -1193,6 +1193,7 @@ public:
 
     [[nodiscard]] auto acquire() -> Result<std::optional<SwapchainImage>, RhiError> override;
     [[nodiscard]] auto resize(Extent2d size) -> Result<void, RhiError> override;
+    [[nodiscard]] auto setPresentMode(PresentMode mode) -> Result<void, RhiError> override;
 
     [[nodiscard]] auto device() const noexcept -> const VulkanDevice* { return m_device; }
     [[nodiscard]] auto build(const SwapchainDesc& desc) -> Result<void, RhiError>;
@@ -3444,6 +3445,16 @@ auto VulkanSwapchain::resize(Extent2d size) -> Result<void, RhiError> {
     expects(!m_device->isRecording() || !m_device->currentFrame().hasAcquiredImage,
             "rhi::Swapchain::resize: not while a frame holds its image");
     m_requestedSize = size;
+    return rebuild();
+}
+
+auto VulkanSwapchain::setPresentMode(PresentMode mode) -> Result<void, RhiError> {
+    expects(!m_device->isRecording() || !m_device->currentFrame().hasAcquiredImage,
+            "rhi::Swapchain::setPresentMode: not while a frame holds its image");
+    if (mode == m_presentMode) {
+        return {};
+    }
+    m_presentMode = mode;
     return rebuild();
 }
 

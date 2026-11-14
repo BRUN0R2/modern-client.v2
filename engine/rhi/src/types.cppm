@@ -325,7 +325,7 @@ enum class IndexFormat : std::uint8_t {
     Uint32,
 };
 
-/// How a swapchain shows its images: the r_present_mode cvar.
+/// How a swapchain shows its images (SwapchainDesc, Swapchain::setPresentMode).
 enum class PresentMode : std::uint8_t {
     Fifo,      ///< Waits for the display's refresh (vsync); every backend has it.
     Mailbox,   ///< Replaces the waiting image with the newest one: no tearing, no wait.

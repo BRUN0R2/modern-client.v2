@@ -63,6 +63,8 @@ public:
     /// The track of a slider on the row at `row`: the left of what changes its setting, its value written
     /// after it.
     [[nodiscard]] auto optionTrack(std::size_t row) const noexcept -> nx::ui::PixelRect;
+    /// Where the page tells about what is selected: a line as wide as its list, between it and its buttons.
+    [[nodiscard]] auto pageNote() const noexcept -> nx::ui::PixelRect;
     /// What does what the page is for, at its foot on the right.
     [[nodiscard]] auto confirmButton() const noexcept -> nx::ui::PixelRect;
     /// What goes back to the items, before it.

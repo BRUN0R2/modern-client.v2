@@ -654,6 +654,11 @@ TEST(WindowDrawTest, DrawsFramesWithDepthToTheWindowAndRebuildsItsSwapchain) {
             const auto rebuilt = opened->swapchain->resize(kExtent);
             ASSERT_TRUE(rebuilt.has_value()) << nx::describe(rebuilt.error());
         }
+        if (frame == kFrames * 3 / 4) {
+            // And as it is asked to show its images otherwise.
+            const auto presented = opened->swapchain->setPresentMode(nx::rhi::PresentMode::Fifo);
+            ASSERT_TRUE(presented.has_value()) << nx::describe(presented.error());
+        }
         auto commands = device.beginFrame();
         ASSERT_TRUE(commands.has_value()) << nx::describe(commands.error());
         CommandList& list = commands->get();
