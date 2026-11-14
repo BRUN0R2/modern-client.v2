@@ -367,6 +367,62 @@ TEST(OptionsPageTest, AChoiceGoesAroundItsValuesWrittenByTheirTextsOrAsTheyAre) 
     EXPECT_EQ(chosen, 0U) << "going on from none, the first";
 }
 
+TEST(OptionsPageTest, ATextIsTypedSetByEnterOnceItsSettingTakesItAndLeftAsItWasByEscape) {
+    constexpr std::size_t kMostBytes = 8;
+    std::string name = "Player";
+    cs::OptionsPage page{
+        {{.category = OptionCategory::Mouse,
+          .name = &OptionsTexts::playerName,
+          .control = cs::OptionText{.text = [&] { return name; },
+                                    .accepts =
+                                        [](std::string_view text) {
+                                            return !text.empty() && text.size() <= kMostBytes &&
+                                                   !text.contains('"');
+                                        },
+                                    .set = [&](std::string text) { name = std::move(text); }}}}};
+    const cs::MainMenuLayout layout{kScreen, 2};
+    const auto send = [&](const nx::platform::WindowEvent& event, MousePosition cursor = kNowhere) {
+        return page.handle(event, cursor, layout);
+    };
+    const auto typedOf = [](std::string_view text) {
+        return nx::platform::WindowEvent{nx::platform::TextEntered{.text = std::string{text}}};
+    };
+    const auto shown = [&] {
+        return page.frame(layout.listRows()).rows[0].control;
+    };
+    page.open();
+    EXPECT_EQ(shown(), cs::ShownControl{cs::ShownText{.text = "Player"}});
+
+    std::ignore = send(pressed(Key::Down));
+    std::ignore = send(pressed(Key::Enter));
+    ASSERT_TRUE(page.isTyping());
+    EXPECT_EQ(shown(), (cs::ShownControl{cs::ShownText{.text = "Player", .cursorBytes = 6}})) << "after it";
+    std::ignore = send(typedOf("X"));
+    std::ignore = send(typedOf("\""));
+    std::ignore = send(typedOf("YZ"));
+    EXPECT_EQ(std::get<cs::ShownText>(shown()).text, "PlayerX") << "nothing its setting would refuse";
+    std::ignore = send(pressed(Key::Left));
+    std::ignore = send(pressed(Key::Backspace));
+    EXPECT_EQ(shown(), (cs::ShownControl{cs::ShownText{.text = "PlayeX", .cursorBytes = 5}}));
+    std::ignore = send(kLeftDown, middleOf(layout.backButton()));
+    EXPECT_TRUE(page.isTyping()) << "the mouse does nothing while it is typed";
+    std::ignore = send(pressed(Key::Escape));
+    EXPECT_FALSE(page.isTyping());
+    EXPECT_EQ(name, "Player") << "left as it was";
+
+    std::ignore = send(pressed(Key::Enter));
+    for (std::size_t erased = 0; erased < name.size(); ++erased) {
+        std::ignore = send(pressed(Key::Backspace));
+    }
+    std::ignore = send(pressed(Key::Enter));
+    EXPECT_TRUE(page.isTyping()) << "an empty name its setting refuses: typed on";
+    std::ignore = send(typedOf("Ana"));
+    std::ignore = send(pressed(Key::Enter));
+    EXPECT_FALSE(page.isTyping());
+    EXPECT_EQ(name, "Ana") << "set as Enter is pressed";
+    EXPECT_EQ(shown(), cs::ShownControl{cs::ShownText{.text = "Ana"}});
+}
+
 TEST(OptionsPageTest, EscapeAndItsButtonGoBack) {
     Settings settings;
     Opened options{settings};
@@ -424,6 +480,35 @@ TEST(OptionsPageTest, ItsItemOpensItOnTheMenuAndEscapeGoesBackToTheItems) {
     ASSERT_TRUE(quit.has_value());
     EXPECT_EQ(quit->action, cs::MainMenuAction::Quit) << "another item chosen leaves the page";
     EXPECT_FALSE(menu.showsOptions());
+}
+
+TEST(OptionsPageTest, OnTheMenuATextTypedTakesEveryKeyAndWhatIsTyped) {
+    std::string name = "Player";
+    const cs::MainMenuLook look{
+        .font = {.regular = "Barlow", .strong = "Barlow SemiBold"},
+        .background = "resource/BackgroundLayout.txt",
+        .items = {{.action = cs::MainMenuAction::Options, .listed = cs::MainMenuListing::Always}}};
+    cs::MainMenu menu{
+        look,
+        {},
+        {{.category = OptionCategory::Mouse,
+          .name = &OptionsTexts::playerName,
+          .control = cs::OptionText{.text = [&] { return name; },
+                                    .accepts = [](std::string_view) { return true; },
+                                    .set = [&](std::string text) { name = std::move(text); }}}}};
+    menu.open(cs::MenuGame::None);
+    const auto send = [&](const nx::platform::WindowEvent& event) {
+        return menu.handle(event, kNowhere, kScreen, cs::MenuGame::None);
+    };
+    std::ignore = send(pressed(Key::Enter));
+    std::ignore = send(pressed(Key::Down));
+    std::ignore = send(pressed(Key::Enter));
+    ASSERT_TRUE(menu.isTyping());
+    EXPECT_TRUE(menu.takesEveryKey()) << "the console's key types too";
+    std::ignore = send(nx::platform::TextEntered{.text = "2"});
+    std::ignore = send(pressed(Key::Enter));
+    EXPECT_FALSE(menu.isTyping());
+    EXPECT_EQ(name, "Player2") << "what is typed reaches the page through the menu";
 }
 
 TEST(MainMenuLayoutTest, TheOptionsTabsAndControlsStandInThePage) {

@@ -66,6 +66,7 @@ struct OptionsTexts {
     std::string fidelityLegacy{};
     std::string fidelityEnhanced{};
     std::string language{};
+    std::string playerName{};
     std::string crosshairSize{};
     std::string crosshairAuto{};
     std::string crosshairSmall{};
@@ -218,6 +219,7 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::fidelityLegacy>("fidelityLegacy"),
         nx::meta::field<&cs::OptionsTexts::fidelityEnhanced>("fidelityEnhanced"),
         nx::meta::field<&cs::OptionsTexts::language>("language"),
+        nx::meta::field<&cs::OptionsTexts::playerName>("playerName"),
         nx::meta::field<&cs::OptionsTexts::crosshairSize>("crosshairSize"),
         nx::meta::field<&cs::OptionsTexts::crosshairAuto>("crosshairAuto"),
         nx::meta::field<&cs::OptionsTexts::crosshairSmall>("crosshairSmall"),

@@ -41,13 +41,14 @@ drawing within it. `paintTree` draws a panel's background, then over it each of 
 children in their order; a hidden panel draws nothing, nor do its children. A control is a kind of
 panel that draws more: the first is the `Label` (`nx.ui:label`), a line of text in a face and a
 colour, placed against an edge of the label or halfway between two by its alignment, named as the
-layouts' `textAlignment` names them (`north-west` to `south-east`). The `TextEntry`
-(`nx.ui:textEntry`) is a line the player types in, the console's input line first: typed text
-([§6](#6-input)) goes in at its cursor, control characters left out; Left and Right move the
-cursor by a character, Home and End to the ends, Backspace and Delete remove the character before
-or after it, and Enter submits the line to its owner; it draws its text and a cursor a pixel wide,
-scrolled left when the cursor would pass its right edge. Selection, the clipboard and the cursor's
-blinking come later. `RichText` (`nx.ui:richText`) shows lines of text, each in its colour, the
+layouts' `textAlignment` names them (`north-west` to `south-east`). A line of text typed
+(`nx::ui::TextLine`, `nx.ui:textLine`) holds what the player types: typed text ([§6](#6-input)) goes in
+at its cursor, control characters left out; Left and Right move the cursor by a character, Home and
+End to the ends, Backspace and Delete remove the character before or after it, and Enter submits the
+line to its owner. The `TextEntry` (`nx.ui:textEntry`) is a panel that holds one, the console's input
+line first: it draws its text and a cursor a pixel wide, scrolled left when the cursor would pass its
+right edge (`scrollToShow`); the main menu's options type in one of their own the same way (§4).
+Selection, the clipboard and the cursor's blinking come later. `RichText` (`nx.ui:richText`) shows lines of text, each in its colour, the
 console's output: the newest at the bottom, each wrapped at its last space that fits its width
 (anywhere in a word wider than it), the oldest dropped past its capacity (1024 lines unless told
 otherwise), scrolled up from the newest by whole rows; scrolled up, it stays on the rows it shows
@@ -451,16 +452,21 @@ writes the one chosen; or the keys of an action. Today: `sensitivity` and the mo
 (`m_pitch` below zero, as the original's option sets it); `volume` and the sound while the window is not focused
 (`s_play_unfocused`); the most frames a second (`fps_max`, to the 100 it gives without `fps_override`),
 `gl_vsync`, `cl_showfps`, `hud_draw`, how the picture is made (`r_fidelity`), `gamma` and `brightness`;
-`_cl_autowepswitch`, `cl_righthand`, the language (`cl_language`, among those the game's data has) and the
-crosshair: its size (`cl_crosshair_size`), whether it is translucent (`cl_crosshair_translucent`), and its color
+the player's name (`name`), `_cl_autowepswitch`, `cl_righthand`, the language (`cl_language`, among those
+the game's data has) and the crosshair: its size (`cl_crosshair_size`), whether it is translucent (`cl_crosshair_translucent`), and its color
 by a slider for each of the red, the green and the blue `cl_crosshair_color` gives, from 0 to 255 by 5, which
 Counter-Strike 1.6's 50 and 250 are among. The original's options name five colors instead; their values wait
-for being observed in the original before they are offered. A setting is set as it is changed and kept by `config.cfg` as every archived cvar is: there is nothing to apply
-or to cancel, where the original has `OK`, `Cancel` and `Apply`. Each takes effect at once, the picture
+for being observed in the original before they are offered. A setting is set as it is changed and kept by
+`config.cfg` as every archived cvar is: there is nothing to apply or to cancel, where the original has `OK`, `Cancel` and `Apply`. Each takes effect at once, the picture
 (§5.1) and the language (§7) among them. A choice writes its values as the menu draws, by a text of the
 options' or as they are (`cs::ChoiceText`), so that the page is written in the language chosen from the
 frame after. The language is written by its tag (`en`, `pt-BR`); set from the console to one the game's data
-does not have, the row shows none chosen. The player's name comes with what lets it be typed there.
+does not have, the row shows none chosen. The player's name is typed (`cs::OptionText`): Enter, or the left
+button, has it typed, the keys typing text then (the platform's `TextEntered`, `Client::typeAsNeeded`); what is
+typed goes in at its cursor, as much as `name` takes (`Cvar::accepts`), the keys edit it as a line of text
+does (`nx::ui::TextLine`), Enter sets it, once `name` takes it, and Escape leaves it as it was. While it is
+typed, every key is the page's, and the mouse does nothing; it shows in gold, its cursor drawn, scrolled
+within its row so that the cursor shows.
 
 **The keys** list the actions of the commands the client has, each with the keys that run it, as `bind` names
 them: moving, jumping, ducking, walking, using, firing, the weapon's special function, reloading, the last
@@ -477,9 +483,10 @@ binds are those `bind` sets, kept by `config.cfg`.
 Left and Right change the tab while the tabs are selected, as they are when the page opens; Down selects the
 first row and Up, from it, the tabs again. On a row, Left and Right move a slider by a step, switch a switch
 over and take a choice to the value before or after it, going around past either end; Enter switches a switch
-over too, takes a choice to its next value, or has an action wait for its key. The mouse selects the row it is
-over; its left button shows the tab it is pressed on, switches a switch over, takes a choice to its next value,
-and sets a slider to where it is pressed on its track, which follows it until the button comes up. Escape, or `BACK`, goes back to the items. What a row reads and sets is given to
+over too, takes a choice to its next value, has an action wait for its key, or has a text typed. The mouse
+selects the row it is over; its left button shows the tab it is pressed on, does to a row what Enter does, and
+sets a slider to where it is pressed on its track, which follows it until the button comes up. Escape, or
+`BACK`, goes back to the items. What a row reads and sets is given to
 the menu by what runs it (`app.client:options`, the client's cvars), so that the page knows no cvar.
 
 **The loading screen.** A map takes seconds to load, and the frames wait for it. So `map` (and `nav_generate`,
@@ -726,8 +733,9 @@ category the application passes in (`log_level_net debug`, or the level's number
   (`KeyChanged::character`, from SDL's keycode), the mouse as relative motion in its own
   counts (`MouseMoved`), and the window gives a GPU backend its native handles. Typed text arrives
   apart from the keys, as the keyboard's layout and the system's input method make it
-  (`TextEntered`, UTF-8), while text input is on (`Window::setTextInput`): the console and the
-  menus' text entries turn it on while they have the keyboard.
+  (`TextEntered`, UTF-8), while text input is on (`Window::setTextInput`): the client turns it on
+  while the console's window is open or the main menu has a text typed, and only then
+  (`Client::typeAsNeeded`).
 - **Raw mouse** by default (`m_rawinput 1`), without OS acceleration. Sensitivity is
   calibrated so that `sensitivity` has **the same effect in degrees per count** as in the
   original (validated by a parity test).

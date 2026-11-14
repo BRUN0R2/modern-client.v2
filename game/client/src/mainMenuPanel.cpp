@@ -91,6 +91,29 @@ void writeEnding(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, st
                                color);
 }
 
+/// Draws `line`, a text the player types, with `painter` in `face` within `rect`: ending at its end while it
+/// fits, else scrolled so that its end shows; while it is typed, in gold and scrolled so that its cursor
+/// shows, the cursor drawn where it is.
+void paintTypedText(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, const ShownText& line,
+                    const nx::ui::PixelRect& rect) {
+    nx::ui::PanelPainter within = painter.inside(rect);
+    const nx::Pixels wide = nx::ui::widthOf(*face.atlas, line.text);
+    const nx::Pixels pen =
+        line.cursorBytes
+            ? nx::ui::widthOf(*face.atlas, std::string_view{line.text}.substr(0, *line.cursorBytes))
+            : wide;
+    const nx::Pixels room = rect.wide - nx::ui::kTextCursorWidth;
+    const nx::Pixels start = wide <= room ? room - wide : -nx::ui::scrollToShow(pen, rect.wide);
+    const nx::Pixels lineTall = face.atlas->lineHeight();
+    const nx::Pixels top = (rect.tall - lineTall) / kMiddleDivisor;
+    std::ignore =
+        within.text(face, line.text, {.x = start, .y = top}, line.cursorBytes ? kMenuGold : kMenuInk);
+    if (line.cursorBytes) {
+        within.fill({.x = start + pen, .y = top, .wide = nx::ui::kTextCursorWidth, .tall = lineTall},
+                    kMenuGold);
+    }
+}
+
 /// Draws `control`, what changes the setting on the list's row `row` by `layout`, with `painter`, in `face`,
 /// writing `texts`.
 void paintOptionControl(nx::ui::PanelPainter& painter, const MainMenuLayout& layout,
@@ -108,6 +131,8 @@ void paintOptionControl(nx::ui::PanelPainter& painter, const MainMenuLayout& lay
                       .tall = track.tall},
                      kMenuGold);
         writeEnding(painter, face, sliderText(*slider), end, rect, kMenuInk);
+    } else if (const auto* const line = std::get_if<ShownText>(&control)) {
+        paintTypedText(painter, face, *line, rect);
     } else if (const auto* const choice = std::get_if<ShownChoice>(&control)) {
         if (choice->chosen) {
             writeEnding(painter, face, writtenOf(*choice->chosen, texts), end, rect, kMenuInk);

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The options of the main menu (docs/12-ui-hud-and-console.md, section 4): the player's settings by what
-/// they set, each on a row with what changes it, a slider, a switch, a choice among a few values or the
-/// keys of an action, changed by the keys or the mouse and set as it is changed. Here is the page's state
-/// and what it shows (OptionsFrame), its texts named by the fields of OptionsTexts; what a setting reads and
-/// sets is given by whoever runs the menu, and drawing it is apart (cs.client:mainMenuPanel), in the
-/// player's language as it is when it draws.
+/// they set, each on a row with what changes it, a slider, a switch, a choice among a few values, a text
+/// typed or the keys of an action, changed by the keys or the mouse and set as it is changed. Here is the
+/// page's state and what it shows (OptionsFrame), its texts named by the fields of OptionsTexts; what a
+/// setting reads and sets is given by whoever runs the menu, and drawing it is apart
+/// (cs.client:mainMenuPanel), in the player's language as it is when it draws.
 export module cs.client:optionsPage;
 
 import std;
@@ -74,8 +74,16 @@ struct OptionChoice {
     std::function<void(std::size_t)> choose;
 };
 
+/// A setting that is a line of text the player types: what it is now; whether it would take a text, so that
+/// none it would refuse is typed; and what sets it to one it takes.
+struct OptionText {
+    std::function<std::string()> text;
+    std::function<bool(std::string_view)> accepts;
+    std::function<void(std::string)> set;
+};
+
 /// What changes a setting.
-using OptionControl = std::variant<OptionSlider, OptionSwitch, OptionKeys, OptionChoice>;
+using OptionControl = std::variant<OptionSlider, OptionSwitch, OptionKeys, OptionChoice, OptionText>;
 
 /// A setting the options list: the tab it is on, the text of the options' that names it, and what changes
 /// it, which takes effect as it is changed.
@@ -118,8 +126,17 @@ struct ShownChoice {
     [[nodiscard]] inline auto operator==(const ShownChoice&) const noexcept -> bool = default;
 };
 
+/// A text as it shows: what it is, as typed while it is; and, while it is typed, how many of its bytes are
+/// before the cursor.
+struct ShownText {
+    std::string text{};
+    std::optional<std::size_t> cursorBytes{};
+
+    [[nodiscard]] inline auto operator==(const ShownText&) const noexcept -> bool = default;
+};
+
 /// What changes a setting, as it shows.
-using ShownControl = std::variant<ShownSlider, ShownSwitch, ShownKeys, ShownChoice>;
+using ShownControl = std::variant<ShownSlider, ShownSwitch, ShownKeys, ShownChoice, ShownText>;
 
 /// A row of the tab shown: the text that names its setting, and what changes it as it stands.
 struct ShownOption {
@@ -167,18 +184,23 @@ public:
     /// Whether an action waits for its key: every key and button is then the page's, the one that opens
     /// the console among them.
     [[nodiscard]] inline auto isWaitingForKey() const noexcept -> bool { return waitingRow.has_value(); }
+    /// Whether a text is typed: every key and button is then the page's too, and the keys type text (the
+    /// platform's TextEntered).
+    [[nodiscard]] inline auto isTyping() const noexcept -> bool { return typingRow.has_value(); }
 
     /// What `event` does to the options, laid out by `layout`, with the mouse's cursor at `cursor`. Left and
     /// Right change the tab while the tabs are selected, else the setting selected: a slider by a step, a
     /// switch over, a choice to the value before or after it, going around past either end. Up and Down
     /// select the setting before and the one after, the tabs above the first, the list following it; the
-    /// wheel scrolls the list. Enter switches a switch over, takes a choice to its next value, and has an
-    /// action wait for its key; Delete and Backspace take an action's keys from it. The mouse selects the row
-    /// it is over; its left button shows the tab it is pressed on, switches a switch over, takes a choice to
-    /// its next value, has an action wait for its key, and sets a slider to where it is pressed on its track,
-    /// and on as it moves until it comes up. While an action waits, the
-    /// next key, button or notch of the wheel is given to it, and Escape leaves it as it was. Else Escape,
-    /// and the page's button, go back to the menu's items.
+    /// wheel scrolls the list. Enter switches a switch over, takes a choice to its next value, has an action
+    /// wait for its key, and has a text typed; Delete and Backspace take an action's keys from it. The mouse
+    /// selects the row it is over; its left button shows the tab it is pressed on, does to a row what Enter
+    /// does, and sets a slider to where it is pressed on its track, and on as it moves until it comes up.
+    /// While an action waits, the next key, button or notch of the wheel is given to it, and Escape leaves
+    /// it as it was. While a text is typed, the text typed goes in it at its cursor, as much as its setting
+    /// would take, the keys edit it (nx::ui::TextLine), Enter sets it, when its setting takes it, and Escape
+    /// leaves it as it was; the mouse does nothing then. Else Escape, and the page's button, go back to the
+    /// menu's items.
     [[nodiscard]] auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                               const MainMenuLayout& layout) -> OptionsOutcome;
 
@@ -200,12 +222,14 @@ private:
     /// over.
     void change(std::int32_t steps);
     /// What Enter, or the left button, does to the setting selected: a switch over, a choice to its next
-    /// value, an action waits.
+    /// value, an action waits, a text is typed.
     void activate();
     /// Sets `slider` to where the cursor's `x` is on `track`.
     static void drag(const OptionSlider& slider, const nx::ui::PixelRect& track, float x);
     /// What `event` does while an action waits for its key.
     void giveKey(const nx::platform::WindowEvent& event);
+    /// What `event` does while a text is typed.
+    void type(const nx::platform::WindowEvent& event);
     [[nodiscard]] auto press(const nx::platform::KeyChanged& key, std::size_t listRows) -> OptionsOutcome;
     [[nodiscard]] auto click(nx::platform::MousePosition cursor, const MainMenuLayout& layout)
         -> OptionsOutcome;
@@ -216,6 +240,8 @@ private:
     std::size_t firstShown = 0;            ///< The setting on the list's first row.
     std::optional<std::size_t> draggedRow; ///< The slider the mouse holds, by its setting.
     std::optional<std::size_t> waitingRow; ///< The action that waits for its key, by its setting.
+    std::optional<std::size_t> typingRow;  ///< The text typed, by its setting.
+    nx::ui::TextLine typed;                ///< What is typed of it, while it is.
 };
 
 } // namespace cs

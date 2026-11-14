@@ -121,6 +121,17 @@ template <class Value>
                                 kFidelityTexts | std::ranges::to<std::vector<cs::ChoiceText>>())};
 }
 
+/// The player's name (`name`), typed: a text the cvar takes, which the server makes one no other player has
+/// as it gives it.
+[[nodiscard]] auto typedNameOf(Cvar<std::string> name) -> cs::OptionRow {
+    return {.category = OptionCategory::Game,
+            .name = &OptionsTexts::playerName,
+            .control = cs::OptionText{
+                .text = [name] { return name.value(); },
+                .accepts = [name](std::string_view text) { return name.accepts(std::string{text}); },
+                .set = [name](std::string text) { name.setAccepted(std::move(text)); }}};
+}
+
 /// The choice of the language (`language`, cl_language) among `languages`, each written by its tag.
 [[nodiscard]] auto languageOf(Cvar<std::string> language, std::span<const std::string> languages)
     -> cs::OptionRow {
@@ -257,6 +268,7 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(sliderOf(OptionCategory::Video, &OptionsTexts::brightness, client.video.brightness,
                             nx::settings::kLeastBrightness, nx::settings::kMostBrightness, kPictureStep,
                             OptionValueStyle::Tenths));
+    rows.push_back(typedNameOf(client.player.name));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::autoSwitch, client.player.autoWeaponSwitch));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::rightHand, settings.hud.rightHand));
     rows.push_back(languageOf(client.player.language, languages));

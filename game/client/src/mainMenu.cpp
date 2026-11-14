@@ -46,6 +46,11 @@ auto MainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mous
                       nx::rhi::Extent2d size, MenuGame game) -> std::optional<MainMenuRequest> {
     const std::vector<MainMenuAction> items = mainMenuItemsOf(*look, game);
     const MainMenuLayout layout{size, items.size()};
+    if (isTyping()) {
+        // Every event is the options' while a text of theirs is typed, what is typed among them.
+        leaveOptionsIf(options.handle(event, cursor, layout));
+        return std::nullopt;
+    }
     if (std::holds_alternative<nx::platform::MouseMoved>(event)) {
         // The item whose page is open stays the one selected.
         if (const std::optional<std::size_t> item = layout.itemAt(cursor.x, cursor.y);

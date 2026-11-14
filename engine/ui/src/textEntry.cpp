@@ -12,91 +12,19 @@ namespace nx::ui {
 
 namespace {
 
-/// How wide the cursor is drawn.
-constexpr Pixels kCursorWidth{1};
 /// What the room left is divided by to put the line halfway down the entry.
 constexpr std::int32_t kMiddleDivisor = 2;
-
-/// Whether `character` is a control character (C0, DEL or C1), which a line of text does not hold.
-[[nodiscard]] constexpr auto isControl(char32_t character) noexcept -> bool {
-    constexpr char32_t kSpace = 0x20;
-    constexpr char32_t kDelete = 0x7F;
-    constexpr char32_t kFirstPrintableAfterC1 = 0xA0;
-    return character < kSpace || (character >= kDelete && character < kFirstPrintableAfterC1);
-}
-
-/// The UTF-8 of `characters`.
-[[nodiscard]] auto utf8Of(std::u32string_view characters) -> std::string {
-    std::string text;
-    for (const char32_t character : characters) {
-        appendUtf8(text, character);
-    }
-    return text;
-}
 
 } // namespace
 
 TextEntry::TextEntry(std::string name, PixelRect bounds) : Panel{std::move(name), bounds} {}
 
-auto TextEntry::text() const -> std::string {
-    return utf8Of(m_characters);
-}
-
-void TextEntry::setText(std::string_view text) {
-    m_characters.clear();
-    m_cursor = 0;
-    insertText(text);
-}
-
-void TextEntry::insertText(std::string_view text) {
-    std::u32string typed = decodeUtf8(text);
-    std::erase_if(typed, isControl);
-    m_characters.insert(m_cursor, typed);
-    m_cursor += typed.size();
-}
-
-auto TextEntry::pressKey(platform::Key key) -> TextEntryAction {
-    switch (key) {
-    case platform::Key::Left:
-        m_cursor -= m_cursor > 0 ? 1U : 0U;
-        return TextEntryAction::Edited;
-    case platform::Key::Right:
-        m_cursor += m_cursor < m_characters.size() ? 1U : 0U;
-        return TextEntryAction::Edited;
-    case platform::Key::Home:
-        m_cursor = 0;
-        return TextEntryAction::Edited;
-    case platform::Key::End:
-        m_cursor = m_characters.size();
-        return TextEntryAction::Edited;
-    case platform::Key::Backspace:
-        if (m_cursor > 0) {
-            m_characters.erase(--m_cursor, 1);
-        }
-        return TextEntryAction::Edited;
-    case platform::Key::Delete:
-        if (m_cursor < m_characters.size()) {
-            m_characters.erase(m_cursor, 1);
-        }
-        return TextEntryAction::Edited;
-    case platform::Key::Enter:
-    case platform::Key::KeypadEnter:
-        return TextEntryAction::Submitted;
-    default:
-        return TextEntryAction::None;
-    }
-}
-
 auto TextEntry::cursorPen() const -> Pixels {
-    return m_face.atlas != nullptr
-               ? widthOf(*m_face.atlas, utf8Of(std::u32string_view{m_characters}.substr(0, m_cursor)))
-               : Pixels{};
+    return m_face.atlas != nullptr ? widthOf(*m_face.atlas, line.textBeforeCursor()) : Pixels{};
 }
 
 auto TextEntry::scroll() const -> Pixels {
-    // The cursor shows when its pixel is within the entry.
-    const Pixels room = bounds().wide - textInset - kCursorWidth;
-    return std::max(Pixels{}, cursorPen() - room);
+    return scrollToShow(cursorPen(), bounds().wide - textInset);
 }
 
 void TextEntry::paint(PanelPainter& painter) const {
@@ -109,7 +37,8 @@ void TextEntry::paint(PanelPainter& painter) const {
     const Pixels start = textInset - scroll();
     std::ignore =
         painter.text(m_face, text(), {.x = start, .y = top}, m_textColor); // the cursor's pen is known
-    painter.fill({.x = start + cursorPen(), .y = top, .wide = kCursorWidth, .tall = height}, m_cursorColor);
+    painter.fill({.x = start + cursorPen(), .y = top, .wide = kTextCursorWidth, .tall = height},
+                 m_cursorColor);
 }
 
 } // namespace nx::ui

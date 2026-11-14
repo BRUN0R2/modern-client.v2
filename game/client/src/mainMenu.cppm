@@ -76,9 +76,13 @@ public:
     /// Whether the page of a new game is open.
     [[nodiscard]] inline auto showsNewGame() const noexcept -> bool { return page == Page::NewGame; }
     /// Whether every key and button is the menu's, the one that opens the console among them: while an
-    /// action of the options waits for its key.
+    /// action of the options waits for its key, and while a text of theirs is typed.
     [[nodiscard]] inline auto takesEveryKey() const noexcept -> bool {
-        return page == Page::Options && options.isWaitingForKey();
+        return page == Page::Options && (options.isWaitingForKey() || options.isTyping());
+    }
+    /// Whether a text of the options is typed: the keys type text then (the platform's TextEntered).
+    [[nodiscard]] inline auto isTyping() const noexcept -> bool {
+        return page == Page::Options && options.isTyping();
     }
     /// Whether the page of the options is open.
     [[nodiscard]] inline auto showsOptions() const noexcept -> bool { return page == Page::Options; }
@@ -94,8 +98,9 @@ public:
     /// its page, where Up, Down, Page Up, Page Down, Home and End select a map, the wheel scrolls the list,
     /// the mouse selects the map it is pressed on, Enter and the page's button play the map selected, and
     /// Escape and its other button go back to the items. The item of the options opens theirs, which takes
-    /// the keys and the mouse off the items (OptionsPage::handle). Returns what the menu asks for, if
-    /// anything: the menu stays as it is, whoever runs it doing that.
+    /// the keys and the mouse off the items (OptionsPage::handle), and every event, text typed among them,
+    /// while a text of theirs is typed. Returns what the menu asks for, if anything: the menu stays as it
+    /// is, whoever runs it doing that.
     [[nodiscard]] auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                               nx::rhi::Extent2d size, MenuGame game) -> std::optional<MainMenuRequest>;
 
