@@ -475,6 +475,21 @@ TEST(CrosshairTest, ColorsAndSizesAreReadAsTheOriginalWritesThem) {
     EXPECT_FALSE(cs::crosshairColorOf("1 2 3.5").has_value());
     EXPECT_EQ(cs::crosshairSizeNamed("medium"), cs::CrosshairSize::Medium);
     EXPECT_FALSE(cs::crosshairSizeNamed("Medium").has_value()) << "as the original spells them";
+    for (const cs::CrosshairSize size : nx::EnumArray<cs::CrosshairSize, bool>::keys()) {
+        EXPECT_EQ(cs::crosshairSizeNamed(cs::crosshairSizeName(size)), size) << "each size by its name";
+    }
+}
+
+TEST(CrosshairTest, AColorSetIsWrittenAsClCrosshairColorTakesIt) {
+    SilentOutput output;
+    NoFiles files;
+    nx::console::Console console{output, files};
+    const auto cvars = cs::HudCvars::registerIn(console);
+    ASSERT_TRUE(cvars.has_value()) << nx::describe(cvars.error());
+    cvars->setCrosshairColor({.red = 0, .green = 128, .blue = 255, .alpha = 7});
+    EXPECT_EQ(cvars->crosshairColor.value(), "0 128 255")
+        << "its channels as whole numbers, its alpha left out";
+    EXPECT_EQ(cvars->crosshair().color, (nx::render::ScreenColor{.red = 0, .green = 128, .blue = 255}));
 }
 
 } // namespace

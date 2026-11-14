@@ -451,8 +451,11 @@ writes the one chosen; or the keys of an action. Today: `sensitivity` and the mo
 (`m_pitch` below zero, as the original's option sets it); `volume` and the sound while the window is not focused
 (`s_play_unfocused`); the most frames a second (`fps_max`, to the 100 it gives without `fps_override`),
 `gl_vsync`, `cl_showfps`, `hud_draw`, how the picture is made (`r_fidelity`), `gamma` and `brightness`;
-`_cl_autowepswitch`, `cl_righthand` and the language (`cl_language`, among those the game's data has). A
-setting is set as it is changed and kept by `config.cfg` as every archived cvar is: there is nothing to apply
+`_cl_autowepswitch`, `cl_righthand`, the language (`cl_language`, among those the game's data has) and the
+crosshair: its size (`cl_crosshair_size`), whether it is translucent (`cl_crosshair_translucent`), and its color
+by a slider for each of the red, the green and the blue `cl_crosshair_color` gives, from 0 to 255 by 5, which
+Counter-Strike 1.6's 50 and 250 are among. The original's options name five colors instead; their values wait
+for being observed in the original before they are offered. A setting is set as it is changed and kept by `config.cfg` as every archived cvar is: there is nothing to apply
 or to cancel, where the original has `OK`, `Cancel` and `Apply`. Each takes effect at once, the picture
 (§5.1) and the language (§7) among them. A choice writes its values as the menu draws, by a text of the
 options' or as they are (`cs::ChoiceText`), so that the page is written in the language chosen from the

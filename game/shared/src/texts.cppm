@@ -66,6 +66,15 @@ struct OptionsTexts {
     std::string fidelityLegacy{};
     std::string fidelityEnhanced{};
     std::string language{};
+    std::string crosshairSize{};
+    std::string crosshairAuto{};
+    std::string crosshairSmall{};
+    std::string crosshairMedium{};
+    std::string crosshairLarge{};
+    std::string crosshairTranslucent{};
+    std::string crosshairRed{};
+    std::string crosshairGreen{};
+    std::string crosshairBlue{};
     std::string showFps{};
     std::string drawHud{};
     std::string autoSwitch{};
@@ -209,6 +218,15 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::fidelityLegacy>("fidelityLegacy"),
         nx::meta::field<&cs::OptionsTexts::fidelityEnhanced>("fidelityEnhanced"),
         nx::meta::field<&cs::OptionsTexts::language>("language"),
+        nx::meta::field<&cs::OptionsTexts::crosshairSize>("crosshairSize"),
+        nx::meta::field<&cs::OptionsTexts::crosshairAuto>("crosshairAuto"),
+        nx::meta::field<&cs::OptionsTexts::crosshairSmall>("crosshairSmall"),
+        nx::meta::field<&cs::OptionsTexts::crosshairMedium>("crosshairMedium"),
+        nx::meta::field<&cs::OptionsTexts::crosshairLarge>("crosshairLarge"),
+        nx::meta::field<&cs::OptionsTexts::crosshairTranslucent>("crosshairTranslucent"),
+        nx::meta::field<&cs::OptionsTexts::crosshairRed>("crosshairRed"),
+        nx::meta::field<&cs::OptionsTexts::crosshairGreen>("crosshairGreen"),
+        nx::meta::field<&cs::OptionsTexts::crosshairBlue>("crosshairBlue"),
         nx::meta::field<&cs::OptionsTexts::showFps>("showFps"),
         nx::meta::field<&cs::OptionsTexts::drawHud>("drawHud"),
         nx::meta::field<&cs::OptionsTexts::autoSwitch>("autoSwitch"),

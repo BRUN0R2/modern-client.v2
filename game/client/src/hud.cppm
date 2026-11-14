@@ -99,6 +99,8 @@ enum class CrosshairSize : std::uint8_t {
 
 /// The size `text` names: "auto", "small", "medium" or "large"; none for other text.
 [[nodiscard]] auto crosshairSizeNamed(std::string_view text) noexcept -> std::optional<CrosshairSize>;
+/// The name `cl_crosshair_size` gives `size`, which is not Count.
+[[nodiscard]] auto crosshairSizeName(CrosshairSize size) noexcept -> std::string_view;
 /// The color `text` gives: three whole numbers from 0 to 255, red, green and blue, spaces between them
 /// ("50 250 50"); none for other text.
 [[nodiscard]] auto crosshairColorOf(std::string_view text) noexcept -> std::optional<nx::render::ScreenColor>;
@@ -126,6 +128,9 @@ struct HudCvars {
 
     /// The crosshair they ask for.
     [[nodiscard]] auto crosshair() const -> CrosshairStyle;
+    /// Sets `cl_crosshair_color` to `color`, written as it takes it: red, green and blue, spaces between
+    /// them. Its alpha is none of the cvar's.
+    void setCrosshairColor(nx::render::ScreenColor color) const;
     /// The hand the player holds its weapons in.
     [[nodiscard]] auto hand() const -> Hand;
 };
