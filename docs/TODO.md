@@ -588,7 +588,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] The main menu's music; what a new game sets besides its map (the original's `CreateMultiplayerGame*Page.res`: bots, rules)
 - [x] The options' page ([12 §4](12-ui-hud-and-console.md#4-game-menus-and-screens)): tabs (mouse, audio, video, game), sliders and switches set as they are changed (`cs.client:optionsPage`, `app.client:options`): `sensitivity`, the mouse reversed, `volume`, `s_play_unfocused`, `fps_max`, `cl_showfps`, `hud_draw`, `_cl_autowepswitch`, `cl_righthand`
 - [x] The options' `gl_vsync` (taking effect at once: `rhi::Swapchain::setPresentMode`), `r_fidelity`, `gamma`, `brightness` and `cl_language`, with a choice among values that goes around them (`cs::OptionChoice`) and the page telling when a change takes effect (`cs::TakesEffect`)
-- [ ] `gamma`, `brightness`, `r_fidelity` and the language taking effect at once (textures and scene made again; the texts and the menu made again); the player's name, with a text entry; voice and the crosshair
+- [x] `gamma`, `brightness`, `texgamma`, `lightgamma` and `r_fidelity` taking effect at once: the HUD's pictures and the scene made again between two frames, the decals kept (`ScreenRenderer::setGamma`, `BspWorld::keepDecalsOf`)
+- [ ] The language taking effect at once (the texts and the menu made again); the player's name, with a text entry; voice and the crosshair
 - [x] The options' keys: the actions of the commands the client has, each with its keys, a key waited for and given to it (two an action, as the original's), taken with Delete (`cs::OptionKeys`, `nx::settings::KeyBindings::give`, `pressedKeyOf`), on a list that scrolls
 - [ ] The options' keys of the commands still to come (the radio, the chat, dropping a weapon, the night vision, the weapon slots with their menu), and restoring the original's binds
 - [ ] Server browser

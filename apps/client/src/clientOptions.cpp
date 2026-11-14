@@ -71,12 +71,6 @@ constexpr FidelityTexts kFidelityTexts{
                                             }}};
 }
 
-/// `row`, a change of which takes effect as `takesEffect` says.
-[[nodiscard]] auto takingEffect(cs::TakesEffect takesEffect, cs::OptionRow row) -> cs::OptionRow {
-    row.takesEffect = takesEffect;
-    return row;
-}
-
 /// A choice of `cvar` among `choices`, at least one, each written as `written` writes the one at its place:
 /// none is chosen while the cvar is set to another.
 template <class Value>
@@ -95,8 +89,7 @@ template <class Value>
                           std::size_t index) { cvar.setAccepted(choices[index]); }};
 }
 
-/// The choice of how the picture is made (`fidelity`, r_fidelity), each way written as `texts` writes it;
-/// read as a map is loaded.
+/// The choice of how the picture is made (`fidelity`, r_fidelity), each way written as `texts` writes it.
 [[nodiscard]] auto fidelityOf(Cvar<nx::settings::Fidelity> fidelity, const OptionsTexts& texts)
     -> cs::OptionRow {
     return {.category = OptionCategory::Video,
@@ -105,8 +98,7 @@ template <class Value>
                 choiceOf(fidelity, FidelityTexts::keys() | std::ranges::to<std::vector>(),
                          kFidelityTexts | std::views::transform([&texts](std::string OptionsTexts::* way) {
                              return texts.*way;
-                         }) | std::ranges::to<std::vector>()),
-            .takesEffect = cs::TakesEffect::OnNextMap};
+                         }) | std::ranges::to<std::vector>())};
 }
 
 /// The choice of the language (`language`, cl_language) among `languages`, each written by its tag; read
@@ -209,15 +201,12 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::showFps, client.video.showFps));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::drawHud, client.video.hudDraw));
     rows.push_back(fidelityOf(client.video.fidelity, texts));
-    rows.push_back(takingEffect(cs::TakesEffect::OnNextStart,
-                                sliderOf(OptionCategory::Video, &OptionsTexts::gamma, client.video.gamma,
-                                         nx::settings::kLeastGamma, nx::settings::kMostGamma, kPictureStep,
-                                         OptionValueStyle::Tenths)));
-    rows.push_back(
-        takingEffect(cs::TakesEffect::OnNextStart,
-                     sliderOf(OptionCategory::Video, &OptionsTexts::brightness, client.video.brightness,
-                              nx::settings::kLeastBrightness, nx::settings::kMostBrightness, kPictureStep,
-                              OptionValueStyle::Tenths)));
+    rows.push_back(sliderOf(OptionCategory::Video, &OptionsTexts::gamma, client.video.gamma,
+                            nx::settings::kLeastGamma, nx::settings::kMostGamma, kPictureStep,
+                            OptionValueStyle::Tenths));
+    rows.push_back(sliderOf(OptionCategory::Video, &OptionsTexts::brightness, client.video.brightness,
+                            nx::settings::kLeastBrightness, nx::settings::kMostBrightness, kPictureStep,
+                            OptionValueStyle::Tenths));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::autoSwitch, client.player.autoWeaponSwitch));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::rightHand, settings.hud.rightHand));
     rows.push_back(languageOf(client.player.language, languages));

@@ -38,10 +38,15 @@ public:
     /// `screenHeight` tall, in the looks of `content`.
     void open(const cs::WindowFonts& fonts, nx::ui::FontCatalog& catalog, const cs::GameContent& content,
               std::uint32_t screenHeight);
-    /// Puts on the GPU in `list` with `screen` the HUD's pictures of `content`, and what opened. Errors:
-    /// GpuFailed, with the cause.
+    /// Puts on the GPU in `list` with `screen` the HUD's pictures of `content` (loadPictures), and what
+    /// opened. Errors: GpuFailed, with the cause.
     [[nodiscard]] auto load(const cs::GameContent& content, nx::render::ScreenRenderer& screen,
                             nx::rhi::CommandList& list) -> nx::Result<void, ClientError>;
+    /// Puts on the GPU in `list` with `screen` the HUD's pictures of `content`, the sprites whose palettes
+    /// go through the screen's picture (ScreenRenderer::gamma), in place of those it had: again as that
+    /// picture changes. Without them the HUD is not drawn, which is logged, and the game plays on.
+    void loadPictures(const cs::GameContent& content, nx::render::ScreenRenderer& screen,
+                      nx::rhi::CommandList& list);
     /// Forgets the bodies and the deaths of the map played before.
     void clear();
     /// What tells the player, with `console`, what happened in the frame played, as `settings` say.

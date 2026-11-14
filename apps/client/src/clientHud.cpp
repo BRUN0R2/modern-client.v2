@@ -47,11 +47,7 @@ void ClientHud::open(const cs::WindowFonts& fonts, nx::ui::FontCatalog& catalog,
 
 auto ClientHud::load(const cs::GameContent& content, nx::render::ScreenRenderer& screen,
                      nx::rhi::CommandList& list) -> nx::Result<void, ClientError> {
-    if (auto loaded = cs::Hud::load(content.vfs, content.weapons.ammo(), screen, list); loaded) {
-        hud.emplace(std::move(*loaded));
-    } else {
-        nx::log::warning(kLog, "the HUD is not drawn: {}", nx::describe(loaded.error())); // the game plays on
-    }
+    loadPictures(content, screen, list);
     if (fpsLabel) {
         if (auto loaded = fpsLabel->load(screen, list); !loaded) {
             return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
@@ -79,6 +75,16 @@ auto ClientHud::load(const cs::GameContent& content, nx::render::ScreenRenderer&
         }
     }
     return {};
+}
+
+void ClientHud::loadPictures(const cs::GameContent& content, nx::render::ScreenRenderer& screen,
+                             nx::rhi::CommandList& list) {
+    if (auto loaded = cs::Hud::load(content.vfs, content.weapons.ammo(), screen, list); loaded) {
+        hud.emplace(std::move(*loaded));
+    } else {
+        hud.reset();
+        nx::log::warning(kLog, "the HUD is not drawn: {}", nx::describe(loaded.error())); // the game plays on
+    }
 }
 
 void ClientHud::clear() {

@@ -552,7 +552,7 @@ flowchart LR
 
 ### 9.2 MDL format features to support
 
-The enhanced look (`r_fidelity enhanced`, read when the map loads; `nxview --look enhanced` for
+The enhanced look (`r_fidelity enhanced`, the scene made again as it changes, §11; `nxview --look enhanced` for
 captures that do not depend on the GPU's speed) shades each texture of a model by the material the
 file beside the model gives it (`<model>.material.toml`, `cs.client:modelMaterials`), texture by
 texture, a skin family's swap included:
@@ -816,7 +816,11 @@ a table of 1024 entries, built as the original builds `lightgammatable`: `lightg
 the upper 8 bits are drawn. The color is the texture's times that light, never brighter
 (`gl_overbright 0`). The defaults are what CS 1.6 ships: `gamma 2.5`, `brightness 1`, `texgamma 2`,
 `lightgamma 2.5`; each setting is held to the original's range. The tables match those the
-Xash3D-FWGS project records from the original for its tests.
+Xash3D-FWGS project records from the original for its tests. A change of them, or of `r_fidelity`, takes
+effect between two frames: `next` makes again what the old values made, the HUD's pictures through the
+screen's new gamma (`ScreenRenderer::setGamma`) and the scene of the map played, its decals carried over
+(`BspWorld::keepDecalsOf`: the faces and lightmaps they lie on are those of any world of the map), the
+overlay it kept too, and the map's time going on.
 
 ## 12. Latency and frame pacing
 

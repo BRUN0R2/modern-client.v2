@@ -330,7 +330,7 @@ TEST(OptionsPageTest, AChoiceGoesAroundItsValuesAndTellsWhenItTakesEffect) {
           .control = cs::OptionChoice{.values = {"low", "medium", "high"},
                                       .chosen = [&] { return chosen; },
                                       .choose = [&](std::size_t index) { chosen = index; }},
-          .takesEffect = cs::TakesEffect::OnNextMap},
+          .takesEffect = cs::TakesEffect::OnNextStart},
          {.category = OptionCategory::Mouse,
           .name = &OptionsTexts::showFps,
           .control = cs::OptionSwitch{.isOn = [&] { return isOn; }, .set = [&](bool on) { isOn = on; }}}}};
@@ -346,7 +346,7 @@ TEST(OptionsPageTest, AChoiceGoesAroundItsValuesAndTellsWhenItTakesEffect) {
     EXPECT_EQ(shown().rows[0].control, cs::ShownControl{cs::ShownChoice{.chosen = "medium"}});
 
     std::ignore = send(pressed(Key::Down));
-    EXPECT_EQ(shown().takesEffect, cs::TakesEffect::OnNextMap);
+    EXPECT_EQ(shown().takesEffect, cs::TakesEffect::OnNextStart);
     std::ignore = send(pressed(Key::Right));
     EXPECT_EQ(chosen, 2U);
     std::ignore = send(pressed(Key::Right));

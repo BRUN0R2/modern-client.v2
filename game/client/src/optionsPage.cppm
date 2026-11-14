@@ -75,7 +75,6 @@ using OptionControl = std::variant<OptionSlider, OptionSwitch, OptionKeys, Optio
 /// When a change of a setting takes effect.
 enum class TakesEffect : std::uint8_t {
     AtOnce,
-    OnNextMap,   ///< As the next map is loaded.
     OnNextStart, ///< As the game starts again.
     Count,
 };

@@ -80,32 +80,31 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                             .defaultValue = false,
                                             .description = "Whether frames wait for the display's refresh.",
                                             .flags = kArchived});
-    auto gamma = console.registerCvar(CvarDesc<float>{
-        .name = "gamma",
-        .defaultValue = kGamma,
-        .description = "The display's gamma the picture is made for; read as the game starts.",
-        .flags = kArchived,
-        .minimum = kLeastGamma,
-        .maximum = kMostGamma});
-    auto brightness = console.registerCvar(
-        CvarDesc<float>{.name = "brightness",
-                        .defaultValue = kBrightness,
-                        .description = "How much the light is brightened; read as the game starts.",
-                        .flags = kArchived,
-                        .minimum = kLeastBrightness,
-                        .maximum = kMostBrightness});
-    auto textureGamma = console.registerCvar(CvarDesc<float>{
-        .name = "texgamma",
-        .defaultValue = kTextureGamma,
-        .description = "The gamma the textures' palettes are brought from; read as the game starts.",
-        .minimum = kLeastGamma,
-        .maximum = kMostGamma});
-    auto lightGamma = console.registerCvar(
-        CvarDesc<float>{.name = "lightgamma",
-                        .defaultValue = kLightGamma,
-                        .description = "The gamma the lightmaps are brought from; read as the game starts.",
+    auto gamma =
+        console.registerCvar(CvarDesc<float>{.name = "gamma",
+                                             .defaultValue = kGamma,
+                                             .description = "The display's gamma the picture is made for.",
+                                             .flags = kArchived,
+                                             .minimum = kLeastGamma,
+                                             .maximum = kMostGamma});
+    auto brightness = console.registerCvar(CvarDesc<float>{.name = "brightness",
+                                                           .defaultValue = kBrightness,
+                                                           .description = "How much the light is brightened.",
+                                                           .flags = kArchived,
+                                                           .minimum = kLeastBrightness,
+                                                           .maximum = kMostBrightness});
+    auto textureGamma = console.registerCvar(
+        CvarDesc<float>{.name = "texgamma",
+                        .defaultValue = kTextureGamma,
+                        .description = "The gamma the textures' palettes are brought from.",
                         .minimum = kLeastGamma,
                         .maximum = kMostGamma});
+    auto lightGamma =
+        console.registerCvar(CvarDesc<float>{.name = "lightgamma",
+                                             .defaultValue = kLightGamma,
+                                             .description = "The gamma the lightmaps are brought from.",
+                                             .minimum = kLeastGamma,
+                                             .maximum = kMostGamma});
     auto hudDraw = console.registerCvar(CvarDesc<bool>{.name = "hud_draw",
                                                        .defaultValue = true,
                                                        .description = "Whether the HUD is drawn.",
@@ -118,9 +117,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
     auto fidelity = console.registerCvar(CvarDesc<Fidelity>{
         .name = "r_fidelity",
         .defaultValue = Fidelity::Legacy,
-        .description =
-            "How the picture is made: legacy, as Counter-Strike 1.6 makes it, or enhanced; read when a "
-            "map is loaded.",
+        .description = "How the picture is made: legacy, as Counter-Strike 1.6 makes it, or enhanced.",
         .flags = kArchived});
     auto decals = console.registerCvar(
         CvarDesc<std::int32_t>{.name = "r_decals",

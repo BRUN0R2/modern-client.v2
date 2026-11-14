@@ -20,6 +20,8 @@ struct GammaSettings {
     float brightness = 1.0F;   ///< `brightness`, 0 to 3; CS 1.6 ships 1 in config.cfg.
     float textureGamma = 2.0F; ///< `texgamma`, 1.8 to 3.
     float lightGamma = 2.5F;   ///< `lightgamma`, 1.8 to 3.
+
+    [[nodiscard]] inline auto operator==(const GammaSettings&) const noexcept -> bool = default;
 };
 
 /// How the colors a renderer draws reach its target (shaders/colorEncoding.slang).

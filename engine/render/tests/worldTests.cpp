@@ -655,6 +655,59 @@ TEST(BspWorldTest, ADecalDarkensTheFaceItLiesOnLitAsItIs) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+TEST(BspWorldTest, AWorldMadeAgainOfItsMapByAnotherPictureKeepsTheDecalsOfTheOneBefore) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const std::vector<std::byte> file = readSeed();
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    const HoleDecal hole;
+    const auto decals = hole.textures();
+    auto before = createWorld(
+        **device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm, .decals = decals});
+    auto again = createWorld(**device, {.map = *map,
+                                        .shaderCode = shader,
+                                        .colorFormat = Format::Rgba8Unorm,
+                                        .gamma = {.gamma = 1.8F, .brightness = 2.0F},
+                                        .decals = decals});
+    ASSERT_TRUE(before.has_value() && again.has_value());
+
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.pitch = nx::Degrees{90.0F}}};
+    const std::vector<std::byte> clean = drawWorld(target, *again, camera);
+    EXPECT_EQ(before->shootDecal(nx::render::DecalImageIndex{0}, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
+    // A decal of its own elsewhere, as many as before's: each frame in flight writes it, at the same
+    // revision as the decals it takes.
+    EXPECT_EQ(again->shootDecal(nx::render::DecalImageIndex{0}, {.x = 12.0F, .y = 12.0F, .z = 0.0F}), 1U);
+    std::vector<std::byte> own;
+    for (std::uint32_t frame = 0; frame < nx::rhi::kMaxFramesInFlight; ++frame) {
+        own = drawWorld(target, *again, camera);
+    }
+    again->keepDecalsOf(*before);
+    const std::vector<std::byte> kept = drawWorld(target, *again, camera);
+
+    constexpr std::uint32_t kPixelMiddle = kExtent.width / 2;
+    EXPECT_LT(sumOf(pixelAt(kept, kPixelMiddle, kPixelMiddle)) * 10,
+              sumOf(pixelAt(clean, kPixelMiddle, kPixelMiddle)))
+        << "the decal of the world before, where it was";
+    EXPECT_NE(own, clean) << "its own decal drawn";
+    for (std::uint32_t y = 0; y < kExtent.height; ++y) {
+        for (std::uint32_t x = 0; x < kExtent.width; ++x) {
+            if (pixelAt(own, x, y) != pixelAt(clean, x, y)) {
+                EXPECT_EQ(pixelAt(kept, x, y), pixelAt(clean, x, y))
+                    << "its own decal gone, at " << x << ", " << y;
+            }
+        }
+    }
+    EXPECT_EQ(before->decals().decalsOn(nx::assets::FaceIndex{0}), 1U) << "the world before keeps its own";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 /// The seed with the square of its func_wall, model 1 at x = 16, drawn in `mode` at `amount`, and the
 /// hole decal; the views point into it, which stays where it is made.
 struct WallWithDecals {

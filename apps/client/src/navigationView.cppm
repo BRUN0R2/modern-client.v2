@@ -35,6 +35,11 @@ public:
            const nx::Result<nx::game::NavigationData, nx::console::ConsoleError>& navigation)
         -> nx::Result<void, ClientError>;
 
+    /// Gives `scene`, the scene of `session` made again, the mesh the scene before it kept, its upload
+    /// recorded in `list`; nothing while it has none. Errors: GpuFailed, with the cause.
+    [[nodiscard]] static auto keepOn(cs::Scene& scene, const Session& session, nx::rhi::CommandList& list)
+        -> nx::Result<void, ClientError>;
+
     /// What it draws over the frame of `session`, its ways found in jobs of `jobs`; nothing while it does not
     /// draw.
     [[nodiscard]] auto overlay(Session& session, nx::jobs::JobSystem& jobs) -> cs::SceneOverlay;

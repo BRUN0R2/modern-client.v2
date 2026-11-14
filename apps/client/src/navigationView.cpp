@@ -46,6 +46,17 @@ auto NavigationView::upload(Session& session, cs::Scene& scene, nx::rhi::Command
     return {};
 }
 
+auto NavigationView::keepOn(cs::Scene& scene, const Session& session, nx::rhi::CommandList& list)
+    -> nx::Result<void, ClientError> {
+    if (!session.navigationDrawing) {
+        return {};
+    }
+    if (auto kept = scene.keepOverlay(list, session.navigationDrawing->mesh()); !kept) {
+        return nx::fail(ClientError::GpuFailed, std::move(kept.error()));
+    }
+    return {};
+}
+
 auto NavigationView::overlay(Session& session, nx::jobs::JobSystem& jobs) -> cs::SceneOverlay {
     if (!isDrawing || !session.navigationDrawing) {
         return {};

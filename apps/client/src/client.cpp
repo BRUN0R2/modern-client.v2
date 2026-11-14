@@ -80,6 +80,12 @@ public:
             .lightGamma = video.lightGamma.value()};
 }
 
+/// How the picture is made as the video cvars set it (r_fidelity).
+[[nodiscard]] auto lookOf(const nx::settings::VideoCvars& video) noexcept -> nx::render::StudioLook {
+    return video.fidelity.value() == nx::settings::Fidelity::Enhanced ? nx::render::StudioLook::Enhanced
+                                                                      : nx::render::StudioLook::Legacy;
+}
+
 /// The most decals on faces the video cvars keep: `r_decals`, never negative.
 [[nodiscard]] auto decalLimitOf(const nx::settings::VideoCvars& video) -> std::size_t {
     return nx::narrow<std::size_t>(video.decals.value());
@@ -206,6 +212,14 @@ private:
     void updateWeapons();
     /// Records the frame begun in `list`, and hands it to the GPU to show.
     [[nodiscard]] auto drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError>;
+    /// The scene of the map played, made by the video cvars as they are now (gammaOf, lookOf), its uploads
+    /// recorded in `list`. Errors: GpuFailed.
+    [[nodiscard]] auto makeScene(nx::rhi::CommandList& list) -> nx::Result<cs::Scene, ClientError>;
+    /// Makes again what the picture's cvars made otherwise than they are now, its uploads recorded in
+    /// `list`, as they change, whoever changed them: the HUD's pictures, through the screen's new gamma; and
+    /// the scene of the map played, its decals and the overlay it kept carried over, the map's time going
+    /// on. Errors: GpuFailed.
+    [[nodiscard]] auto followPicture(nx::rhi::CommandList& list) -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
         -> nx::Result<void, ClientError>;
     /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
@@ -249,9 +263,6 @@ private:
     std::vector<cs::WeaponIndex> m_changedWeapons;
     nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
-    /// The picture every texture is made by as it is read, the HUD's and every map's: the video cvars' as
-    /// the client started, so that a map loaded later is made as the HUD was.
-    nx::render::GammaSettings pictureGamma{};
     std::optional<cs::Scene> m_scene;          ///< Of the session's level, made with the first image of it.
     std::optional<cs::FrameRenderer> m_frames; ///< What draws the frames, made with the first image.
     std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
@@ -395,7 +406,6 @@ auto Client::start() -> nx::Result<void, ClientError> {
         mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
     }
     sounds->openNamedOutput();
-    pictureGamma = gammaOf(settings->client.video);
     auto video = openVideo(*m_options, settings->client.video.vsync.value(), readPipelineCache());
     if (!video) {
         return std::unexpected{std::move(video.error())};
@@ -902,15 +912,48 @@ auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientErr
     return {};
 }
 
+auto Client::makeScene(nx::rhi::CommandList& list) -> nx::Result<cs::Scene, ClientError> {
+    const nx::settings::VideoCvars& video = settings->client.video;
+    const nx::render::StudioLook look = lookOf(video);
+    auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders,
+                                   m_frames->sceneFormatOf(look), m_frames->effectsFormatOf(look),
+                                   gammaOf(video), look, decalLimitOf(video));
+    if (!scene) {
+        return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
+    }
+    return std::move(*scene);
+}
+
+auto Client::followPicture(nx::rhi::CommandList& list) -> nx::Result<void, ClientError> {
+    const nx::render::GammaSettings gamma = gammaOf(settings->client.video);
+    nx::render::ScreenRenderer& screen = m_frames->screen();
+    if (screen.gamma() != gamma) {
+        screen.setGamma(gamma);
+        hud.loadPictures(*m_content, screen, list);
+    }
+    if (!m_scene || (m_scene->gamma() == gamma && m_scene->look() == lookOf(settings->client.video))) {
+        return {};
+    }
+    auto scene = makeScene(list);
+    if (!scene) {
+        return std::unexpected{std::move(scene.error())};
+    }
+    scene->keepDecalsOf(*m_scene);
+    m_scene.emplace(std::move(*scene));
+    m_changedWeapons.clear();             // the scene put every weapon's view model on the GPU
+    std::ignore = m_frameClock.restart(); // making it is no time of the game's
+    return NavigationView::keepOn(*m_scene, *m_session, list);
+}
+
 /// Puts on the GPU what the frame draws that is not there yet, its uploads recorded in `list` before
 /// the frame renders: what draws the frames, the HUD's pictures and the console's atlas, the main menu's
-/// text while it is open, and the scene of the map played.
+/// text while it is open, and the scene of the map played; and again what the picture's cvars changed.
 auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
     -> nx::Result<void, ClientError> {
     if (!m_frames) {
         auto frames = cs::FrameRenderer::create(*m_video->device,
                                                 std::move(*std::exchange(m_frameShaders, std::nullopt)),
-                                                frame.format, pictureGamma);
+                                                frame.format, gammaOf(settings->client.video));
         if (!frames) {
             return nx::fail(ClientError::GpuFailed, std::move(frames.error()));
         }
@@ -929,6 +972,9 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
             m_output.window = m_consoleWindow->dialog();
         }
     }
+    if (auto followed = followPicture(list); !followed) {
+        return followed;
+    }
     if (mainMenu->isOpen() || mapAsked) {
         if (auto loaded = mainMenu->load(m_fonts, m_frames->screen(), list, frame.size); !loaded) {
             return loaded;
@@ -943,16 +989,9 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
         buyMenu->load(m_fonts, m_content->vfs, m_frames->screen(), list, extentOf(*size).height);
     }
     if (m_session && !m_scene) {
-        // r_fidelity, read as the map's scene is made.
-        const nx::render::StudioLook look =
-            settings->client.video.fidelity.value() == nx::settings::Fidelity::Enhanced
-                ? nx::render::StudioLook::Enhanced
-                : nx::render::StudioLook::Legacy;
-        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders,
-                                       m_frames->sceneFormatOf(look), m_frames->effectsFormatOf(look),
-                                       pictureGamma, look, decalLimitOf(settings->client.video));
+        auto scene = makeScene(list);
         if (!scene) {
-            return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
+            return std::unexpected{std::move(scene.error())};
         }
         m_scene.emplace(std::move(*scene));
         m_changedWeapons.clear();             // the scene put every weapon's view model on the GPU
