@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.console;
 import nx.platform;
+import nx.render;
 import nx.settings;
 import cs.shared;
 import cs.client;
@@ -29,11 +30,34 @@ constexpr float kVolumeStep = 0.05F;
 constexpr float kLeastMaxFps = 30.0F;
 constexpr float kMaxFpsStep = 10.0F;
 constexpr float kPictureStep = 0.1F; ///< Of gamma and brightness.
+/// Of a channel of the crosshair's color, from 0 to the most a channel holds: Counter-Strike 1.6's 50 and 250
+/// among its steps.
+constexpr float kChannelStep = 5.0F;
+constexpr auto kMostChannel = static_cast<float>(std::numeric_limits<std::uint8_t>::max());
 
 /// The text of the options' that writes each way the picture is made (r_fidelity).
 using FidelityTexts = nx::EnumArray<nx::settings::Fidelity, std::string OptionsTexts::*>;
 constexpr FidelityTexts kFidelityTexts{
     FidelityTexts::Storage{&OptionsTexts::fidelityLegacy, &OptionsTexts::fidelityEnhanced}};
+
+/// The text of the options' that writes each size of the crosshair (cl_crosshair_size).
+using CrosshairSizeTexts = nx::EnumArray<cs::CrosshairSize, std::string OptionsTexts::*>;
+constexpr CrosshairSizeTexts kCrosshairSizeTexts{
+    CrosshairSizeTexts::Storage{&OptionsTexts::crosshairAuto, &OptionsTexts::crosshairSmall,
+                                &OptionsTexts::crosshairMedium, &OptionsTexts::crosshairLarge}};
+
+/// A channel of the crosshair's color, and the text of the options' that names its slider.
+struct CrosshairChannel {
+    std::uint8_t nx::render::ScreenColor::* channel = nullptr;
+    std::string OptionsTexts::* name = nullptr;
+};
+
+/// The channels the options set the crosshair's color by, in their order.
+constexpr auto kCrosshairChannels = std::to_array<CrosshairChannel>({
+    {.channel = &nx::render::ScreenColor::red, .name = &OptionsTexts::crosshairRed},
+    {.channel = &nx::render::ScreenColor::green, .name = &OptionsTexts::crosshairGreen},
+    {.channel = &nx::render::ScreenColor::blue, .name = &OptionsTexts::crosshairBlue},
+});
 
 /// A slider of `cvar` from `minimum` to `maximum` by `step`, named by `name` on the tab of `category`.
 [[nodiscard]] auto sliderOf(OptionCategory category, std::string OptionsTexts::* name, Cvar<float> cvar,
@@ -104,6 +128,38 @@ template <class Value>
             .name = &OptionsTexts::language,
             .control = choiceOf(language, languages | std::ranges::to<std::vector>(),
                                 languages | std::ranges::to<std::vector<cs::ChoiceText>>())};
+}
+
+/// The choice of the crosshair's size (`size`, cl_crosshair_size), each written by its text.
+[[nodiscard]] auto crosshairSizeOf(Cvar<std::string> size) -> cs::OptionRow {
+    return {.category = OptionCategory::Game,
+            .name = &OptionsTexts::crosshairSize,
+            .control =
+                choiceOf(size, CrosshairSizeTexts::keys() | std::views::transform([](cs::CrosshairSize each) {
+                                   return std::string{cs::crosshairSizeName(each)};
+                               }) | std::ranges::to<std::vector>(),
+                         kCrosshairSizeTexts | std::ranges::to<std::vector<cs::ChoiceText>>())};
+}
+
+/// The slider of `shade`, a channel of the crosshair's color in `hud` (cl_crosshair_color): what it sets
+/// leaves the other channels as they are.
+[[nodiscard]] auto crosshairChannelOf(const cs::HudCvars& hud, const CrosshairChannel& shade)
+    -> cs::OptionRow {
+    const auto channel = shade.channel;
+    return {.category = OptionCategory::Game,
+            .name = shade.name,
+            .control = cs::OptionSlider{
+                .value = [hud, channel] { return static_cast<float>(hud.crosshair().color.*channel); },
+                .set =
+                    [hud, channel](float value) {
+                        nx::render::ScreenColor color = hud.crosshair().color;
+                        color.*channel = nx::narrow<std::uint8_t>(std::lround(value));
+                        hud.setCrosshairColor(color);
+                    },
+                .minimum = 0.0F,
+                .maximum = kMostChannel,
+                .step = kChannelStep,
+                .style = OptionValueStyle::Whole}};
 }
 
 /// An action the keys run: the text that names it, and its command.
@@ -204,6 +260,12 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::autoSwitch, client.player.autoWeaponSwitch));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::rightHand, settings.hud.rightHand));
     rows.push_back(languageOf(client.player.language, languages));
+    rows.push_back(crosshairSizeOf(settings.hud.crosshairSize));
+    rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::crosshairTranslucent,
+                            settings.hud.crosshairTranslucent));
+    for (const CrosshairChannel& shade : kCrosshairChannels) {
+        rows.push_back(crosshairChannelOf(settings.hud, shade));
+    }
     return rows;
 }
 

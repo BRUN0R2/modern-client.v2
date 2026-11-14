@@ -590,7 +590,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] The options' `gl_vsync` (taking effect at once: `rhi::Swapchain::setPresentMode`), `r_fidelity`, `gamma`, `brightness` and `cl_language`, with a choice among values that goes around them (`cs::OptionChoice`) and the page telling when a change takes effect (`cs::TakesEffect`)
 - [x] `gamma`, `brightness`, `texgamma`, `lightgamma` and `r_fidelity` taking effect at once: the HUD's pictures and the scene made again between two frames, the decals kept (`ScreenRenderer::setGamma`, `BspWorld::keepDecalsOf`)
 - [x] The language taking effect at once ([ADR-0036](adr/0036-language-at-once.md)): the texts read again as `cl_language` changes (`cs::PlayerTexts`), the main menu laid out again in them, a choice's values written as it draws (`cs::ChoiceText`)
-- [ ] The options' player name, with a text entry; voice and the crosshair
+- [x] The options' crosshair: its size, its translucency, and its color by a slider for each channel (`HudCvars::setCrosshairColor`)
+- [ ] The options' player name, with a text entry; voice
+- [ ] The crosshair's five colors the original's options name, their values observed in the original (its `config.cfg` after each is chosen): needs the original game
 - [x] The options' keys: the actions of the commands the client has, each with its keys, a key waited for and given to it (two an action, as the original's), taken with Delete (`cs::OptionKeys`, `nx::settings::KeyBindings::give`, `pressedKeyOf`), on a list that scrolls
 - [ ] The options' keys of the commands still to come (the radio, the chat, dropping a weapon, the night vision, the weapon slots with their menu), and restoring the original's binds
 - [ ] Server browser

@@ -280,6 +280,10 @@ auto crosshairSizeNamed(std::string_view text) noexcept -> std::optional<Crossha
     return std::nullopt;
 }
 
+auto crosshairSizeName(CrosshairSize size) noexcept -> std::string_view {
+    return kSizeNames[size];
+}
+
 auto crosshairColorOf(std::string_view text) noexcept -> std::optional<nx::render::ScreenColor> {
     constexpr std::uint32_t kChannelTop = 255;
     constexpr std::size_t kColorChannelCount = 3;
@@ -346,6 +350,10 @@ auto HudCvars::registerIn(nx::console::Console& console) -> nx::Result<HudCvars,
 
 auto HudCvars::hand() const -> Hand {
     return rightHand.value() ? Hand::Right : Hand::Left;
+}
+
+void HudCvars::setCrosshairColor(nx::render::ScreenColor color) const {
+    crosshairColor.setAccepted(std::format("{} {} {}", color.red, color.green, color.blue));
 }
 
 auto HudCvars::crosshair() const -> CrosshairStyle {
