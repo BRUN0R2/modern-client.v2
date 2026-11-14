@@ -27,15 +27,11 @@ constexpr float kTextureGamma = 2.0F;
 constexpr float kLightGamma = 2.5F;
 constexpr float kVolume = 0.7F;
 // The frames a second the original's Host_FilterTime holds fps_max to: at least half a frame, 20 in a
-// game of more than one player, 100 at most without fps_override, and the half frame it adds to them.
+// game of more than one player, kMostFpsWithoutOverride at most without fps_override, and the half
+// frame it adds to them.
 constexpr float kLeastFps = 0.5F;
 constexpr float kLeastMultiplayerFps = 20.0F;
-constexpr float kMostFpsWithoutOverride = 100.0F;
 constexpr float kFpsMargin = 0.5F;
-// The ranges the original holds the picture's cvars to (V_CheckGamma).
-constexpr float kLeastGamma = 1.8F;
-constexpr float kMostGamma = 3.0F;
-constexpr float kMostBrightness = 3.0F;
 
 } // namespace
 
@@ -84,29 +80,30 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                             .defaultValue = false,
                                             .description = "Whether frames wait for the display's refresh.",
                                             .flags = kArchived});
-    auto gamma =
-        console.registerCvar(CvarDesc<float>{.name = "gamma",
-                                             .defaultValue = kGamma,
-                                             .description = "The display's gamma the picture is made for.",
-                                             .flags = kArchived,
-                                             .minimum = kLeastGamma,
-                                             .maximum = kMostGamma});
-    auto brightness = console.registerCvar(CvarDesc<float>{.name = "brightness",
-                                                           .defaultValue = kBrightness,
-                                                           .description = "How much the light is brightened.",
-                                                           .flags = kArchived,
-                                                           .minimum = 0.0F,
-                                                           .maximum = kMostBrightness});
+    auto gamma = console.registerCvar(CvarDesc<float>{
+        .name = "gamma",
+        .defaultValue = kGamma,
+        .description = "The display's gamma the picture is made for; read as the game starts.",
+        .flags = kArchived,
+        .minimum = kLeastGamma,
+        .maximum = kMostGamma});
+    auto brightness = console.registerCvar(
+        CvarDesc<float>{.name = "brightness",
+                        .defaultValue = kBrightness,
+                        .description = "How much the light is brightened; read as the game starts.",
+                        .flags = kArchived,
+                        .minimum = kLeastBrightness,
+                        .maximum = kMostBrightness});
     auto textureGamma = console.registerCvar(CvarDesc<float>{
         .name = "texgamma",
         .defaultValue = kTextureGamma,
-        .description = "The gamma the textures' palettes are brought from; read when a map is loaded.",
+        .description = "The gamma the textures' palettes are brought from; read as the game starts.",
         .minimum = kLeastGamma,
         .maximum = kMostGamma});
     auto lightGamma = console.registerCvar(
         CvarDesc<float>{.name = "lightgamma",
                         .defaultValue = kLightGamma,
-                        .description = "The gamma the lightmaps are brought from; read when a map is loaded.",
+                        .description = "The gamma the lightmaps are brought from; read as the game starts.",
                         .minimum = kLeastGamma,
                         .maximum = kMostGamma});
     auto hudDraw = console.registerCvar(CvarDesc<bool>{.name = "hud_draw",

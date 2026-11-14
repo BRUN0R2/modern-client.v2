@@ -446,14 +446,18 @@ Escape, or `BACK`, goes back to the items, and another item chosen leaves the pa
 
 **The options** (`cs.client:optionsPage`) list the player's settings by what they set, each on a tab: the
 mouse, the keys, the audio, the video and the game. A row names a setting and has what changes it: a slider, its
-value written after its track; a switch, which says whether it is on; or the keys of an action. Today: `sensitivity` and the mouse reversed
+value written after its track; a switch, which says whether it is on; a choice among a few values, which
+writes the one chosen; or the keys of an action. Today: `sensitivity` and the mouse reversed
 (`m_pitch` below zero, as the original's option sets it); `volume` and the sound while the window is not focused
 (`s_play_unfocused`); the most frames a second (`fps_max`, to the 100 it gives without `fps_override`),
-`cl_showfps` and `hud_draw`; `_cl_autowepswitch` and `cl_righthand`. A setting is set as it is changed, takes
-effect at once, and is kept by `config.cfg` as every archived cvar is: there is nothing to apply or to cancel,
-where the original has `OK`, `Cancel` and `Apply`. Only what takes effect at once is listed: the settings read
-as the game or a map starts (`gl_vsync`, `gamma`, `brightness`, `r_fidelity`, `cl_language`) and the player's
-name come with what lets them be changed there.
+`gl_vsync`, `cl_showfps`, `hud_draw`, how the picture is made (`r_fidelity`), `gamma` and `brightness`;
+`_cl_autowepswitch`, `cl_righthand` and the language (`cl_language`, among those the game's data has). A
+setting is set as it is changed and kept by `config.cfg` as every archived cvar is: there is nothing to apply
+or to cancel, where the original has `OK`, `Cancel` and `Apply`. Most take effect at once, `gl_vsync` among
+them (§5.1). Those that do not say so: while one is selected, a line between the list and the page's buttons
+tells when its change takes effect (`cs::TakesEffect`): `r_fidelity` on the next map; `gamma`, `brightness` and
+the language the next time the game starts. The language is written by its tag (`en`, `pt-BR`); set from the console to one the game's
+data does not have, the row shows none chosen. The player's name comes with what lets it be typed there.
 
 **The keys** list the actions of the commands the client has, each with the keys that run it, as `bind` names
 them: moving, jumping, ducking, walking, using, firing, the weapon's special function, reloading, the last
@@ -468,10 +472,11 @@ the page: it follows what is selected, the wheel scrolls it, and a thumb down it
 binds are those `bind` sets, kept by `config.cfg`.
 
 Left and Right change the tab while the tabs are selected, as they are when the page opens; Down selects the
-first row and Up, from it, the tabs again. On a row, Left and Right move a slider by a step and switch a switch
-over, and Enter switches a switch over too, or has an action wait for its key. The mouse selects the row it is over; its left button shows the tab
-it is pressed on, switches a switch over, and sets a slider to where it is pressed on its track, which follows
-it until the button comes up. Escape, or `BACK`, goes back to the items. What a row reads and sets is given to
+first row and Up, from it, the tabs again. On a row, Left and Right move a slider by a step, switch a switch
+over and take a choice to the value before or after it, going around past either end; Enter switches a switch
+over too, takes a choice to its next value, or has an action wait for its key. The mouse selects the row it is
+over; its left button shows the tab it is pressed on, switches a switch over, takes a choice to its next value,
+and sets a slider to where it is pressed on its track, which follows it until the button comes up. Escape, or `BACK`, goes back to the items. What a row reads and sets is given to
 the menu by what runs it (`app.client:options`, the client's cvars), so that the page knows no cvar.
 
 **The loading screen.** A map takes seconds to load, and the frames wait for it. So `map` (and `nav_generate`,
@@ -606,11 +611,13 @@ is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, whi
 `next` registers them, with the game's and the HUD's below, as one `ClientSettings` (`app.client:settings`),
 reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
 effect as soon as what reads it reads it again: `in_keymap` with the next key press, the mouse's
-as the mouse moves, `fps_max`,
-`fps_override`, `hud_draw`, `cl_showfps`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon
-given, the picture's (`gamma`, `brightness`,
-`texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again
-(the pace it sets with `fps_max`, with the next frame).
+as the mouse moves, `fps_max`, `fps_override`, `hud_draw`, `cl_showfps`, `r_decals`, `volume` and
+`s_play_unfocused` with the next frame, `gl_vsync` between two frames (the swapchain made again as it
+changes, `rhi::Swapchain::setPresentMode`), `_cl_autowepswitch` with the next weapon given, `r_fidelity` with
+the next map, and the picture's gamma (`gamma`, `brightness`, `texgamma`, `lightgamma`) when `next` starts
+again: every texture is made by it as it is read, the HUD's as the first frame is drawn and a map's as it is
+loaded, so that `next` keeps the values it started with for all it draws, and a map loaded later is made as
+the HUD was.
 `config.cfg` keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
 `cl_crosshair_translucent` (1), and `cl_righthand` (1, the weapons in the right hand, else in the
@@ -802,7 +809,8 @@ the two there are): a table for each part and a key for each text, read as the r
 language is whole or it is not offered, and a test reads every language of the repository. `cl_language`
 (archived, `en` unless chosen) names the language; it is read as `next` starts, once the player's files and
 the command line ran, and one the data does not have stops the start, telling the languages there are and
-how to choose again (`next +cl_language en`). A change takes the next start, as the original's does. The
+how to choose again (`next +cl_language en`). A change, from the console or from the options (§4, among
+the languages the data has, `cs::languagesOf`), takes the next start, as the original's does. The
 main menu writes by it; the buy menu's and the HUD's own texts are constants still, in English, until they
 move to it. Texts with values in them, and the original's own (`titles.txt`), come with what writes them.
 

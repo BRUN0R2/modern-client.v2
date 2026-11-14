@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The options of the main menu (docs/12-ui-hud-and-console.md, section 4): the player's settings by what
-/// they set, each on a row with what changes it, a slider, a switch or the keys of an action, changed by
-/// the keys or the mouse and set as it is changed. Here is the page's state and what it shows
-/// (OptionsFrame); what a setting reads and sets is given by whoever runs the menu, and drawing it is apart
-/// (cs.client:mainMenuPanel).
+/// they set, each on a row with what changes it, a slider, a switch, a choice among a few values or the
+/// keys of an action, changed by the keys or the mouse and set as it is changed, and told when it takes
+/// effect if not at once. Here is the page's state and what it shows (OptionsFrame); what a setting reads
+/// and sets is given by whoever runs the menu, and drawing it is apart (cs.client:mainMenuPanel).
 export module cs.client:optionsPage;
 
 import std;
@@ -60,15 +60,33 @@ struct OptionKeys {
     std::function<void()> clear;
 };
 
-/// What changes a setting.
-using OptionControl = std::variant<OptionSlider, OptionSwitch, OptionKeys>;
+/// A setting that is one of a few values: how each is written, in their order, at least one; which of them
+/// it is now, none while it is set to another (from the console); and what sets it to one of them, by its
+/// place among them.
+struct OptionChoice {
+    std::vector<std::string> values;
+    std::function<std::optional<std::size_t>()> chosen;
+    std::function<void(std::size_t)> choose;
+};
 
-/// A setting the options list: the tab it is on, the text of the options' that names it, and what changes
-/// it.
+/// What changes a setting.
+using OptionControl = std::variant<OptionSlider, OptionSwitch, OptionKeys, OptionChoice>;
+
+/// When a change of a setting takes effect.
+enum class TakesEffect : std::uint8_t {
+    AtOnce,
+    OnNextMap,   ///< As the next map is loaded.
+    OnNextStart, ///< As the game starts again.
+    Count,
+};
+
+/// A setting the options list: the tab it is on, the text of the options' that names it, what changes it,
+/// and when a change of it takes effect.
 struct OptionRow {
     OptionCategory category{};
     std::string OptionsTexts::* name = nullptr;
     OptionControl control;
+    TakesEffect takesEffect = TakesEffect::AtOnce;
 };
 
 /// A slider as it shows: its value, how it is written, and the share of its track the value is at, from 0
@@ -97,8 +115,15 @@ struct ShownKeys {
     [[nodiscard]] inline auto operator==(const ShownKeys&) const noexcept -> bool = default;
 };
 
+/// A choice as it shows: the value chosen, as it is written; none while it is set to another.
+struct ShownChoice {
+    std::optional<std::string> chosen{};
+
+    [[nodiscard]] inline auto operator==(const ShownChoice&) const noexcept -> bool = default;
+};
+
 /// What changes a setting, as it shows.
-using ShownControl = std::variant<ShownSlider, ShownSwitch, ShownKeys>;
+using ShownControl = std::variant<ShownSlider, ShownSwitch, ShownKeys, ShownChoice>;
 
 /// A row of the tab shown: the text that names its setting, and what changes it as it stands.
 struct ShownOption {
@@ -113,12 +138,13 @@ struct ShownOption {
 };
 
 /// All the options show: the tab shown; its rows on those the page's list shows, from the one at `first` of
-/// all `count`; and the row of the one selected, when it is among them. None is selected while the tabs
-/// are.
+/// all `count`; the row of the one selected, when it is among them; and when a change of the one selected
+/// takes effect, at once while none is. None is selected while the tabs are.
 struct OptionsFrame {
     OptionCategory category{};
     std::vector<ShownOption> rows{};
     std::optional<std::size_t> selectedRow{};
+    TakesEffect takesEffect = TakesEffect::AtOnce;
     std::size_t first = 0;
     std::size_t count = 0;
 
@@ -150,13 +176,15 @@ public:
 
     /// What `event` does to the options, laid out by `layout`, with the mouse's cursor at `cursor`. Left and
     /// Right change the tab while the tabs are selected, else the setting selected: a slider by a step, a
-    /// switch over. Up and Down select the setting before and the one after, the tabs above the first, the
-    /// list following it; the wheel scrolls the list. Enter switches a switch over, and has an action wait
-    /// for its key; Delete and Backspace take an action's keys from it. The mouse selects the row it is
-    /// over; its left button shows the tab it is pressed on, switches a switch over, has an action wait for
-    /// its key, and sets a slider to where it is pressed on its track, and on as it moves until it comes
-    /// up. While an action waits, the next key, button or notch of the wheel is given to it, and Escape
-    /// leaves it as it was. Else Escape, and the page's button, go back to the menu's items.
+    /// switch over, a choice to the value before or after it, going around past either end. Up and Down
+    /// select the setting before and the one after, the tabs above the first, the list following it; the
+    /// wheel scrolls the list. Enter switches a switch over, takes a choice to its next value, and has an
+    /// action wait for its key; Delete and Backspace take an action's keys from it. The mouse selects the row
+    /// it is over; its left button shows the tab it is pressed on, switches a switch over, takes a choice to
+    /// its next value, has an action wait for its key, and sets a slider to where it is pressed on its track,
+    /// and on as it moves until it comes up. While an action waits, the
+    /// next key, button or notch of the wheel is given to it, and Escape leaves it as it was. Else Escape,
+    /// and the page's button, go back to the menu's items.
     [[nodiscard]] auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                               const MainMenuLayout& layout) -> OptionsOutcome;
 
@@ -174,9 +202,11 @@ private:
     void select(std::size_t index, std::size_t listRows) noexcept;
     /// Shows the tab `tab`, its tabs selected.
     void show(OptionCategory tab) noexcept;
-    /// Changes the setting selected by a step: a slider down or up as `steps` says, a switch over.
+    /// Changes the setting selected by a step: a slider or a choice down or up as `steps` says, a switch
+    /// over.
     void change(std::int32_t steps);
-    /// What Enter, or the left button, does to the setting selected: a switch over, an action waits.
+    /// What Enter, or the left button, does to the setting selected: a switch over, a choice to its next
+    /// value, an action waits.
     void activate();
     /// Sets `slider` to where the cursor's `x` is on `track`.
     static void drag(const OptionSlider& slider, const nx::ui::PixelRect& track, float x);

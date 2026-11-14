@@ -249,6 +249,9 @@ private:
     std::vector<cs::WeaponIndex> m_changedWeapons;
     nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
+    /// The picture every texture is made by as it is read, the HUD's and every map's: the video cvars' as
+    /// the client started, so that a map loaded later is made as the HUD was.
+    nx::render::GammaSettings pictureGamma{};
     std::optional<cs::Scene> m_scene;          ///< Of the session's level, made with the first image of it.
     std::optional<cs::FrameRenderer> m_frames; ///< What draws the frames, made with the first image.
     std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
@@ -382,11 +385,17 @@ auto Client::start() -> nx::Result<void, ClientError> {
                         std::move(written.error()));
     }
     texts.emplace(std::move(*written));
-    mainMenu.emplace(*m_content, *texts, clientOptionsOf(*settings, m_bindings));
+    // Those the options offer the player to choose from.
+    auto languages = cs::languagesOf(dataFolder);
+    if (!languages) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(languages.error()));
+    }
+    mainMenu.emplace(*m_content, *texts, clientOptionsOf(*settings, m_bindings, texts->options, *languages));
     if (!mapAsked) {
         mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
     }
     sounds->openNamedOutput();
+    pictureGamma = gammaOf(settings->client.video);
     auto video = openVideo(*m_options, settings->client.video.vsync.value(), readPipelineCache());
     if (!video) {
         return std::unexpected{std::move(video.error())};
@@ -688,6 +697,13 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_frameStart + std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(interval));
         m_frameStart = nx::platform::MonotonicClock::now();
         m_frameRate.frameStarted(m_frameStart);
+        // gl_vsync as it is now, whoever set it: the swapchain is made again between two frames as it
+        // changes.
+        if (auto presented =
+                m_video->swapchain->setPresentMode(presentModeOf(settings->client.video.vsync.value()));
+            !presented) {
+            return nx::fail(ClientError::GpuFailed, std::move(presented.error()));
+        }
         // The frame's waits, for the GPU and for the frame before to be taken to the GPU, before the
         // input is read too (docs/adr/0029-submission-thread.md).
         auto commands = m_video->device->beginFrame();
@@ -894,7 +910,7 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
     if (!m_frames) {
         auto frames = cs::FrameRenderer::create(*m_video->device,
                                                 std::move(*std::exchange(m_frameShaders, std::nullopt)),
-                                                frame.format, gammaOf(settings->client.video));
+                                                frame.format, pictureGamma);
         if (!frames) {
             return nx::fail(ClientError::GpuFailed, std::move(frames.error()));
         }
@@ -932,10 +948,9 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
             settings->client.video.fidelity.value() == nx::settings::Fidelity::Enhanced
                 ? nx::render::StudioLook::Enhanced
                 : nx::render::StudioLook::Legacy;
-        auto scene =
-            cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders,
-                              m_frames->sceneFormatOf(look), m_frames->effectsFormatOf(look),
-                              gammaOf(settings->client.video), look, decalLimitOf(settings->client.video));
+        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders,
+                                       m_frames->sceneFormatOf(look), m_frames->effectsFormatOf(look),
+                                       pictureGamma, look, decalLimitOf(settings->client.video));
         if (!scene) {
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }

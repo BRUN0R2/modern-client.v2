@@ -218,6 +218,10 @@ public:
 
     /// Recreates the images for the window's new drawable size. Errors: as acquire.
     [[nodiscard]] virtual auto resize(Extent2d size) -> Result<void, RhiError> = 0;
+
+    /// Shows the images as `mode` says from the next frame, recreating them when it showed them
+    /// otherwise; a mode the surface lacks is Fifo, as createSwapchain makes it. Errors: as acquire.
+    [[nodiscard]] virtual auto setPresentMode(PresentMode mode) -> Result<void, RhiError> = 0;
 };
 
 class Device;

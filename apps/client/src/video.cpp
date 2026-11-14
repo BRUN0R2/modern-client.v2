@@ -53,6 +53,10 @@ void savePipelineCache(const nx::rhi::Device& device) {
     }
 }
 
+auto presentModeOf(bool isVsync) noexcept -> nx::rhi::PresentMode {
+    return isVsync ? nx::rhi::PresentMode::Fifo : nx::rhi::PresentMode::Immediate;
+}
+
 /// Opens the window and the GPU, presenting as `isVsync` asks, the device given what the GPU learned
 /// building the pipelines before (`pipelineCache`). Errors: WindowUnavailable, GpuFailed.
 auto openVideo(const ClientOptions& options, bool isVsync, std::span<const std::byte> pipelineCache)
@@ -75,9 +79,8 @@ auto openVideo(const ClientOptions& options, bool isVsync, std::span<const std::
     if (!device) {
         return nx::fail(ClientError::GpuFailed, std::move(device.error()));
     }
-    auto swapchain = (*device)->createSwapchain(
-        {.size = extentOf(*size),
-         .presentMode = isVsync ? nx::rhi::PresentMode::Fifo : nx::rhi::PresentMode::Immediate});
+    auto swapchain =
+        (*device)->createSwapchain({.size = extentOf(*size), .presentMode = presentModeOf(isVsync)});
     if (!swapchain) {
         return nx::fail(ClientError::GpuFailed, std::move(swapchain.error()));
     }

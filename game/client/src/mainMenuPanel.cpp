@@ -44,6 +44,22 @@ constexpr nx::EnumArray<OptionCategory, std::string OptionsTexts::*> kTabTexts{
         &OptionsTexts::mouse, &OptionsTexts::keyboard, &OptionsTexts::audio, &OptionsTexts::video,
         &OptionsTexts::game}};
 
+/// What tells, in the language of `texts`, when a change takes effect as `takesEffect` says; nothing for
+/// one at once.
+[[nodiscard]] auto takesEffectText(const OptionsTexts& texts, TakesEffect takesEffect) noexcept
+    -> std::optional<std::string_view> {
+    switch (takesEffect) {
+    case TakesEffect::OnNextMap:
+        return texts.onNextMap;
+    case TakesEffect::OnNextStart:
+        return texts.onNextStart;
+    case TakesEffect::AtOnce:
+    case TakesEffect::Count:
+        break;
+    }
+    return std::nullopt;
+}
+
 /// What the menu calls the item that does `action`, in the language of `texts`.
 [[nodiscard]] auto itemNameOf(const MainMenuTexts& texts, MainMenuAction action) noexcept
     -> std::string_view {
@@ -81,6 +97,42 @@ void writeEnding(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, st
                                {.x = end - nx::ui::widthOf(*face.atlas, text),
                                 .y = rect.y + ((rect.tall - face.atlas->lineHeight()) / kMiddleDivisor)},
                                color);
+}
+
+/// Draws `control`, what changes the setting on the list's row `row` by `layout`, with `painter`, in `face`,
+/// writing `texts`.
+void paintOptionControl(nx::ui::PanelPainter& painter, const MainMenuLayout& layout,
+                        const nx::ui::TextFace& face, const OptionsTexts& texts, const ShownControl& control,
+                        std::size_t row) {
+    const nx::ui::PixelRect rect = layout.optionControl(row);
+    const nx::Pixels end = rect.x + rect.wide;
+    if (const auto* const slider = std::get_if<ShownSlider>(&control)) {
+        const nx::ui::PixelRect track = layout.optionTrack(row);
+        painter.fill(track, kMenuLine);
+        painter.fill({.x = track.x,
+                      .y = track.y,
+                      .wide = nx::Pixels{static_cast<std::int32_t>(
+                          std::lround(static_cast<float>(track.wide.value()) * slider->share))},
+                      .tall = track.tall},
+                     kMenuGold);
+        writeEnding(painter, face, sliderText(*slider), end, rect, kMenuInk);
+    } else if (const auto* const choice = std::get_if<ShownChoice>(&control)) {
+        if (choice->chosen) {
+            writeEnding(painter, face, *choice->chosen, end, rect, kMenuInk);
+        }
+    } else if (const auto* const keys = std::get_if<ShownKeys>(&control)) {
+        // Waited for, it asks for its key; else its keys, or that it has none.
+        if (keys->isWaited) {
+            writeEnding(painter, face, texts.pressAKey, end, rect, kMenuGold);
+        } else if (keys->keys.empty()) {
+            writeEnding(painter, face, texts.noKey, end, rect, kMenuInkFaint);
+        } else {
+            writeEnding(painter, face, keys->keys, end, rect, kMenuInk);
+        }
+    } else {
+        const bool isOn = std::get<ShownSwitch>(control).isOn;
+        writeEnding(painter, face, isOn ? texts.on : texts.off, end, rect, isOn ? kMenuGold : kMenuInkFaint);
+    }
 }
 
 /// Draws the options showing `shown` by `layout` with `painter`, in `faces`, writing `texts`.
@@ -121,37 +173,21 @@ void paintOptions(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
                          {.x = rect.x + layout.pixels(kRowInset),
                           .y = rect.y + ((rect.tall - rowFace.atlas->lineHeight()) / kMiddleDivisor)},
                          isSelected ? kMenuInk : kMenuInkSoft);
-        const nx::ui::PixelRect control = layout.optionControl(row);
-        const nx::Pixels end = control.x + control.wide;
-        if (const auto* const slider = std::get_if<ShownSlider>(&option.control)) {
-            const nx::ui::PixelRect track = layout.optionTrack(row);
-            painter.fill(track, kMenuLine);
-            painter.fill({.x = track.x,
-                          .y = track.y,
-                          .wide = nx::Pixels{static_cast<std::int32_t>(
-                              std::lround(static_cast<float>(track.wide.value()) * slider->share))},
-                          .tall = track.tall},
-                         kMenuGold);
-            writeEnding(painter, rowFace, sliderText(*slider), end, control, kMenuInk);
-        } else if (const auto* const keys = std::get_if<ShownKeys>(&option.control)) {
-            // Waited for, it asks for its key; else its keys, or that it has none.
-            const std::string_view written = keys->isWaited       ? std::string_view{texts.options.pressAKey}
-                                             : keys->keys.empty() ? std::string_view{texts.options.noKey}
-                                                                  : std::string_view{keys->keys};
-            writeEnding(painter, rowFace, written, end, control,
-                        keys->isWaited       ? kMenuGold
-                        : keys->keys.empty() ? kMenuInkFaint
-                                             : kMenuInk);
-        } else {
-            const bool isOn = std::get<ShownSwitch>(option.control).isOn;
-            writeEnding(painter, rowFace, isOn ? texts.options.on : texts.options.off, end, control,
-                        isOn ? kMenuGold : kMenuInkFaint);
-        }
+        paintOptionControl(painter, layout, rowFace, texts.options, option.control, row);
     }
     if (const std::optional<nx::ui::PixelRect> thumb = layout.listThumb(shown.first, shown.count)) {
         painter.fill(*thumb, kMenuInkFaint);
     }
 
+    if (const std::optional<std::string_view> note = takesEffectText(texts.options, shown.takesEffect)) {
+        // When a change of the setting selected takes effect.
+        const nx::ui::PixelRect line = layout.pageNote();
+        std::ignore =
+            painter.text(hintFace, *note,
+                         {.x = line.x + layout.pixels(kRowInset),
+                          .y = line.y + ((line.tall - hintFace.atlas->lineHeight()) / kMiddleDivisor)},
+                         kMenuInkSoft);
+    }
     paintMenuOutline(painter, layout.backButton(), kMenuLine);
     writeInMiddle(painter, rowFace, texts.mainMenu.back, layout.backButton(), kMenuInkSoft);
 }

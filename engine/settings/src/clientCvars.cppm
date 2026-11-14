@@ -53,6 +53,16 @@ struct VideoCvars {
     console::Cvar<std::int32_t> multiplayerDecals;
 };
 
+/// The ranges the original holds the picture's cvars to (V_CheckGamma): `gamma`, `texgamma` and
+/// `lightgamma` from 1.8 to 3, `brightness` from 0 to 3.
+inline constexpr float kLeastGamma = 1.8F;
+inline constexpr float kMostGamma = 3.0F;
+inline constexpr float kLeastBrightness = 0.0F;
+inline constexpr float kMostBrightness = 3.0F;
+
+/// The most frames a second `fps_max` gives without `fps_override` (frameIntervalOf).
+inline constexpr float kMostFpsWithoutOverride = 100.0F;
+
 /// The values `r_decals` and `mp_decals` start with: the original's.
 inline constexpr std::int32_t kDefaultDecals = 4096;
 inline constexpr std::int32_t kDefaultMultiplayerDecals = 300;

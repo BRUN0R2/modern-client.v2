@@ -31,6 +31,19 @@ constexpr float kRowsANotch = 3.0F;
     return std::clamp((value - slider.minimum) / (slider.maximum - slider.minimum), 0.0F, 1.0F);
 }
 
+/// The place of the value of `choice` `steps` from the one chosen, after it above zero and before it below,
+/// going around past either end; while none is chosen, from before the first going on or after the last
+/// going back.
+[[nodiscard]] auto steppedChoiceOf(const OptionChoice& choice, std::int32_t steps) -> std::size_t {
+    nx::expects(!choice.values.empty(), "OptionChoice: a value at least");
+    const auto count = nx::narrow<std::int64_t>(choice.values.size());
+    const std::optional<std::size_t> chosen = choice.chosen();
+    // None chosen: as from just before the first going on, or just after the last going back.
+    const std::int64_t noneChosen = steps > 0 ? -1 : count;
+    const std::int64_t from = chosen ? nx::narrow<std::int64_t>(*chosen) : noneChosen;
+    return nx::narrow<std::size_t>((((from + steps) % count) + count) % count);
+}
+
 /// How `row` shows, waiting for its key or not.
 [[nodiscard]] auto shownOf(const OptionRow& row, bool isWaited) -> ShownOption {
     if (const auto* const slider = std::get_if<OptionSlider>(&row.control)) {
@@ -41,6 +54,13 @@ constexpr float kRowsANotch = 3.0F;
     }
     if (const auto* const keys = std::get_if<OptionKeys>(&row.control)) {
         return {.name = row.name, .control = ShownKeys{.keys = keys->keys(), .isWaited = isWaited}};
+    }
+    if (const auto* const choice = std::get_if<OptionChoice>(&row.control)) {
+        const std::optional<std::size_t> chosen = choice->chosen();
+        nx::expects(!chosen || *chosen < choice->values.size(), "OptionChoice: one of its values chosen");
+        return {.name = row.name,
+                .control = ShownChoice{.chosen = chosen.transform(
+                                           [choice](std::size_t index) { return choice->values[index]; })}};
     }
     return {.name = row.name, .control = ShownSwitch{.isOn = std::get<OptionSwitch>(row.control).isOn()}};
 }
@@ -96,6 +116,9 @@ auto OptionsPage::frame(std::size_t listRows) const -> OptionsFrame {
     if (selected && *selected >= first && *selected < first + shown.rows.size()) {
         shown.selectedRow = *selected - first;
     }
+    if (selected && *selected < all.size()) {
+        shown.takesEffect = all[*selected]->takesEffect;
+    }
     return shown;
 }
 
@@ -118,6 +141,8 @@ void OptionsPage::change(std::int32_t steps) {
         slider->set(steppedValueOf(*slider, slider->value() + (static_cast<float>(steps) * slider->step)));
     } else if (const auto* const toggled = std::get_if<OptionSwitch>(&row.control)) {
         toggled->set(!toggled->isOn());
+    } else if (const auto* const choice = std::get_if<OptionChoice>(&row.control)) {
+        choice->choose(steppedChoiceOf(*choice, steps));
     }
 }
 
@@ -129,7 +154,8 @@ void OptionsPage::activate() {
     const OptionControl& control = all[*selected]->control;
     if (std::holds_alternative<OptionKeys>(control)) {
         waitingRow = selected;
-    } else if (std::holds_alternative<OptionSwitch>(control)) {
+    } else if (std::holds_alternative<OptionSwitch>(control) ||
+               std::holds_alternative<OptionChoice>(control)) {
         change(1);
     }
 }
