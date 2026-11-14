@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// A text entry: typed text at its cursor, the keys that edit it, and the scroll that keeps its
-// cursor in sight.
+// A line of text typed: typed text at its cursor and the keys that edit it; and the scroll that keeps a
+// text entry's cursor in sight.
 
 #include <gtest/gtest.h>
 
@@ -19,9 +19,10 @@ namespace {
 using nx::platform::Key;
 using nx::ui::TextEntry;
 using nx::ui::TextEntryAction;
+using nx::ui::TextLine;
 
-TEST(TextEntryTest, TypedTextGoesAtTheCursor) {
-    TextEntry entry{"Input"};
+TEST(TextLineTest, TypedTextGoesAtTheCursor) {
+    TextLine entry;
     entry.insertText("abc");
     EXPECT_EQ(entry.text(), "abc");
     EXPECT_EQ(entry.cursor(), 3U);
@@ -32,12 +33,13 @@ TEST(TextEntryTest, TypedTextGoesAtTheCursor) {
                             "bc")
         << "a character, not a byte";
     EXPECT_EQ(entry.cursor(), 2U);
+    EXPECT_EQ(entry.textBeforeCursor(), "a\xC3\xA9") << "what the cursor's pen is measured by";
     entry.insertText("x\ty\n");
     EXPECT_EQ(entry.text(), "a\xC3\xA9xybc") << "control characters left out";
 }
 
-TEST(TextEntryTest, KeysMoveTheCursorAndRemoveCharacters) {
-    TextEntry entry{"Input"};
+TEST(TextLineTest, KeysMoveTheCursorAndRemoveCharacters) {
+    TextLine entry;
     entry.setText("abcd");
     EXPECT_EQ(entry.cursor(), 4U) << "after the text";
     std::ignore = entry.pressKey(Key::Backspace);
@@ -58,8 +60,8 @@ TEST(TextEntryTest, KeysMoveTheCursorAndRemoveCharacters) {
     EXPECT_EQ(entry.cursor(), 2U);
 }
 
-TEST(TextEntryTest, EnterSubmitsAndOtherKeysAreLeft) {
-    TextEntry entry{"Input"};
+TEST(TextLineTest, EnterSubmitsAndOtherKeysAreLeft) {
+    TextLine entry;
     entry.setText("map de_dust2");
     EXPECT_EQ(entry.pressKey(Key::Enter), TextEntryAction::Submitted);
     EXPECT_EQ(entry.pressKey(Key::KeypadEnter), TextEntryAction::Submitted);
@@ -83,6 +85,8 @@ TEST(TextEntryTest, ScrollsSoThatTheCursorShows) {
     EXPECT_EQ(entry.scroll(), nx::Pixels{13}) << "the cursor's pixel at 2 + 40 - 13, the entry's last";
     std::ignore = entry.pressKey(Key::Home);
     EXPECT_EQ(entry.scroll(), nx::Pixels{0});
+    static_assert(nx::ui::scrollToShow(nx::Pixels{42}, nx::Pixels{28}) == nx::Pixels{15},
+                  "the cursor's pixel the room's last");
 }
 
 } // namespace

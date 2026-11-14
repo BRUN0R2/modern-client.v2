@@ -181,6 +181,10 @@ TEST(CvarTextTest, TextWithARuleTakesOnlyWhatTheRuleAccepts) {
     EXPECT_EQ(refused.error().code, CvarError::InvalidValue);
     EXPECT_EQ(refused.error().detail, R"(cl_size: expected small or large, got "huge")");
     EXPECT_EQ(cvar.value(), "large");
+    EXPECT_TRUE(cvar.accepts("small")) << "what set would take, asked without setting it";
+    EXPECT_FALSE(cvar.accepts("huge"));
+    EXPECT_FALSE(cvar.accepts("small\"")) << "nor text it could not write back";
+    EXPECT_EQ(cvar.value(), "large");
 
     const TypedCvar<std::string> refusesItsDefault{
         CvarDesc<std::string>{.name = "cl_size",

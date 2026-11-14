@@ -44,8 +44,9 @@ constexpr float kRowsANotch = 3.0F;
     return nx::narrow<std::size_t>((((from + steps) % count) + count) % count);
 }
 
-/// How `row` shows, waiting for its key or not.
-[[nodiscard]] auto shownOf(const OptionRow& row, bool isWaited) -> ShownOption {
+/// How `row` shows: waiting for its key or not, `typed` what is typed of its text while it is.
+[[nodiscard]] auto shownOf(const OptionRow& row, bool isWaited, const nx::ui::TextLine* typed)
+    -> ShownOption {
     if (const auto* const slider = std::get_if<OptionSlider>(&row.control)) {
         const float value = slider->value();
         return {.name = row.name,
@@ -61,6 +62,12 @@ constexpr float kRowsANotch = 3.0F;
         return {.name = row.name,
                 .control = ShownChoice{.chosen = chosen.transform(
                                            [choice](std::size_t index) { return choice->values[index]; })}};
+    }
+    if (const auto* const field = std::get_if<OptionText>(&row.control)) {
+        return {.name = row.name,
+                .control = typed != nullptr ? ShownText{.text = typed->text(),
+                                                        .cursorBytes = typed->textBeforeCursor().size()}
+                                            : ShownText{.text = field->text()}};
     }
     return {.name = row.name, .control = ShownSwitch{.isOn = std::get<OptionSwitch>(row.control).isOn()}};
 }
@@ -94,6 +101,7 @@ void OptionsPage::show(OptionCategory tab) noexcept {
     firstShown = 0;
     draggedRow.reset();
     waitingRow.reset();
+    typingRow.reset();
 }
 
 auto OptionsPage::shownRows() const -> std::vector<const OptionRow*> {
@@ -111,7 +119,8 @@ auto OptionsPage::frame(std::size_t listRows) const -> OptionsFrame {
     const std::size_t first = firstShownOf(listRows);
     OptionsFrame shown{.category = category, .first = first, .count = all.size()};
     for (std::size_t index = first; index < std::min(all.size(), first + listRows); ++index) {
-        shown.rows.push_back(shownOf(*all[index], waitingRow == index));
+        shown.rows.push_back(
+            shownOf(*all[index], waitingRow == index, typingRow == index ? &typed : nullptr));
     }
     if (selected && *selected >= first && *selected < first + shown.rows.size()) {
         shown.selectedRow = *selected - first;
@@ -151,6 +160,9 @@ void OptionsPage::activate() {
     const OptionControl& control = all[*selected]->control;
     if (std::holds_alternative<OptionKeys>(control)) {
         waitingRow = selected;
+    } else if (const auto* const field = std::get_if<OptionText>(&control)) {
+        typingRow = selected;
+        typed.setText(field->text());
     } else if (std::holds_alternative<OptionSwitch>(control) ||
                std::holds_alternative<OptionChoice>(control)) {
         change(1);
@@ -173,10 +185,49 @@ void OptionsPage::giveKey(const nx::platform::WindowEvent& event) {
     }
 }
 
+void OptionsPage::type(const nx::platform::WindowEvent& event) {
+    const std::vector<const OptionRow*> all = shownRows();
+    if (*typingRow >= all.size()) {
+        typingRow.reset();
+        return;
+    }
+    const auto& field = std::get<OptionText>(all[*typingRow]->control);
+    if (const auto* const entered = std::get_if<nx::platform::TextEntered>(&event)) {
+        // As much as its setting would take: text it would refuse is not typed.
+        nx::ui::TextLine longer = typed;
+        longer.insertText(entered->text);
+        if (field.accepts(longer.text())) {
+            typed = std::move(longer);
+        }
+        return;
+    }
+    const auto* const key = std::get_if<nx::platform::KeyChanged>(&event);
+    if (key == nullptr || !key->isDown) {
+        return;
+    }
+    if (key->key == nx::platform::Key::Escape) {
+        if (!key->isRepeat) {
+            typingRow.reset();
+        }
+        return;
+    }
+    if (typed.pressKey(key->key) == nx::ui::TextEntryAction::Submitted && !key->isRepeat) {
+        // What its keys removed may leave a text its setting refuses: it is typed on then.
+        if (const std::string text = typed.text(); field.accepts(text)) {
+            field.set(text);
+            typingRow.reset();
+        }
+    }
+}
+
 auto OptionsPage::handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                          const MainMenuLayout& layout) -> OptionsOutcome {
     if (waitingRow) {
         giveKey(event);
+        return OptionsOutcome::Stays;
+    }
+    if (typingRow) {
+        type(event);
         return OptionsOutcome::Stays;
     }
     const std::vector<const OptionRow*> all = shownRows();

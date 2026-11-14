@@ -11,6 +11,7 @@ nxAddModuleLibrary(nxUi
         src/panel.cppm
         src/painter.cppm
         src/label.cppm
+        src/textLine.cppm
         src/textEntry.cppm
         src/richText.cppm
         src/consoleDialog.cppm
@@ -22,6 +23,7 @@ nxAddModuleLibrary(nxUi
         src/panel.cpp
         src/painter.cpp
         src/label.cpp
+        src/textLine.cpp
         src/textEntry.cpp
         src/richText.cpp
         src/consoleDialog.cpp

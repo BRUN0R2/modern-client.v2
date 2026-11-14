@@ -52,6 +52,10 @@ auto ClientMainMenu::takesEveryKey() const noexcept -> bool {
     return menu.takesEveryKey();
 }
 
+auto ClientMainMenu::isTyping() const noexcept -> bool {
+    return menu.isTyping();
+}
+
 void ClientMainMenu::open(cs::MenuGame game) {
     menu.open(game);
 }

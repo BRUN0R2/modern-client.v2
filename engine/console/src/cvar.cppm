@@ -225,6 +225,11 @@ public:
     /// The current value.
     [[nodiscard]] auto value() const noexcept -> const Type& { return m_value; }
 
+    /// Whether set would assign `candidate`: within its range, by its rule, text it can write back.
+    [[nodiscard]] auto accepts(const Type& candidate) const -> bool {
+        return validate(candidate).has_value();
+    }
+
     /// Assigns `newValue` when the cvar accepts it (range, representable text). Errors:
     /// InvalidValue, OutOfRange.
     [[nodiscard]] auto set(Type newValue) -> Result<void, CvarError> {
@@ -359,6 +364,8 @@ public:
 
     /// The current value.
     [[nodiscard]] auto value() const noexcept -> const Type& { return m_cvar->value(); }
+    /// Whether set would assign `candidate` (TypedCvar::accepts): what a field of the menus lets be typed.
+    [[nodiscard]] auto accepts(const Type& candidate) const -> bool { return m_cvar->accepts(candidate); }
     /// Errors: those of TypedCvar::set.
     [[nodiscard]] auto set(Type newValue) const -> Result<void, CvarError> {
         return m_cvar->set(std::move(newValue));

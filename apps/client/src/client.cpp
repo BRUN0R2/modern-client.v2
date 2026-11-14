@@ -175,6 +175,9 @@ private:
     /// The cursor shows while the console's window, the main menu or the buy menu is open; else the mouse
     /// turns the view.
     void showCursorAsNeeded();
+    /// The keys type text (the platform's TextEntered) while the console's window is open or the main menu
+    /// has a text typed, and only then.
+    void typeAsNeeded();
     /// The player's language as cl_language names it now, whoever named it (ADR-0036): the texts read again
     /// in another, and the main menu laid out in them; one the data does not have is logged, the texts
     /// staying as they were.
@@ -624,16 +627,10 @@ void Client::toggleConsole() {
         m_console.print("The console has no window: its font could not be found");
         return;
     }
-    const bool isOpen = m_consoleWindow->toggle();
-    if (isOpen) {
+    if (m_consoleWindow->toggle()) {
         m_keys.releaseAll(); // the keys held for the game are let go
     }
-    // The keys type while it is open.
-    if (auto typing =
-            m_video->window.setTextInput(isOpen ? nx::platform::TextInput::On : nx::platform::TextInput::Off);
-        !typing) {
-        nx::log::warning(kLog, "{}", nx::describe(typing.error()));
-    }
+    typeAsNeeded();
     showCursorAsNeeded();
 }
 
@@ -648,6 +645,18 @@ void Client::showCursorAsNeeded() {
                                                          : nx::platform::MouseMode::Relative);
         !set) {
         nx::log::warning(kLog, "{}", nx::describe(set.error()));
+    }
+}
+
+void Client::typeAsNeeded() {
+    const bool isNeeded = (m_consoleWindow != nullptr && m_consoleWindow->isOpen()) || mainMenu->isTyping();
+    if (isNeeded == m_video->window.isTextInputOn()) {
+        return;
+    }
+    if (auto typing = m_video->window.setTextInput(isNeeded ? nx::platform::TextInput::On
+                                                            : nx::platform::TextInput::Off);
+        !typing) {
+        nx::log::warning(kLog, "{}", nx::describe(typing.error()));
     }
 }
 
@@ -732,6 +741,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         followLanguage();
         buyMenu->update();
         showCursorAsNeeded();
+        typeAsNeeded();
         sounds->update(m_isFocused);
         startNextSession();
         updateWeapons();
