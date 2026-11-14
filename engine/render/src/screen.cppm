@@ -196,6 +196,9 @@ public:
         }
         quads.insert(quads.end(), m_quads.begin(), m_quads.end());
     }
+    /// Has the next append make its quads again, whatever it shows: what they are made of besides changed,
+    /// such as the texts they write.
+    inline void forget() noexcept { m_shown.reset(); }
 
 private:
     std::optional<Shown> m_shown; ///< None before the first append.

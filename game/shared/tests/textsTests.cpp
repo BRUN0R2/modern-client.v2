@@ -19,41 +19,40 @@ using cs::TextsError;
 
 /// A language's file that writes every text the game asks for, the main menu's `quit` as `quit` says.
 [[nodiscard]] auto fileWith(std::string_view quit) -> std::string {
-    return std::format(
-        "[mainMenu]\n"
-        "resumeGame = \"a\"\ndisconnect = \"b\"\nnewGame = \"c\"\nquit = \"{}\"\nmap = \"e\"\n"
-        "noMaps = \"f\"\nstart = \"g\"\nback = \"h\"\nloading = \"i\"\nkeyUpDown = \"j\"\n"
-        "keyEnter = \"k\"\nkeyEscape = \"l\"\nselect = \"m\"\nchoose = \"n\"\nresume = \"o\"\n"
-        "play = \"p\"\ngoBack = \"q\"\noptions = \"r\"\nkeyLeftRight = \"s\"\nchange = "
-        "\"t\"\nkeyDelete = \"u\"\nclear = \"v\"\n"
-        "[options]\n"
-        "mouse = \"a\"\naudio = \"b\"\nvideo = \"c\"\ngame = \"d\"\nsensitivity = \"e\"\n"
-        "reverseMouse = \"f\"\nvolume = \"g\"\nplayUnfocused = \"h\"\nmaxFps = \"i\"\n"
-        "showFps = \"j\"\ndrawHud = \"k\"\nautoSwitch = \"l\"\nrightHand = \"m\"\non = \"n\"\n"
-        "off = \"o\"\nkeyboard = \"p\"\npressAKey = \"q\"\nnoKey = \"r\"\n"
-        "vsync = \"x\"\ngamma = \"x\"\nbrightness = \"x\"\nfidelity = \"x\"\n"
-        "fidelityLegacy = \"x\"\nfidelityEnhanced = \"x\"\nlanguage = \"x\"\nonNextStart = \"x\"\n"
-        "moveForward = \"x\"\n"
-        "moveBack = \"x\"\n"
-        "moveLeft = \"x\"\n"
-        "moveRight = \"x\"\n"
-        "jump = \"x\"\n"
-        "duck = \"x\"\n"
-        "walk = \"x\"\n"
-        "use = \"x\"\n"
-        "fire = \"x\"\n"
-        "secondaryFire = \"x\"\n"
-        "reload = \"x\"\n"
-        "lastWeapon = \"x\"\n"
-        "buyMenu = \"x\"\n"
-        "buyEquipment = \"x\"\n"
-        "buyPrimaryAmmo = \"x\"\n"
-        "buyPistolAmmo = \"x\"\n"
-        "rebuy = \"x\"\n"
-        "showScores = \"x\"\n"
-        "toggleConsole = \"x\"\n"
-        "noclip = \"x\"\n",
-        quit);
+    return std::format("[mainMenu]\n"
+                       "resumeGame = \"a\"\ndisconnect = \"b\"\nnewGame = \"c\"\nquit = \"{}\"\nmap = \"e\"\n"
+                       "noMaps = \"f\"\nstart = \"g\"\nback = \"h\"\nloading = \"i\"\nkeyUpDown = \"j\"\n"
+                       "keyEnter = \"k\"\nkeyEscape = \"l\"\nselect = \"m\"\nchoose = \"n\"\nresume = \"o\"\n"
+                       "play = \"p\"\ngoBack = \"q\"\noptions = \"r\"\nkeyLeftRight = \"s\"\nchange = "
+                       "\"t\"\nkeyDelete = \"u\"\nclear = \"v\"\n"
+                       "[options]\n"
+                       "mouse = \"a\"\naudio = \"b\"\nvideo = \"c\"\ngame = \"d\"\nsensitivity = \"e\"\n"
+                       "reverseMouse = \"f\"\nvolume = \"g\"\nplayUnfocused = \"h\"\nmaxFps = \"i\"\n"
+                       "showFps = \"j\"\ndrawHud = \"k\"\nautoSwitch = \"l\"\nrightHand = \"m\"\non = \"n\"\n"
+                       "off = \"o\"\nkeyboard = \"p\"\npressAKey = \"q\"\nnoKey = \"r\"\n"
+                       "vsync = \"x\"\ngamma = \"x\"\nbrightness = \"x\"\nfidelity = \"x\"\n"
+                       "fidelityLegacy = \"x\"\nfidelityEnhanced = \"x\"\nlanguage = \"x\"\n"
+                       "moveForward = \"x\"\n"
+                       "moveBack = \"x\"\n"
+                       "moveLeft = \"x\"\n"
+                       "moveRight = \"x\"\n"
+                       "jump = \"x\"\n"
+                       "duck = \"x\"\n"
+                       "walk = \"x\"\n"
+                       "use = \"x\"\n"
+                       "fire = \"x\"\n"
+                       "secondaryFire = \"x\"\n"
+                       "reload = \"x\"\n"
+                       "lastWeapon = \"x\"\n"
+                       "buyMenu = \"x\"\n"
+                       "buyEquipment = \"x\"\n"
+                       "buyPrimaryAmmo = \"x\"\n"
+                       "buyPistolAmmo = \"x\"\n"
+                       "rebuy = \"x\"\n"
+                       "showScores = \"x\"\n"
+                       "toggleConsole = \"x\"\n"
+                       "noclip = \"x\"\n",
+                       quit);
 }
 
 [[nodiscard]] auto errorOf(std::string_view text) -> std::optional<TextsError> {
@@ -136,6 +135,39 @@ TEST(TextsTest, OnlyALanguageTheDataHasOpens) {
     const auto none = cs::openTexts(empty.path(), "en");
     ASSERT_FALSE(none.has_value());
     EXPECT_EQ(none.error().code, TextsError::UnknownLanguage) << "no folder of languages";
+}
+
+TEST(PlayerTextsTest, AnotherLanguageIsReadInPlaceOfTheOneBeforeAndOneTheDataLacksChangesNothing) {
+    const nx::test::TemporaryDirectory data;
+    data.write("cstrike/locale/en.toml", fileWith("QUIT"));
+    data.write("cstrike/locale/pt-BR.toml", fileWith("SAIR"));
+    auto texts = cs::PlayerTexts::open(data.path(), "en");
+    ASSERT_TRUE(texts.has_value()) << (texts ? "" : nx::describe(texts.error()));
+    EXPECT_EQ(std::vector<std::string>(texts->languages().begin(), texts->languages().end()),
+              (std::vector<std::string>{"en", "pt-BR"}));
+    const cs::Texts* const place = &texts->written();
+    EXPECT_EQ(place->mainMenu.quit, "QUIT");
+
+    const auto askedFor = [&](std::string_view language) -> std::optional<cs::LanguageAsked> {
+        const auto asked = texts->ask(language);
+        return asked ? std::optional{*asked} : std::nullopt;
+    };
+    EXPECT_EQ(askedFor("en"), cs::LanguageAsked::Same) << "the language it has";
+    EXPECT_EQ(askedFor("pt-BR"), cs::LanguageAsked::Read);
+    EXPECT_EQ(texts->written().mainMenu.quit, "SAIR");
+    EXPECT_EQ(&texts->written(), place) << "in place of the texts before";
+
+    const auto unknown = texts->ask("de");
+    ASSERT_FALSE(unknown.has_value());
+    EXPECT_EQ(unknown.error().code, TextsError::UnknownLanguage);
+    EXPECT_EQ(texts->written().mainMenu.quit, "SAIR") << "the texts it had stay";
+    EXPECT_EQ(askedFor("de"), cs::LanguageAsked::Same) << "asked for again, it is not read again";
+    EXPECT_EQ(askedFor("en"), cs::LanguageAsked::Read) << "another is";
+    EXPECT_EQ(texts->written().mainMenu.quit, "QUIT");
+
+    const auto none = cs::PlayerTexts::open(data.path(), "de");
+    ASSERT_FALSE(none.has_value());
+    EXPECT_EQ(none.error().code, TextsError::UnknownLanguage) << "as it opens, a language the data lacks";
 }
 
 } // namespace

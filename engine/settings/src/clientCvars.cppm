@@ -99,7 +99,7 @@ struct PlayerCvars {
     /// `_cl_autowepswitch`: a weapon given heavier than the one held is drawn.
     console::Cvar<bool> autoWeaponSwitch;
     /// `cl_language`: the language the game writes to the player in, by its tag ("en", "pt-BR"): one of
-    /// those the game's data has, read as the game starts.
+    /// those the game's data has, read as the game starts and again as it changes (ADR-0036).
     console::Cvar<std::string> language;
 };
 

@@ -66,7 +66,6 @@ struct OptionsTexts {
     std::string fidelityLegacy{};
     std::string fidelityEnhanced{};
     std::string language{};
-    std::string onNextStart{};
     std::string showFps{};
     std::string drawHud{};
     std::string autoSwitch{};
@@ -123,6 +122,41 @@ struct Texts {
 [[nodiscard]] auto openTexts(const std::filesystem::path& data, std::string_view language)
     -> nx::Result<Texts, TextsError>;
 
+/// What asking for the texts of a language did (PlayerTexts::ask).
+enum class LanguageAsked : std::uint8_t {
+    Same, ///< The language asked for last: nothing was read.
+    Read, ///< Another: its texts were read in place of those there were.
+};
+
+/// The game's texts in the player's language (ADR-0036): read as they open, and again as another language is
+/// asked for, among those the project's data/ folder has.
+class PlayerTexts {
+public:
+    /// The texts of `language` from `folder`, the project's data/ folder, and the languages it has. Errors:
+    /// those of languagesOf and openTexts.
+    [[nodiscard]] static auto open(std::filesystem::path folder, std::string_view language)
+        -> nx::Result<PlayerTexts, TextsError>;
+
+    /// The texts, in the language read last; at the same place as long as it is not moved.
+    [[nodiscard]] inline auto written() const noexcept -> const Texts& { return texts; }
+    /// The languages the data has, as it opened, in the order of the alphabet (languagesOf).
+    [[nodiscard]] inline auto languages() const noexcept -> std::span<const std::string> { return tags; }
+
+    /// Asks for the texts of `language`: read in place of those there are when it is another language than
+    /// the one asked for last. Errors: those of openTexts; the texts stay those there were, and the language
+    /// is not read again until another is asked for.
+    [[nodiscard]] auto ask(std::string_view language) -> nx::Result<LanguageAsked, TextsError>;
+
+private:
+    PlayerTexts(std::filesystem::path folder, std::vector<std::string> found, std::string language,
+                Texts read) noexcept;
+
+    std::filesystem::path data;
+    std::vector<std::string> tags;
+    std::string asked; ///< The language asked for last, read or not.
+    Texts texts;
+};
+
 } // namespace cs
 
 template <>
@@ -175,7 +209,6 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::fidelityLegacy>("fidelityLegacy"),
         nx::meta::field<&cs::OptionsTexts::fidelityEnhanced>("fidelityEnhanced"),
         nx::meta::field<&cs::OptionsTexts::language>("language"),
-        nx::meta::field<&cs::OptionsTexts::onNextStart>("onNextStart"),
         nx::meta::field<&cs::OptionsTexts::showFps>("showFps"),
         nx::meta::field<&cs::OptionsTexts::drawHud>("drawHud"),
         nx::meta::field<&cs::OptionsTexts::autoSwitch>("autoSwitch"),

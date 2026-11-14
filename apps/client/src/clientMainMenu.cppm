@@ -27,6 +27,9 @@ public:
     ClientMainMenu(const cs::GameContent& content, const cs::Texts& texts,
                    std::vector<cs::OptionRow> settings);
 
+    /// Writes in `texts` from now on, which must outlive it: what it laid out is laid out again.
+    void writeIn(const cs::Texts& texts) noexcept;
+
     [[nodiscard]] auto isOpen() const noexcept -> bool;
     /// Whether every key is the menu's, the one that opens the console among them
     /// (cs::MainMenu::takesEveryKey).

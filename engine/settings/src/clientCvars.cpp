@@ -169,12 +169,11 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                               .defaultValue = std::string{kDefaultPlayerName},
                               .description = "The name you ask the server for as you join.",
                               .flags = kArchived});
-    auto language = console.registerCvar(CvarDesc<std::string>{
-        .name = "cl_language",
-        .defaultValue = std::string{kDefaultLanguage},
-        .description =
-            "The language the game is written in, by its tag (en, pt-BR); read as the game starts.",
-        .flags = kArchived});
+    auto language = console.registerCvar(
+        CvarDesc<std::string>{.name = "cl_language",
+                              .defaultValue = std::string{kDefaultLanguage},
+                              .description = "The language the game is written in, by its tag (en, pt-BR).",
+                              .flags = kArchived});
     for (auto* const registered : {&device, &playerName, &language}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
