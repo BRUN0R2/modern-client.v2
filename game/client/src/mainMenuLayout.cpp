@@ -27,8 +27,7 @@ constexpr std::int32_t kPageInsetUnits = 28;
 constexpr std::int32_t kPageTitleTopUnits = 24;
 constexpr std::int32_t kListTopUnits = 104; ///< From the page's top to its list's.
 constexpr std::int32_t kListRowTallUnits = 44;
-constexpr std::int32_t kListFootGapUnits = 20; ///< From the list's foot to the page's note.
-constexpr std::int32_t kNoteTallUnits = 32;    ///< The page's note, over its buttons.
+constexpr std::int32_t kListFootGapUnits = 20; ///< From the list's foot to the buttons.
 constexpr std::int32_t kThumbWideUnits = 4;
 constexpr std::int32_t kButtonWideUnits = 200;
 constexpr std::int32_t kButtonTallUnits = 56;
@@ -73,14 +72,9 @@ auto MainMenuLayout::pageTitle() const noexcept -> nx::ui::PixelPoint {
 }
 
 auto MainMenuLayout::listRows() const noexcept -> std::size_t {
-    const nx::Pixels room = pageNote().y - pixels(kListFootGapUnits) - (pageRect.y + pixels(kListTopUnits));
+    const nx::Pixels room =
+        confirmButton().y - pixels(kListFootGapUnits) - (pageRect.y + pixels(kListTopUnits));
     return nx::narrow<std::size_t>(std::max(room / pixels(kListRowTallUnits), 1));
-}
-
-auto MainMenuLayout::pageNote() const noexcept -> nx::ui::PixelRect {
-    const nx::ui::PixelRect top = listRow(0);
-    const nx::Pixels noteTall = pixels(kNoteTallUnits);
-    return {.x = top.x, .y = confirmButton().y - noteTall, .wide = top.wide, .tall = noteTall};
 }
 
 auto MainMenuLayout::listRow(std::size_t row) const noexcept -> nx::ui::PixelRect {

@@ -144,6 +144,9 @@ TEST(RetainedQuadsTest, MakesTheQuadsAgainOnlyWhenWhatTheyShowChanges) {
     EXPECT_EQ(quads[2].target.width, 1.0F);
     EXPECT_EQ(quads[3].target.width, 2.0F);
     EXPECT_EQ(quads[4].target.width, 1.0F);
+    retained.forget();
+    append(quads, 1);
+    EXPECT_EQ(made, 4) << "and once it forgot them, as what they write changed";
 }
 
 TEST(ScreenRendererTest, EachTexelLandsOnThePixelItCovers) {

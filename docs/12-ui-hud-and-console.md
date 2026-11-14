@@ -453,11 +453,11 @@ writes the one chosen; or the keys of an action. Today: `sensitivity` and the mo
 `gl_vsync`, `cl_showfps`, `hud_draw`, how the picture is made (`r_fidelity`), `gamma` and `brightness`;
 `_cl_autowepswitch`, `cl_righthand` and the language (`cl_language`, among those the game's data has). A
 setting is set as it is changed and kept by `config.cfg` as every archived cvar is: there is nothing to apply
-or to cancel, where the original has `OK`, `Cancel` and `Apply`. All but the language take effect at once
-(§5.1), the picture's among them. The language says so: while it is selected, a line between the list and the
-page's buttons tells that it takes effect the next time the game starts (`cs::TakesEffect`). It is written by
-its tag (`en`, `pt-BR`); set from the console to one the game's data does not have, the row shows none
-chosen. The player's name comes with what lets it be typed there.
+or to cancel, where the original has `OK`, `Cancel` and `Apply`. Each takes effect at once, the picture
+(§5.1) and the language (§7) among them. A choice writes its values as the menu draws, by a text of the
+options' or as they are (`cs::ChoiceText`), so that the page is written in the language chosen from the
+frame after. The language is written by its tag (`en`, `pt-BR`); set from the console to one the game's data
+does not have, the row shows none chosen. The player's name comes with what lets it be typed there.
 
 **The keys** list the actions of the commands the client has, each with the keys that run it, as `bind` names
 them: moving, jumping, ducking, walking, using, firing, the weapon's special function, reloading, the last
@@ -615,7 +615,8 @@ as the mouse moves, `fps_max`, `fps_override`, `hud_draw`, `cl_showfps`, `r_deca
 `s_play_unfocused` with the next frame, `gl_vsync` between two frames (the swapchain made again as it
 changes, `rhi::Swapchain::setPresentMode`), the picture (`gamma`, `brightness`, `texgamma`, `lightgamma`,
 `r_fidelity`) between two frames too, what it made made again of it, the decals kept
-([05 §11](05-rendering.md#11-visual-fidelity)), and `_cl_autowepswitch` with the next weapon given.
+([05 §11](05-rendering.md#11-visual-fidelity)), `cl_language` between two frames too (§7), and
+`_cl_autowepswitch` with the next weapon given.
 `config.cfg` keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
 `cl_crosshair_translucent` (1), and `cl_righthand` (1, the weapons in the right hand, else in the
@@ -807,9 +808,12 @@ the two there are): a table for each part and a key for each text, read as the r
 language is whole or it is not offered, and a test reads every language of the repository. `cl_language`
 (archived, `en` unless chosen) names the language; it is read as `next` starts, once the player's files and
 the command line ran, and one the data does not have stops the start, telling the languages there are and
-how to choose again (`next +cl_language en`). A change, from the console or from the options (§4, among
-the languages the data has, `cs::languagesOf`), takes the next start, as the original's does. The
-main menu writes by it; the buy menu's and the HUD's own texts are constants still, in English, until they
+how to choose again (`next +cl_language en`). It is read again as it changes, from the console or from the
+options (§4, among the languages the data has), between two frames
+([ADR-0036](adr/0036-language-at-once.md), `cs::PlayerTexts`): the texts of the new language take the place
+of the old, and the main menu lays out again what it wrote (`MainMenuPanel::writeIn`). One the data does not
+have is logged with the languages there are, the texts stay those of the language before, and it is not read
+again until another is asked for. The main menu writes by it; the buy menu's and the HUD's own texts are constants still, in English, until they
 move to it. Texts with values in them, and the original's own (`titles.txt`), come with what writes them.
 
 ## 8. Accessibility

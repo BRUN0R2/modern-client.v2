@@ -1,6 +1,6 @@
 # ADR-0035 — The game's texts are typed data: a field for each text, a file for each language
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [ADR-0036](0036-language-at-once.md) (`cl_language` takes effect at once)
 - **Date:** 2026-11-10
 
 ## Context

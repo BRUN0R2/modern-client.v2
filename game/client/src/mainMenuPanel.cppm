@@ -35,6 +35,10 @@ public:
     /// language; both must outlive it.
     MainMenuPanel(const MainMenuLook& listed, const Texts& written) noexcept;
 
+    /// Writes those of `written` from now on, which must outlive it: what it laid out of the texts before is
+    /// laid out again (ADR-0036).
+    void writeIn(const Texts& written) noexcept;
+
     /// Whether load made its fonts for a screen `screenHeight` pixels tall.
     [[nodiscard]] inline auto isLoadedFor(std::uint32_t screenHeight) const noexcept -> bool {
         return facesHeight == screenHeight;
