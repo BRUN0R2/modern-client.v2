@@ -116,9 +116,6 @@ auto OptionsPage::frame(std::size_t listRows) const -> OptionsFrame {
     if (selected && *selected >= first && *selected < first + shown.rows.size()) {
         shown.selectedRow = *selected - first;
     }
-    if (selected && *selected < all.size()) {
-        shown.takesEffect = all[*selected]->takesEffect;
-    }
     return shown;
 }
 

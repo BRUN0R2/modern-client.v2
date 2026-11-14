@@ -74,7 +74,7 @@ constexpr FidelityTexts kFidelityTexts{
 /// A choice of `cvar` among `choices`, at least one, each written as `written` writes the one at its place:
 /// none is chosen while the cvar is set to another.
 template <class Value>
-[[nodiscard]] auto choiceOf(Cvar<Value> cvar, std::vector<Value> choices, std::vector<std::string> written)
+[[nodiscard]] auto choiceOf(Cvar<Value> cvar, std::vector<Value> choices, std::vector<cs::ChoiceText> written)
     -> cs::OptionChoice {
     nx::expects(!choices.empty() && choices.size() == written.size(), "choiceOf: a text for each choice");
     return {.values = std::move(written),
@@ -89,26 +89,21 @@ template <class Value>
                           std::size_t index) { cvar.setAccepted(choices[index]); }};
 }
 
-/// The choice of how the picture is made (`fidelity`, r_fidelity), each way written as `texts` writes it.
-[[nodiscard]] auto fidelityOf(Cvar<nx::settings::Fidelity> fidelity, const OptionsTexts& texts)
-    -> cs::OptionRow {
+/// The choice of how the picture is made (`fidelity`, r_fidelity), each way written by its text.
+[[nodiscard]] auto fidelityOf(Cvar<nx::settings::Fidelity> fidelity) -> cs::OptionRow {
     return {.category = OptionCategory::Video,
             .name = &OptionsTexts::fidelity,
-            .control =
-                choiceOf(fidelity, FidelityTexts::keys() | std::ranges::to<std::vector>(),
-                         kFidelityTexts | std::views::transform([&texts](std::string OptionsTexts::* way) {
-                             return texts.*way;
-                         }) | std::ranges::to<std::vector>())};
+            .control = choiceOf(fidelity, FidelityTexts::keys() | std::ranges::to<std::vector>(),
+                                kFidelityTexts | std::ranges::to<std::vector<cs::ChoiceText>>())};
 }
 
-/// The choice of the language (`language`, cl_language) among `languages`, each written by its tag; read
-/// as the game starts.
-[[nodiscard]] auto languageOf(Cvar<std::string> language, const std::vector<std::string>& languages)
+/// The choice of the language (`language`, cl_language) among `languages`, each written by its tag.
+[[nodiscard]] auto languageOf(Cvar<std::string> language, std::span<const std::string> languages)
     -> cs::OptionRow {
     return {.category = OptionCategory::Game,
             .name = &OptionsTexts::language,
-            .control = choiceOf(language, languages, languages),
-            .takesEffect = cs::TakesEffect::OnNextStart};
+            .control = choiceOf(language, languages | std::ranges::to<std::vector>(),
+                                languages | std::ranges::to<std::vector<cs::ChoiceText>>())};
 }
 
 /// An action the keys run: the text that names it, and its command.
@@ -182,8 +177,7 @@ constexpr std::string_view kKeySeparator = "  ";
 } // namespace
 
 auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& bindings,
-                     const cs::OptionsTexts& texts, const std::vector<std::string>& languages)
-    -> std::vector<cs::OptionRow> {
+                     std::span<const std::string> languages) -> std::vector<cs::OptionRow> {
     const nx::settings::ClientCvars& client = settings.client;
     std::vector<cs::OptionRow> rows;
     for (const KeyAction& action : kKeyActions) {
@@ -200,7 +194,7 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::vsync, client.video.vsync));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::showFps, client.video.showFps));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::drawHud, client.video.hudDraw));
-    rows.push_back(fidelityOf(client.video.fidelity, texts));
+    rows.push_back(fidelityOf(client.video.fidelity));
     rows.push_back(sliderOf(OptionCategory::Video, &OptionsTexts::gamma, client.video.gamma,
                             nx::settings::kLeastGamma, nx::settings::kMostGamma, kPictureStep,
                             OptionValueStyle::Tenths));

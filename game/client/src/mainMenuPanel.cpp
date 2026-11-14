@@ -44,18 +44,12 @@ constexpr nx::EnumArray<OptionCategory, std::string OptionsTexts::*> kTabTexts{
         &OptionsTexts::mouse, &OptionsTexts::keyboard, &OptionsTexts::audio, &OptionsTexts::video,
         &OptionsTexts::game}};
 
-/// What tells, in the language of `texts`, when a change takes effect as `takesEffect` says; nothing for
-/// one at once.
-[[nodiscard]] auto takesEffectText(const OptionsTexts& texts, TakesEffect takesEffect) noexcept
-    -> std::optional<std::string_view> {
-    switch (takesEffect) {
-    case TakesEffect::OnNextStart:
-        return texts.onNextStart;
-    case TakesEffect::AtOnce:
-    case TakesEffect::Count:
-        break;
+/// How `text`, a value of a choice, is written in the language of `texts`.
+[[nodiscard]] auto writtenOf(const ChoiceText& text, const OptionsTexts& texts) noexcept -> std::string_view {
+    if (const auto* const field = std::get_if<std::string OptionsTexts::*>(&text)) {
+        return texts.**field;
     }
-    return std::nullopt;
+    return std::get<std::string>(text);
 }
 
 /// What the menu calls the item that does `action`, in the language of `texts`.
@@ -116,7 +110,7 @@ void paintOptionControl(nx::ui::PanelPainter& painter, const MainMenuLayout& lay
         writeEnding(painter, face, sliderText(*slider), end, rect, kMenuInk);
     } else if (const auto* const choice = std::get_if<ShownChoice>(&control)) {
         if (choice->chosen) {
-            writeEnding(painter, face, *choice->chosen, end, rect, kMenuInk);
+            writeEnding(painter, face, writtenOf(*choice->chosen, texts), end, rect, kMenuInk);
         }
     } else if (const auto* const keys = std::get_if<ShownKeys>(&control)) {
         // Waited for, it asks for its key; else its keys, or that it has none.
@@ -177,15 +171,6 @@ void paintOptions(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
         painter.fill(*thumb, kMenuInkFaint);
     }
 
-    if (const std::optional<std::string_view> note = takesEffectText(texts.options, shown.takesEffect)) {
-        // When a change of the setting selected takes effect.
-        const nx::ui::PixelRect line = layout.pageNote();
-        std::ignore =
-            painter.text(hintFace, *note,
-                         {.x = line.x + layout.pixels(kRowInset),
-                          .y = line.y + ((line.tall - hintFace.atlas->lineHeight()) / kMiddleDivisor)},
-                         kMenuInkSoft);
-    }
     paintMenuOutline(painter, layout.backButton(), kMenuLine);
     writeInMiddle(painter, rowFace, texts.mainMenu.back, layout.backButton(), kMenuInkSoft);
 }
@@ -307,6 +292,12 @@ void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, cons
 
 MainMenuPanel::MainMenuPanel(const MainMenuLook& listed, const Texts& written) noexcept
     : look{&listed}, texts{&written} {}
+
+void MainMenuPanel::writeIn(const Texts& written) noexcept {
+    texts = &written;
+    shown.forget();
+    shownLoading.forget();
+}
 
 auto MainMenuPanel::load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
                          nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,

@@ -321,19 +321,19 @@ TEST(OptionsPageTest, AListLongerThanThePageScrolls) {
     EXPECT_EQ(page.frame(2).rows.size(), 2U) << "a shorter list shows fewer";
 }
 
-TEST(OptionsPageTest, AChoiceGoesAroundItsValuesAndTellsWhenItTakesEffect) {
+TEST(OptionsPageTest, AChoiceGoesAroundItsValuesWrittenByTheirTextsOrAsTheyAre) {
+    using cs::ChoiceText;
     std::optional<std::size_t> chosen = 1;
-    bool isOn = false;
-    cs::OptionsPage page{
-        {{.category = OptionCategory::Mouse,
-          .name = &OptionsTexts::fidelity,
-          .control = cs::OptionChoice{.values = {"low", "medium", "high"},
-                                      .chosen = [&] { return chosen; },
-                                      .choose = [&](std::size_t index) { chosen = index; }},
-          .takesEffect = cs::TakesEffect::OnNextStart},
-         {.category = OptionCategory::Mouse,
-          .name = &OptionsTexts::showFps,
-          .control = cs::OptionSwitch{.isOn = [&] { return isOn; }, .set = [&](bool on) { isOn = on; }}}}};
+    cs::OptionsPage page{{{.category = OptionCategory::Mouse,
+                           .name = &OptionsTexts::fidelity,
+                           .control = cs::OptionChoice{
+                               .values = {ChoiceText{&OptionsTexts::fidelityLegacy},
+                                          ChoiceText{&OptionsTexts::fidelityEnhanced}, ChoiceText{"high"}},
+                               .chosen = [&] { return chosen; },
+                               .choose = [&](std::size_t index) { chosen = index; }}}}};
+    const auto showing = [](ChoiceText text) {
+        return cs::ShownControl{cs::ShownChoice{.chosen = std::move(text)}};
+    };
     const cs::MainMenuLayout layout{kScreen, 2};
     const auto send = [&](const nx::platform::WindowEvent& event, MousePosition cursor = kNowhere) {
         return page.handle(event, cursor, layout);
@@ -342,13 +342,13 @@ TEST(OptionsPageTest, AChoiceGoesAroundItsValuesAndTellsWhenItTakesEffect) {
         return page.frame(layout.listRows());
     };
     page.open();
-    EXPECT_EQ(shown().takesEffect, cs::TakesEffect::AtOnce) << "the tabs selected, there is nothing to tell";
-    EXPECT_EQ(shown().rows[0].control, cs::ShownControl{cs::ShownChoice{.chosen = "medium"}});
+    EXPECT_EQ(shown().rows[0].control, showing(&OptionsTexts::fidelityEnhanced))
+        << "by its text, which the menu writes in the player's language as it draws";
 
     std::ignore = send(pressed(Key::Down));
-    EXPECT_EQ(shown().takesEffect, cs::TakesEffect::OnNextStart);
     std::ignore = send(pressed(Key::Right));
     EXPECT_EQ(chosen, 2U);
+    EXPECT_EQ(shown().rows[0].control, showing("high")) << "as it is";
     std::ignore = send(pressed(Key::Right));
     EXPECT_EQ(chosen, 0U) << "past the last, the first";
     std::ignore = send(pressed(Key::Left));
@@ -357,7 +357,6 @@ TEST(OptionsPageTest, AChoiceGoesAroundItsValuesAndTellsWhenItTakesEffect) {
     EXPECT_EQ(chosen, 0U) << "Enter takes it to its next value";
     std::ignore = send(kLeftDown, middleOf(layout.listRow(0)));
     EXPECT_EQ(chosen, 1U) << "and so does the mouse";
-    EXPECT_EQ(shown().rows[0].control, cs::ShownControl{cs::ShownChoice{.chosen = "medium"}});
 
     chosen.reset(); // set to none of its values, as the console may
     EXPECT_EQ(shown().rows[0].control, cs::ShownControl{cs::ShownChoice{}}) << "it shows none chosen";
@@ -366,9 +365,6 @@ TEST(OptionsPageTest, AChoiceGoesAroundItsValuesAndTellsWhenItTakesEffect) {
     chosen.reset();
     std::ignore = send(pressed(Key::Right));
     EXPECT_EQ(chosen, 0U) << "going on from none, the first";
-
-    std::ignore = send(pressed(Key::Down));
-    EXPECT_EQ(shown().takesEffect, cs::TakesEffect::AtOnce) << "a setting that takes effect at once";
 }
 
 TEST(OptionsPageTest, EscapeAndItsButtonGoBack) {
@@ -449,12 +445,6 @@ TEST(MainMenuLayoutTest, TheOptionsTabsAndControlsStandInThePage) {
         EXPECT_EQ(track.x, control.x);
         EXPECT_LT(track.x + track.wide, control.x + control.wide) << "room for the value after the track";
         EXPECT_GT(track.wide, nx::Pixels{0});
-        const nx::ui::PixelRect note = layout.pageNote();
-        const nx::ui::PixelRect lastRow = layout.listRow(layout.listRows() - 1);
-        EXPECT_EQ(note.x, row.x) << "the note as wide as the list";
-        EXPECT_EQ(note.wide, row.wide);
-        EXPECT_LE(lastRow.y + lastRow.tall, note.y) << "under the rows";
-        EXPECT_LE(note.y + note.tall, layout.backButton().y) << "over the buttons";
     }
 }
 

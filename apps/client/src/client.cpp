@@ -175,6 +175,10 @@ private:
     /// The cursor shows while the console's window, the main menu or the buy menu is open; else the mouse
     /// turns the view.
     void showCursorAsNeeded();
+    /// The player's language as cl_language names it now, whoever named it (ADR-0036): the texts read again
+    /// in another, and the main menu laid out in them; one the data does not have is logged, the texts
+    /// staying as they were.
+    void followLanguage();
     /// Whether a map is played under the main menu.
     [[nodiscard]] auto menuGame() const noexcept -> cs::MenuGame;
     /// Opens the main menu over the map played, or over none: the keys held for the game are let go.
@@ -273,7 +277,7 @@ private:
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     ClientHud hud;                                      ///< What it draws over the scene of the map played.
     std::optional<ClientBuyMenu> buyMenu;               ///< Made with the game's content.
-    std::optional<cs::Texts> texts;         ///< What the client writes, in the language of `cl_language`.
+    std::optional<cs::PlayerTexts> texts;   ///< What the client writes, in the language of `cl_language`.
     std::optional<ClientMainMenu> mainMenu; ///< Made with the game's content and the texts.
     bool isCursorShown = false;
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
@@ -388,7 +392,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
     // The language the player's files and the command line chose, once they ran.
     const std::string& language = settings->client.player.language.value();
-    auto written = cs::openTexts(dataFolder, language);
+    auto written = cs::PlayerTexts::open(dataFolder, language);
     if (!written) {
         return nx::fail(ClientError::ContentUnavailable,
                         std::format("cl_language {:?}: start with +cl_language {} to choose again", language,
@@ -396,12 +400,8 @@ auto Client::start() -> nx::Result<void, ClientError> {
                         std::move(written.error()));
     }
     texts.emplace(std::move(*written));
-    // Those the options offer the player to choose from.
-    auto languages = cs::languagesOf(dataFolder);
-    if (!languages) {
-        return nx::fail(ClientError::ContentUnavailable, std::move(languages.error()));
-    }
-    mainMenu.emplace(*m_content, *texts, clientOptionsOf(*settings, m_bindings, texts->options, *languages));
+    mainMenu.emplace(*m_content, texts->written(),
+                     clientOptionsOf(*settings, m_bindings, texts->languages()));
     if (!mapAsked) {
         mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
     }
@@ -729,6 +729,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         if (!mapAsked) {
             std::ignore = m_console.execute();
         }
+        followLanguage();
         buyMenu->update();
         showCursorAsNeeded();
         sounds->update(m_isFocused);
@@ -763,6 +764,15 @@ auto Client::run() -> nx::Result<void, ClientError> {
         }
     }
     return finish();
+}
+
+void Client::followLanguage() {
+    auto asked = texts->ask(settings->client.player.language.value());
+    if (!asked) {
+        nx::log::warning(kLog, "cl_language: {}", nx::describe(asked.error()));
+    } else if (*asked == cs::LanguageAsked::Read) {
+        mainMenu->writeIn(texts->written());
+    }
 }
 
 auto Client::readInput() -> nx::Result<void, ClientError> {

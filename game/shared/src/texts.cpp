@@ -102,4 +102,34 @@ auto openTexts(const std::filesystem::path& data, std::string_view language)
     return readTexts(*text, nx::platform::toUtf8(file));
 }
 
+PlayerTexts::PlayerTexts(std::filesystem::path folder, std::vector<std::string> found, std::string language,
+                         Texts read) noexcept
+    : data{std::move(folder)}, tags{std::move(found)}, asked{std::move(language)}, texts{std::move(read)} {}
+
+auto PlayerTexts::open(std::filesystem::path folder, std::string_view language)
+    -> nx::Result<PlayerTexts, TextsError> {
+    auto languages = languagesOf(folder);
+    if (!languages) {
+        return std::unexpected{std::move(languages.error())};
+    }
+    auto read = openTexts(folder, language);
+    if (!read) {
+        return std::unexpected{std::move(read.error())};
+    }
+    return PlayerTexts{std::move(folder), std::move(*languages), std::string{language}, std::move(*read)};
+}
+
+auto PlayerTexts::ask(std::string_view language) -> nx::Result<LanguageAsked, TextsError> {
+    if (language == asked) {
+        return LanguageAsked::Same;
+    }
+    asked = language;
+    auto read = openTexts(data, language);
+    if (!read) {
+        return std::unexpected{std::move(read.error())};
+    }
+    texts = std::move(*read);
+    return LanguageAsked::Read;
+}
+
 } // namespace cs

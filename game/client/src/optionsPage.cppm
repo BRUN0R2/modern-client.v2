@@ -3,9 +3,10 @@
 
 /// The options of the main menu (docs/12-ui-hud-and-console.md, section 4): the player's settings by what
 /// they set, each on a row with what changes it, a slider, a switch, a choice among a few values or the
-/// keys of an action, changed by the keys or the mouse and set as it is changed, and told when it takes
-/// effect if not at once. Here is the page's state and what it shows (OptionsFrame); what a setting reads
-/// and sets is given by whoever runs the menu, and drawing it is apart (cs.client:mainMenuPanel).
+/// keys of an action, changed by the keys or the mouse and set as it is changed. Here is the page's state
+/// and what it shows (OptionsFrame), its texts named by the fields of OptionsTexts; what a setting reads and
+/// sets is given by whoever runs the menu, and drawing it is apart (cs.client:mainMenuPanel), in the
+/// player's language as it is when it draws.
 export module cs.client:optionsPage;
 
 import std;
@@ -60,11 +61,15 @@ struct OptionKeys {
     std::function<void()> clear;
 };
 
+/// How a value of a choice is written: by a text of the options', in the player's language, or as it is
+/// (a language's tag).
+using ChoiceText = std::variant<std::string OptionsTexts::*, std::string>;
+
 /// A setting that is one of a few values: how each is written, in their order, at least one; which of them
 /// it is now, none while it is set to another (from the console); and what sets it to one of them, by its
 /// place among them.
 struct OptionChoice {
-    std::vector<std::string> values;
+    std::vector<ChoiceText> values;
     std::function<std::optional<std::size_t>()> chosen;
     std::function<void(std::size_t)> choose;
 };
@@ -72,20 +77,12 @@ struct OptionChoice {
 /// What changes a setting.
 using OptionControl = std::variant<OptionSlider, OptionSwitch, OptionKeys, OptionChoice>;
 
-/// When a change of a setting takes effect.
-enum class TakesEffect : std::uint8_t {
-    AtOnce,
-    OnNextStart, ///< As the game starts again.
-    Count,
-};
-
-/// A setting the options list: the tab it is on, the text of the options' that names it, what changes it,
-/// and when a change of it takes effect.
+/// A setting the options list: the tab it is on, the text of the options' that names it, and what changes
+/// it, which takes effect as it is changed.
 struct OptionRow {
     OptionCategory category{};
     std::string OptionsTexts::* name = nullptr;
     OptionControl control;
-    TakesEffect takesEffect = TakesEffect::AtOnce;
 };
 
 /// A slider as it shows: its value, how it is written, and the share of its track the value is at, from 0
@@ -114,9 +111,9 @@ struct ShownKeys {
     [[nodiscard]] inline auto operator==(const ShownKeys&) const noexcept -> bool = default;
 };
 
-/// A choice as it shows: the value chosen, as it is written; none while it is set to another.
+/// A choice as it shows: how the value chosen is written; none while it is set to another.
 struct ShownChoice {
-    std::optional<std::string> chosen{};
+    std::optional<ChoiceText> chosen{};
 
     [[nodiscard]] inline auto operator==(const ShownChoice&) const noexcept -> bool = default;
 };
@@ -137,13 +134,11 @@ struct ShownOption {
 };
 
 /// All the options show: the tab shown; its rows on those the page's list shows, from the one at `first` of
-/// all `count`; the row of the one selected, when it is among them; and when a change of the one selected
-/// takes effect, at once while none is. None is selected while the tabs are.
+/// all `count`; and the row of the one selected, when it is among them. None is selected while the tabs are.
 struct OptionsFrame {
     OptionCategory category{};
     std::vector<ShownOption> rows{};
     std::optional<std::size_t> selectedRow{};
-    TakesEffect takesEffect = TakesEffect::AtOnce;
     std::size_t first = 0;
     std::size_t count = 0;
 

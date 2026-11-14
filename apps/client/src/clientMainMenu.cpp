@@ -40,6 +40,10 @@ ClientMainMenu::ClientMainMenu(const cs::GameContent& content, const cs::Texts& 
     : files{&content.vfs}, menu{content.mainMenu, playableMapsOf(content), std::move(settings)},
       panel{content.mainMenu, texts} {}
 
+void ClientMainMenu::writeIn(const cs::Texts& texts) noexcept {
+    panel.writeIn(texts);
+}
+
 auto ClientMainMenu::isOpen() const noexcept -> bool {
     return menu.isOpen();
 }
