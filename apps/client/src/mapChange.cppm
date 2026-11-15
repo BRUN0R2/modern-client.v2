@@ -36,9 +36,8 @@ using MapLoader = std::move_only_function<nx::Result<std::unique_ptr<Played>, nx
 /// The map the client plays, `Played` (a Session), and how it changes as the console's `map`, `nav_generate`
 /// and `disconnect` ask. A frame carries a change out in this order, as the client's run does:
 ///  1. loadAsked(): the map a frame told loading is loaded, to be played from this frame;
-///  2. the console's commands run, unless holdsCommands(): those that follow a map asked for wait for it to
-///  be
-///     loaded, so that they act on it (actedOn());
+///  2. the console's commands run: those that follow a map asked for wait for it to be loaded, the console
+///     held (nx::console::Console::hold) whoever runs it, so that they act on it (actedOn());
 ///  3. switchMap(), when switchDue() says that one is due: the client plays what was asked for from now on;
 ///  4. frameShown(): the frame drawn told that the map asked for is loading.
 /// A template so that what a map played is does not matter to how it changes: the tests change stand-ins of
@@ -129,9 +128,6 @@ public:
         return asked->name;
     }
 
-    /// Whether the console's commands wait: a map asked for is not loaded yet.
-    [[nodiscard]] auto holdsCommands() const noexcept -> bool { return asked.has_value(); }
-
     /// Loads the map asked for, once a frame told that it is loading, to be played from this frame's switch;
     /// logged. One that cannot be loaded leaves the client where it was, and its commands no longer wait.
     /// Errors: those of the loader.
@@ -139,6 +135,7 @@ public:
         if (!asked || asked->stage != MapAskedStage::ToldLoading) {
             return {};
         }
+        // Its hold ends with this call: the commands that follow it run, on it or where the client was.
         const AskedMap map = *std::exchange(asked, std::nullopt);
         nx::log::info(kLog, "loading the map {}", map.name);
         auto made = load(map.name, map.kept);
@@ -181,21 +178,22 @@ private:
         std::unique_ptr<Played> map;
     };
 
-    /// A map asked for: its name, and whether its agents' mesh is read from the cache.
+    /// A map asked for: its name, whether its agents' mesh is read from the cache, and the hold of the
+    /// console's commands that follow it.
     struct AskedMap {
         std::string name;
         KeptMesh kept = KeptMesh::Read;
         MapAskedStage stage = MapAskedStage::Asked;
+        nx::console::CommandHold hold;
     };
 
     static constexpr nx::log::Category kLog{"client"};
 
     /// Asks for the map `name`, its agents' mesh read from the cache or not as `kept` says, in place of one
-    /// asked for before: the next frame tells that it is loading, the one after loads it, and `console`'s
-    /// commands that follow run once it is loaded.
+    /// asked for before: the next frame tells that it is loading, the one after loads it, and `console`
+    /// holds the commands that follow until then.
     void ask(std::string name, KeptMesh kept, nx::console::Console& console) {
-        asked = AskedMap{.name = std::move(name), .kept = kept};
-        console.wait();
+        asked = AskedMap{.name = std::move(name), .kept = kept, .hold = console.hold()};
     }
 
     /// Leaves the map the commands act on from this frame's switch, as the original leaves a game; nothing

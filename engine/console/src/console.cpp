@@ -87,8 +87,40 @@ struct Noun {
 
 } // namespace
 
+CommandHold::CommandHold(Console& held) noexcept : console{&held} {
+    ++held.holds;
+}
+
+CommandHold::CommandHold(CommandHold&& other) noexcept : console{std::exchange(other.console, nullptr)} {}
+
+auto CommandHold::operator=(CommandHold&& other) noexcept -> CommandHold& {
+    if (this != &other) {
+        end();
+        console = std::exchange(other.console, nullptr);
+    }
+    return *this;
+}
+
+CommandHold::~CommandHold() {
+    end();
+}
+
+void CommandHold::end() noexcept {
+    if (console != nullptr) {
+        --std::exchange(console, nullptr)->holds;
+    }
+}
+
 Console::Console(ConsoleOutput& output, ConfigFiles& files) : m_output{&output}, m_files{&files} {
     registerBuiltins();
+}
+
+Console::~Console() {
+    expects(holds == 0, "Console: no CommandHold of it lasts");
+}
+
+auto Console::hold() noexcept -> CommandHold {
+    return CommandHold{*this};
 }
 
 void Console::registerBuiltins() {
@@ -234,7 +266,7 @@ void Console::insertText(std::string_view script) {
 
 auto Console::execute() -> BufferState {
     m_expansions = 0;
-    while (!m_buffer.empty()) {
+    while (holds == 0 && !m_buffer.empty()) {
         Segment& segment = m_buffer.front();
         const std::string_view pending = std::string_view{segment.text}.substr(segment.cursor);
         if (pending.empty()) {
@@ -257,7 +289,10 @@ auto Console::execute() -> BufferState {
             break;
         }
     }
-    return m_buffer.empty() ? BufferState::Empty : BufferState::Waiting;
+    if (m_buffer.empty()) {
+        return BufferState::Empty;
+    }
+    return holds == 0 ? BufferState::Waiting : BufferState::Held;
 }
 
 void Console::run(const CommandLine& line) {
