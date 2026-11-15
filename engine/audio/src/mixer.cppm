@@ -152,6 +152,15 @@ public:
     /// Whether voice `voice` plays, as the audio thread last left it; from any thread.
     [[nodiscard]] auto isPlaying(VoiceId voice) const noexcept -> bool;
 
+    /// The frames mixed so far, the mix's own clock, as the audio thread last left it: a command sent
+    /// now is done at the start of the next block, its delay later; from any thread.
+    [[nodiscard]] auto framesMixed() const noexcept -> std::uint64_t;
+    /// The frames of the mix `delay` lasts, to the nearest, as send waits them.
+    [[nodiscard]] auto framesIn(Seconds delay) const noexcept -> std::uint64_t;
+    /// The frames of the mix a voice plays `sound` for at `pitch` (PlayVoice::pitch) before it ends,
+    /// unless it loops: none for one it cannot play.
+    [[nodiscard]] auto framesOf(const Sound& sound, float pitch) const noexcept -> std::uint64_t;
+
     [[nodiscard]] inline auto voices() const noexcept -> std::uint32_t {
         return static_cast<std::uint32_t>(m_voices.size());
     }
@@ -168,7 +177,9 @@ private:
         bool loops = false;
     };
 
-    /// Keeps `sent`, taken as the block that starts at m_mixed is mixed, until it is due.
+    /// Frames of `sound` a frame of the mix at `pitch`: none for one it cannot play.
+    [[nodiscard]] auto stepOf(const Sound* sound, float pitch) const noexcept -> double;
+    /// Keeps `sent`, taken as the block that starts at mixedFrames is mixed, until it is due.
     void schedule(SentCommand sent) noexcept;
     /// Does the commands due by `frame`, in their order.
     void doDue(std::uint64_t frame) noexcept;
@@ -190,7 +201,8 @@ private:
     std::vector<ScheduledCommand> m_scheduled;
     /// Sent and not yet done: what send holds to kCommandCapacity.
     std::atomic<std::size_t> m_unfinished{0};
-    std::uint64_t m_mixed = 0; ///< Frames mixed so far.
+    /// Frames mixed so far: the audio thread alone writes it, after each block.
+    std::atomic<std::uint64_t> mixedFrames{0};
     float m_masterGain = 1.0F;
     float m_limiterGain = 1.0F;
     float m_limiterRelease; ///< The share of the way back to a gain of 1 the limiter goes a frame.

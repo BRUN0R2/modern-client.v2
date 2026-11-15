@@ -13,9 +13,9 @@
 /// from what its server tells after each tick (ClientGame); the HUD of its player, the kill feed, the buy
 /// menu and the main menu, in the look the project's menus share; the
 /// fonts of the installation's windows, the console's window's place and cl_showfps's label; the sound output
-/// with the sounds the client plays; the console's weapon commands, which make weapons and set their values
-/// as the game runs; and what nav_draw draws over the scene, the agents' mesh and their ways
-/// (NavigationDrawing).
+/// with the sounds the client plays, each in the voice the original would choose; the console's weapon
+/// commands, which make weapons and set their values as the game runs; and what nav_draw draws over the
+/// scene, the agents' mesh and their ways (NavigationDrawing).
 export module cs.client;
 
 export import :input;
@@ -50,6 +50,7 @@ export import :console;
 export import :fpsLabel;
 export import :killFeed;
 export import :scoreboard;
+export import :voices;
 export import :audio;
 export import :weaponCommands;
 export import :buyCommands;

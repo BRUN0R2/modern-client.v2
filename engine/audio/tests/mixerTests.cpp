@@ -165,6 +165,31 @@ TEST(MixerTest, ASoundThatDoesNotLoopEndsAndItsVoiceIsFree) {
     }
 }
 
+TEST(MixerTest, AVoiceEndsAsTheFramesItsSoundLastsAtItsPitchAreMixed) {
+    // 450 frames at 22 050 a second sped up by half: 653.06 frames of the mix.
+    constexpr std::uint32_t kSoundRate = 22'050;
+    constexpr float kPitch = 1.5F;
+    Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
+    const Sound sound = soundOf(kSoundRate, 450, [](std::size_t) { return 0.5F; });
+    const std::uint64_t lasts = mixer.framesOf(sound, kPitch);
+    EXPECT_EQ(lasts, 654U);
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &sound, .pitch = kPitch});
+    std::ignore = render(mixer, lasts - 1);
+    EXPECT_TRUE(mixer.isPlaying(nx::audio::VoiceId{0}));
+    std::ignore = render(mixer, 1);
+    EXPECT_FALSE(mixer.isPlaying(nx::audio::VoiceId{0}));
+    EXPECT_EQ(mixer.framesOf(sound, 0.0F), 0U) << "a pitch it cannot play it at";
+}
+
+TEST(MixerTest, ItsClockCountsTheFramesMixed) {
+    Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
+    EXPECT_EQ(mixer.framesMixed(), 0U);
+    std::ignore = render(mixer, 256);
+    std::ignore = render(mixer, 100);
+    EXPECT_EQ(mixer.framesMixed(), 356U);
+    EXPECT_EQ(mixer.framesIn(nx::Seconds{0.5F}), std::uint64_t{kMixRate / 2});
+}
+
 TEST(MixerTest, ALoopingSoundGoesBackToItsLoopStart) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const auto ramp = [](std::size_t frame) {
