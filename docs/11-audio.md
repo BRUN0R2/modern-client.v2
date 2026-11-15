@@ -34,8 +34,10 @@ game owns it, so the audio thread never frees memory. The game sends the mixer `
 `StopVoice`, `SetVoiceGains` and `SetMasterGain`, each of a voice by its `VoiceId`, through an SPSC queue (`nx.jobs:spscQueue`; a
 full queue is a typed `QueueFull`, never a wait), each done at once or a delay after the start of
 the block that takes it, to the frame: the block is mixed in parts, cut where a command is due, and
-commands due at the same frame are done in the order sent. `QueueFull` counts the commands waiting
-for their time too, so the audio thread never makes room for them. Each voice reads its sound at
+commands due at the same frame are done in the order sent. A play may be known by a tag (`PlayTag`),
+and a change of gains tagged so reaches that play alone, never the next sound its voice plays, however
+late it comes. `QueueFull` counts the commands waiting for their time too, so the audio thread never
+makes room for them. Each voice reads its sound at
 `rate / deviceRate × pitch` frames a frame through a windowed sinc (Kaiser window, β 8, 8 zero
 crossings each way), narrowed when the sound is sped up so that nothing folds back: a sine at
 another rate comes out over 90 dB clean, and one sped up past the mix's band over 80 dB down.
@@ -145,6 +147,9 @@ still plays one of the player's own, as the original keeps its view entity's sou
 (`cs::voiceFor`); when every voice holds one, the other's is not played and is reported
 (`PlayError::NoVoice`).
 
+**Today**, the positional sounds: the other players' sounds follow their makers while they play, and
+stay where they were last once a maker is gone (§5).
+
 **Today**, the attenuations: a sound fades in a straight line from its volume where it is made to
 nothing at its reach, 1000 units (`nx::kNominalSoundReach`) over its attenuation (`nx::Attenuation`,
 §5). The original names four, as AMX Mod X's
@@ -214,12 +219,22 @@ volume, and where its maker was, the middle of its box, as the original's server
 its entity), every one until interest management keeps those in its potentially audible set
 ([08 §6.2](08-networking.md#62-interest-management)); the client plays each at the moment of its tick
 (§2) from where it was made, on its channel of its maker (§3), and not at all when neither ear would
-hear it as it starts, as the original drops one out of reach. Their reloads are the reloading player's
+hear it as it starts, as the original drops one out of reach. Each frame, as the original's client
+places every sound that plays again, the client hears each from where its maker shows then
+(`ClientGame::writePlayerOrigins`, between the last two ticks as it is drawn), or where it was last
+once its maker is gone, by the listener's place and turn then (`ClientAudio::follow`); the change is
+sent once either ear moves by a 255th, the step of the original's ear volumes, so that a listener
+turning at a thousand frames a second does not crowd the mixer's queue with changes no one hears. A
+sound gone out of reach plays on unheard, as the original's do. Their reloads are the reloading player's
 alone, as in the original: its view model plays them (5004), and neither the players' models nor the
 weapons' player models (`p_*.mdl`) the others see have a sound event (none in the installation's).
+Checked end to end on SDL's disk output, on de_dust2 with two bots a team and the player standing at
+its spawn: of the 134 stretches of 50 ms in which something was heard, the 11 of the player's own
+knife were the same in both ears and the 123 of the bots' draws and steps were not, their balance
+shifting from one ear to the other as the bots walked off; the fight at the other end of the map was
+out of reach, unheard.
 
-Not yet as the original: a sound follows neither its maker nor the listener as it plays
-([TODO](TODO.md)); a sound of no attenuation is not panned (Quake's engine pans one, Xash3D's does not:
+Not yet as the original: a sound of no attenuation is not panned (Quake's engine pans one, Xash3D's does not:
 to be measured on the original, and no sound of the game is made so yet); and the guns' shots, which
 the original's client events play, fade as `ATTN_NORM`'s until how far they carry is measured on it.
 
