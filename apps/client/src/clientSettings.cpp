@@ -30,6 +30,16 @@ template <class Value, nx::ErrorCode Code>
 
 } // namespace
 
+auto defaultClientBindings() -> nx::settings::KeyBindings {
+    nx::settings::KeyBindings bindings = nx::settings::defaultBindings();
+    const std::optional<nx::console::KeyId> noclipKey = nx::settings::keyNamed(kNoclipKey);
+    nx::invariant(noclipKey.has_value(), "defaultClientBindings: the noclip key has a name");
+    nx::invariant(bindings.commandOf(*noclipKey).empty(),
+                  "defaultClientBindings: Counter-Strike leaves it free");
+    bindings.bind(*noclipKey, "noclip");
+    return bindings;
+}
+
 auto registerClientSettings(nx::console::Console& console, nx::settings::KeyBindings& bindings)
     -> nx::Result<ClientSettings, ClientError> {
     // In the order their cvars are listed and written to config.cfg.
@@ -77,10 +87,6 @@ auto registerClientSettings(nx::console::Console& console, nx::settings::KeyBind
     if (!bots) {
         return std::unexpected{std::move(bots.error())};
     }
-    // Counter-Strike's binds, and noclip on a key it leaves free, until config.cfg says otherwise.
-    const std::optional<nx::console::KeyId> noclipKey = nx::settings::keyNamed(kNoclipKey);
-    nx::invariant(noclipKey.has_value(), "registerClientSettings: the noclip key has a name");
-    bindings.bind(*noclipKey, "noclip");
     if (auto registered = nx::settings::registerBindCommands(console, bindings); !registered) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }

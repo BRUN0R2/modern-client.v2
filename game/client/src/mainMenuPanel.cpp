@@ -67,10 +67,14 @@ constexpr std::int32_t kItemInset = 24;
 constexpr std::int32_t kHintKeyGap = 8;
 constexpr std::int32_t kHintGap = 28;
 constexpr std::int32_t kRowInset = 16;
-constexpr std::int32_t kTabRule = 2;     ///< Under the tab shown.
-constexpr std::int32_t kMapsNameGap = 6; ///< From the name of the list to its first row.
+constexpr std::int32_t kTabRule = 2;         ///< Under the tab shown.
+constexpr std::int32_t kMapsNameGap = 6;     ///< From the name of the list to its first row.
+constexpr std::int32_t kRowButtonInset = 16; ///< From a row's button's sides to its text.
+constexpr std::int32_t kRowButtonMargin = 6; ///< From a row's top and foot to its button's.
 /// What the room left is divided by to put a thing halfway into it.
 constexpr std::int32_t kMiddleDivisor = 2;
+/// The sides an inset or a margin is left on: left and right, or top and foot.
+constexpr std::int32_t kBothSides = 2;
 
 /// `text` in `face` in the middle of `rect`, in `color`.
 void writeInMiddle(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, std::string_view text,
@@ -146,6 +150,16 @@ void paintOptionControl(nx::ui::PanelPainter& painter, const MainMenuLayout& lay
         } else {
             writeEnding(painter, face, keys->keys, end, rect, kMenuInk);
         }
+    } else if (const auto* const button = std::get_if<ShownButton>(&control)) {
+        // Outlined as the page's buttons are, ending where the row's control ends.
+        const std::string_view label = texts.*button->label;
+        const nx::Pixels margin = layout.pixels(kRowButtonMargin);
+        const nx::Pixels wide =
+            nx::ui::widthOf(*face.atlas, label) + (kBothSides * layout.pixels(kRowButtonInset));
+        const nx::ui::PixelRect box{
+            .x = end - wide, .y = rect.y + margin, .wide = wide, .tall = rect.tall - (kBothSides * margin)};
+        paintMenuOutline(painter, box, kMenuLine);
+        writeInMiddle(painter, face, label, box, kMenuInk);
     } else {
         const bool isOn = std::get<ShownSwitch>(control).isOn;
         writeEnding(painter, face, isOn ? texts.on : texts.off, end, rect, isOn ? kMenuGold : kMenuInkFaint);
