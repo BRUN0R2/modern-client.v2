@@ -21,5 +21,6 @@ export import :hud;
 export import :video;
 export import :agentMeshes;
 export import :session;
+export import :mapChange;
 export import :zombieCommands;
 export import :sessionFrame;

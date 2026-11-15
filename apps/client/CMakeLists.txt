@@ -20,6 +20,7 @@ nxAddModuleLibrary(appClient
         src/video.cppm
         src/agentMeshes.cppm
         src/session.cppm
+        src/mapChange.cppm
         src/zombieCommands.cppm
         src/sessionFrame.cppm
     SOURCES

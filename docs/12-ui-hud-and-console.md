@@ -501,7 +501,9 @@ that follow on the same line run once the map is loaded, so that they act on it 
 as a `wait` holds them (`nx::console::Console::wait`), as the original's run after its own loading. A map that
 cannot be loaded is reported as its command would report it, on the console, and the client stays where it was: on
 its menu when it plays no map. The screen does not move while the map loads: a bar that follows the loading comes
-with loading off the main thread.
+with loading off the main thread. The change of map has named states of its own (`app.client:mapChange`): a map
+asked for, then told loading (`MapAskedStage`), loaded, and played from the frame that loads it, or left at the
+same point of the frame by `disconnect` (`MapSwitch`); each loading and each change of the map played is logged.
 
 **The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, made as
 large as the screen (`MenuScale`); the sizes of text made of the families a menu's data names for that height

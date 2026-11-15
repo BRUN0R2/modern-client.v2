@@ -1,0 +1,187 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+// How the map the client plays changes: `map` asks for a map, a frame tells that it is loading, the next
+// loads it, and the commands after it on the line act on it; `disconnect` leaves the map played; a map that
+// cannot be loaded leaves the client where it was. The frames run as the client's do.
+
+#include <gtest/gtest.h>
+
+import std;
+import nx.core;
+import nx.console;
+import app.client;
+
+#include "consoleFixtures.hpp"
+#include "logRecorder.hpp"
+
+namespace {
+
+using app::KeptMesh;
+using app::MapSwitch;
+using nx::console::ConsoleError;
+
+/// The map the loader cannot load.
+constexpr std::string_view kMissingMap = "missing";
+
+/// A map played, of no game: its name, and whether its agents' mesh was read from the cache.
+struct StandInMap {
+    std::string name;
+    KeptMesh kept = KeptMesh::Read;
+};
+
+/// A change of stand-in maps and the console that asks for it, with `bot_add` standing for the commands that
+/// act on the map the commands act on: it records that map's name, empty for none.
+class MapChangeTest : public ::testing::Test {
+protected:
+    MapChangeTest() {
+        EXPECT_TRUE(change.registerCommands(console).has_value());
+        EXPECT_TRUE(console
+                        .registerCommand({.name = "bot_add", .description = "Records the map acted on."},
+                                         [this](nx::console::Console&, const nx::console::CommandLine&)
+                                             -> nx::Result<void, ConsoleError> {
+                                             const StandInMap* map = change.actedOn();
+                                             actedOn.push_back(map != nullptr ? map->name : std::string{});
+                                             return {};
+                                         })
+                        .has_value());
+    }
+
+    /// Runs `script` over the next `frames` frames.
+    void play(std::string_view script, std::size_t frames) {
+        console.addText(script);
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            playFrame();
+        }
+    }
+
+    /// One frame, as the client's run plays it: the map told loading is loaded, the commands run unless they
+    /// wait for a map, the switch due is made, and the frame drawn tells that the map asked for is loading.
+    void playFrame() {
+        if (auto loaded = change.loadAsked(); !loaded) {
+            loadFailures.push_back(loaded.error().code);
+        }
+        if (!change.holdsCommands()) {
+            std::ignore = console.execute();
+        }
+        if (const MapSwitch due = change.switchDue(); due != MapSwitch::Stay) {
+            switches.push_back(due);
+            change.switchMap();
+        }
+        change.frameShown();
+    }
+
+    /// The name of the map played; none on the menu.
+    [[nodiscard]] auto playedName() const -> std::optional<std::string> {
+        const StandInMap* map = change.played();
+        return map != nullptr ? std::optional{map->name} : std::nullopt;
+    }
+
+    nx::test::RecordingOutput output;
+    nx::test::MemoryFiles files;
+    nx::console::Console console{output, files};
+    app::MapChange<StandInMap> change{
+        [](std::string_view name, KeptMesh kept) -> nx::Result<std::unique_ptr<StandInMap>, ConsoleError> {
+            if (name == kMissingMap) {
+                return nx::fail(ConsoleError::CommandFailed, std::format("map {}", name));
+            }
+            return std::make_unique<StandInMap>(StandInMap{.name = std::string{name}, .kept = kept});
+        }};
+    std::vector<std::string> actedOn;
+    std::vector<MapSwitch> switches;
+    std::vector<ConsoleError> loadFailures;
+};
+
+TEST_F(MapChangeTest, AFrameTellsTheMapIsLoadingAndTheCommandsAfterItActOnIt) {
+    play("map de_dust2; bot_add\n", 1);
+    EXPECT_EQ(change.askedMap(), "de_dust2") << "the frame drawn tells that it is loading";
+    EXPECT_EQ(playedName(), std::nullopt);
+    EXPECT_TRUE(change.holdsCommands());
+    EXPECT_TRUE(actedOn.empty()) << "bot_add waits for the map";
+
+    playFrame();
+    EXPECT_EQ(actedOn, std::vector<std::string>{"de_dust2"}) << "bot_add acts on the map loaded";
+    EXPECT_EQ(playedName(), "de_dust2");
+    EXPECT_EQ(change.played()->kept, KeptMesh::Read);
+    EXPECT_EQ(change.askedMap(), std::nullopt);
+    EXPECT_FALSE(change.holdsCommands());
+    EXPECT_EQ(switches, std::vector{MapSwitch::Play});
+}
+
+TEST_F(MapChangeTest, AMapAskedForAfterAnotherIsPlayedOnceTheFirstIs) {
+    play("map cs_italy; map de_dust2\n", 2);
+    EXPECT_EQ(playedName(), "cs_italy") << "played from the frame that loads it";
+    EXPECT_EQ(change.askedMap(), "de_dust2");
+
+    playFrame();
+    EXPECT_EQ(playedName(), "de_dust2");
+    EXPECT_EQ(switches, (std::vector{MapSwitch::Play, MapSwitch::Play}));
+}
+
+TEST_F(MapChangeTest, DisconnectLeavesTheMapPlayedAndAMapAfterItIsPlayedThen) {
+    play("disconnect\n", 1);
+    EXPECT_TRUE(switches.empty()) << "nothing to leave";
+
+    play("map cs_italy\n", 2);
+    play("disconnect; map de_dust2; bot_add\n", 1);
+    EXPECT_EQ(playedName(), std::nullopt) << "on the menu while de_dust2 loads";
+    EXPECT_EQ(change.askedMap(), "de_dust2");
+
+    playFrame();
+    EXPECT_EQ(playedName(), "de_dust2");
+    EXPECT_EQ(actedOn, std::vector<std::string>{"de_dust2"});
+    EXPECT_EQ(switches, (std::vector{MapSwitch::Play, MapSwitch::Leave, MapSwitch::Play}));
+}
+
+TEST_F(MapChangeTest, DisconnectAfterAMapLeavesTheMapLoaded) {
+    play("map de_dust2; disconnect; bot_add\n", 2);
+    EXPECT_EQ(playedName(), std::nullopt);
+    EXPECT_EQ(actedOn, std::vector<std::string>{""}) << "the commands after disconnect act on no map";
+    EXPECT_EQ(switches, std::vector{MapSwitch::Leave});
+}
+
+TEST_F(MapChangeTest, AMapThatCannotBeLoadedLeavesTheClientWhereItWas) {
+    play(std::format("map {}; bot_add\n", kMissingMap), 2);
+    EXPECT_EQ(loadFailures, std::vector{ConsoleError::CommandFailed});
+    EXPECT_EQ(playedName(), std::nullopt) << "still on the menu, without a map";
+    EXPECT_EQ(change.askedMap(), std::nullopt);
+    EXPECT_EQ(actedOn, std::vector<std::string>{""}) << "the commands after it wait no longer";
+    EXPECT_TRUE(switches.empty());
+
+    play("map cs_italy\n", 2);
+    play(std::format("map {}; bot_add\n", kMissingMap), 2);
+    EXPECT_EQ(loadFailures, (std::vector{ConsoleError::CommandFailed, ConsoleError::CommandFailed}));
+    EXPECT_EQ(playedName(), "cs_italy") << "the map played stays";
+    EXPECT_EQ(actedOn, (std::vector<std::string>{"", "cs_italy"}));
+    EXPECT_EQ(switches, std::vector{MapSwitch::Play});
+}
+
+TEST_F(MapChangeTest, NavGeneratePlaysTheMapPlayedAgainItsMeshBuiltAgain) {
+    play("nav_generate\n", 1);
+    EXPECT_EQ(output.failureCodes(), std::vector{ConsoleError::CommandFailed}) << "no map to build again";
+
+    play("map cs_italy\n", 2);
+    play("nav_generate\n", 2);
+    EXPECT_EQ(playedName(), "cs_italy");
+    EXPECT_EQ(change.played()->kept, KeptMesh::Ignored);
+    EXPECT_EQ(switches, (std::vector{MapSwitch::Play, MapSwitch::Play}));
+}
+
+TEST_F(MapChangeTest, MapTakesOneName) {
+    play("map\nmap de_dust2 cs_italy\nnav_generate now\n", 1);
+    EXPECT_EQ(output.failureCodes(),
+              (std::vector{ConsoleError::InvalidArguments, ConsoleError::InvalidArguments,
+                           ConsoleError::InvalidArguments}));
+    EXPECT_EQ(change.askedMap(), std::nullopt);
+}
+
+TEST_F(MapChangeTest, TheLoadingAndTheSwitchesAreLogged) {
+    const nx::test::LogRecorder log;
+    play("map de_dust2\n", 2);
+    play("disconnect\n", 1);
+    EXPECT_EQ(log.messagesAt(nx::log::Level::Info),
+              (std::vector<std::string>{"loading the map de_dust2", "playing the map de_dust2",
+                                        "left the map de_dust2"}));
+}
+
+} // namespace
