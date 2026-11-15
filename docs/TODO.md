@@ -595,7 +595,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] The options' voice settings, with the voice they set (Opus voice, M4)
 - [ ] The crosshair's five colors the original's options name, their values observed in the original (its `config.cfg` after each is chosen): needs the original game
 - [x] The options' keys: the actions of the commands the client has, each with its keys, a key waited for and given to it (two an action, as the original's), taken with Delete (`cs::OptionKeys`, `nx::settings::KeyBindings::give`, `pressedKeyOf`), on a list that scrolls
-- [ ] The options' keys of the commands still to come (the radio, the chat, dropping a weapon, the night vision, the weapon slots with their menu), and restoring the original's binds
+- [x] The options' default keys restored by a button (`cs::OptionButton`): every key as the client first starts (`app::defaultClientBindings`, Counter-Strike 1.6's binds and `noclip` on `v`)
+- [ ] The options' keys of the commands still to come (the radio, the chat, dropping a weapon, the night vision, the weapon slots with their menu)
 - [ ] Server browser
 - [ ] Complete console (history, autocomplete, suggestions): the window over `nx.console`; its history, completions and suggestions are in `nx.console` ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module))
 - [x] Binds with the original key names (`nx.settings`, above)

@@ -4,6 +4,9 @@
 nxAddTest(appClientTests
     SOURCES
         commandLineTests.cpp
+        clientSettingsTests.cpp
         mapChangeTests.cpp
     DEPENDS
-        app::client)
+        app::client
+        nx::console
+        nx::settings)

@@ -107,7 +107,7 @@ class Client {
 public:
     Client(const ClientOptions& options, const std::filesystem::path& userFolder)
         : m_options{&options}, m_loggerScope{m_logger}, m_files{userFolder}, m_console{m_output, m_files},
-          m_bindings{nx::settings::defaultBindings()}, m_keys{m_console, m_bindings} {
+          m_bindings{defaultClientBindings()}, m_keys{m_console, m_bindings} {
         // What is logged goes where it always went, and to the console's window.
         auto logSink = std::make_unique<nx::ui::ConsoleLogSink>();
         m_logSink = logSink.get();

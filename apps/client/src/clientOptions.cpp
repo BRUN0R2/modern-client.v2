@@ -241,6 +241,16 @@ constexpr std::string_view kKeySeparator = "  ";
                                .clear = [&bindings, command] { bindings.release(command); }}};
 }
 
+/// The button that gives every key of `bindings` back what it runs as the client first starts
+/// (defaultClientBindings): Counter-Strike's binds, those its options' defaults list names, a key the player
+/// bound to anything else let go.
+[[nodiscard]] auto restoredKeysOf(nx::settings::KeyBindings& bindings) -> cs::OptionRow {
+    return {.category = OptionCategory::Keyboard,
+            .name = &OptionsTexts::defaultKeys,
+            .control = cs::OptionButton{.label = &OptionsTexts::restore,
+                                        .press = [&bindings] { bindings = defaultClientBindings(); }}};
+}
+
 } // namespace
 
 auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& bindings,
@@ -250,6 +260,7 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     for (const KeyAction& action : kKeyActions) {
         rows.push_back(keysOf(action, bindings, client.keyboard.keymap));
     }
+    rows.push_back(restoredKeysOf(bindings));
     rows.push_back(sliderOf(OptionCategory::Mouse, &OptionsTexts::sensitivity, client.mouse.sensitivity,
                             kLeastSensitivity, kMostSensitivity, kSensitivityStep, OptionValueStyle::Tenths));
     rows.push_back(reverseMouseOf(client.mouse.pitch));

@@ -104,6 +104,8 @@ struct OptionsTexts {
     std::string showScores{};
     std::string toggleConsole{};
     std::string noclip{};
+    std::string defaultKeys{};
+    std::string restore{};
 };
 
 /// Every text of the game, by the part that writes it.
@@ -257,6 +259,8 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::showScores>("showScores"),
         nx::meta::field<&cs::OptionsTexts::toggleConsole>("toggleConsole"),
         nx::meta::field<&cs::OptionsTexts::noclip>("noclip"),
+        nx::meta::field<&cs::OptionsTexts::defaultKeys>("defaultKeys"),
+        nx::meta::field<&cs::OptionsTexts::restore>("restore"),
     };
 };
 

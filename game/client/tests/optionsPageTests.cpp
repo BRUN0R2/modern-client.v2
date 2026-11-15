@@ -282,6 +282,44 @@ TEST(OptionsPageTest, AnActionWaitsForItsKeyAndTakesTheNextOne) {
     EXPECT_EQ(actions.given.size(), 1U) << "what follows is";
 }
 
+TEST(OptionsPageTest, AButtonIsPressedByEnterOrTheMouseAndByNothingElse) {
+    Actions actions;
+    std::vector<cs::OptionRow> rows = actionsOf(actions, 1);
+    std::size_t presses = 0;
+    rows.push_back(
+        {.category = OptionCategory::Keyboard,
+         .name = &OptionsTexts::defaultKeys,
+         .control = cs::OptionButton{.label = &OptionsTexts::restore, .press = [&presses] { ++presses; }}});
+    cs::OptionsPage page{std::move(rows)};
+    const cs::MainMenuLayout layout{kScreen, 2};
+    const auto send = [&](const nx::platform::WindowEvent& event, MousePosition cursor = kNowhere) {
+        return page.handle(event, cursor, layout);
+    };
+    page.open();
+    std::ignore = send(pressed(Key::Right));
+    std::ignore = send(pressed(Key::Down));
+    std::ignore = send(pressed(Key::Down));
+    const cs::OptionsFrame frame = page.frame(layout.listRows());
+    ASSERT_EQ(frame.selectedRow, 1U);
+    EXPECT_EQ(frame.rows[1].name, &OptionsTexts::defaultKeys);
+    EXPECT_EQ(frame.rows[1].control, cs::ShownControl{cs::ShownButton{.label = &OptionsTexts::restore}});
+
+    std::ignore = send(pressed(Key::Left));
+    std::ignore = send(pressed(Key::Right));
+    std::ignore = send(pressed(Key::Delete));
+    std::ignore = send(pressed(Key::Enter, true));
+    EXPECT_EQ(presses, 0U) << "a button has no steps and no keys, and Enter held does not press it again";
+
+    std::ignore = send(pressed(Key::Enter));
+    EXPECT_EQ(presses, 1U);
+    EXPECT_FALSE(page.isWaitingForKey()) << "it waits for nothing";
+    EXPECT_FALSE(page.isTyping());
+    std::ignore = send(kLeftDown, middleOf(layout.listRow(1)));
+    std::ignore = send(kLeftUp, middleOf(layout.listRow(1)));
+    EXPECT_EQ(presses, 2U) << "the left button pressed on its row presses it";
+    EXPECT_EQ(page.frame(layout.listRows()).selectedRow, 1U);
+}
+
 TEST(OptionsPageTest, AListLongerThanThePageScrolls) {
     Actions actions;
     const cs::MainMenuLayout layout{kScreen, 2};

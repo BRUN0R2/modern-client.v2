@@ -448,7 +448,7 @@ Escape, or `BACK`, goes back to the items, and another item chosen leaves the pa
 **The options** (`cs.client:optionsPage`) list the player's settings by what they set, each on a tab: the
 mouse, the keys, the audio, the video and the game. A row names a setting and has what changes it: a slider, its
 value written after its track; a switch, which says whether it is on; a choice among a few values, which
-writes the one chosen; or the keys of an action. Today: `sensitivity` and the mouse reversed
+writes the one chosen; the keys of an action; or a button. Today: `sensitivity` and the mouse reversed
 (`m_pitch` below zero, as the original's option sets it); `volume` and the sound while the window is not focused
 (`s_play_unfocused`); the most frames a second (`fps_max`, to the 100 it gives without `fps_override`),
 `gl_vsync`, `cl_showfps`, `hud_draw`, how the picture is made (`r_fidelity`), `gamma` and `brightness`;
@@ -476,16 +476,20 @@ the action selected wait for its key, and the next key, mouse button or notch of
 given to none, as in the original. An action keeps two keys, as the original's options show two: a third takes
 the place of both, and a key given to an action no longer runs what it ran (`KeyBindings::give`). Delete, or
 Backspace, takes the keys of the action selected. While an action waits, every key is the page's: the one
-bound to `toggleconsole` does not open the console, so that it can be given another. The list is longer than
-the page: it follows what is selected, the wheel scrolls it, and a thumb down its right shows how far. The
-binds are those `bind` sets, kept by `config.cfg`.
+bound to `toggleconsole` does not open the console, so that it can be given another. Last on the list, the
+default keys' `RESTORE` button (`cs::OptionButton`, pressed by Enter or the left button) gives every key back
+what it runs as the client first starts (`app::defaultClientBindings`): Counter-Strike 1.6's binds, those its
+options' defaults list (`gfx/shell/kb_def.lst`) names, and `noclip` on `v`; a key the player bound to anything
+else is let go. The list is longer than the page: it follows what is selected, the wheel scrolls it, and a
+thumb down its right shows how far. The binds are those `bind` sets, kept by `config.cfg`.
 
 Left and Right change the tab while the tabs are selected, as they are when the page opens; Down selects the
 first row and Up, from it, the tabs again. On a row, Left and Right move a slider by a step, switch a switch
 over and take a choice to the value before or after it, going around past either end; Enter switches a switch
-over too, takes a choice to its next value, has an action wait for its key, or has a text typed. The mouse
-selects the row it is over; its left button shows the tab it is pressed on, does to a row what Enter does, and
-sets a slider to where it is pressed on its track, which follows it until the button comes up. Escape, or
+over too, takes a choice to its next value, has an action wait for its key, has a text typed, or presses a
+button. The mouse selects the row it is over; its left button shows the tab it is pressed on, does to a row
+what Enter does, and sets a slider to where it is pressed on its track, which follows it until the button comes
+up. Escape, or
 `BACK`, goes back to the items. What a row reads and sets is given to
 the menu by what runs it (`app.client:options`, the client's cvars), so that the page knows no cvar.
 
@@ -800,8 +804,8 @@ made as the game runs: [10 §7.5](10-counter-strike-gameplay.md#75-weapons-made-
 as the original's game takes them, and `lastinv`, which selects the weapon held before; `slot1` to
 `slot10` are the keys of the buy menu ([§4](#4-game-menus-and-screens)), and select nothing yet with it closed:
 that, `invnext` and `invprev` come with the weapon menu. `next` plays with them:
-Counter-Strike's binds, and `noclip` on `v`. `play <sound>` and `playvol <sound> <volume>` play
-a sound heard everywhere, as the original's do ([11 §2](11-audio.md#2-architecture)).
+Counter-Strike's binds, and `noclip` on `v` (`app::defaultClientBindings`, which the options restore).
+`play <sound>` and `playvol <sound> <volume>` play a sound heard everywhere, as the original's do ([11 §2](11-audio.md#2-architecture)).
 
 ## 7. Localization
 
