@@ -25,8 +25,8 @@ struct AgentMeshLoad {
 };
 
 /// Whether a map's agents' mesh is read from the cache when the cache keeps it, or built again
-/// (nav_generate).
-enum class KeptMesh : std::uint8_t {
+/// (nav_generate). Exported with what loads a map asked for (MapLoader).
+export enum class KeptMesh : std::uint8_t {
     Read,
     Ignored,
 };
