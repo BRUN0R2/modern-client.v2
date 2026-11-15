@@ -58,7 +58,7 @@ standing = { base = 0.0, scale = 0.1 }
 [firing.recoil]
 punch = 2.0
 
-[firing.sound] # its client event plays one of them, which to be measured on the original
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
 files = ["weapons/usp_unsil-1.wav"]
 channel = "weapon"
 volume = 1.0
@@ -109,7 +109,7 @@ standing = { base = 0.0, scale = 0.15 }
 [alternate.firing.recoil]
 punch = 2.0
 
-[alternate.firing.sound] # its client event plays one of them, which to be measured on the original
+[alternate.firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
 files = ["weapons/usp1.wav", "weapons/usp2.wav"]
 channel = "weapon"
 volume = 1.0

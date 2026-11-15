@@ -9,6 +9,7 @@ import nx.platform;
 import nx.console;
 import nx.assets;
 import nx.settings;
+import nx.render;
 import cs.shared;
 import cs.client;
 
@@ -115,8 +116,8 @@ void ClientSounds::update(bool isFocused) {
     output->update();
 }
 
-void ClientSounds::hear(Session& session, const cs::Hearing& hearing) {
-    hearSession(session, output.get(), hearing, failures);
+void ClientSounds::hear(Session& session, const cs::Hearing& hearing, const nx::render::Camera& view) {
+    hearSession(session, output.get(), hearing, view, failures);
 }
 
 void ClientSounds::readWeapons(const cs::WeaponCatalog& weapons, const cs::Level& level,

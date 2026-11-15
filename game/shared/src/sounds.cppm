@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The sounds the game makes, as data (docs/11-audio.md, section 3): which files, on which channel of
-/// the entity that makes them, how loud and at what pitch. The game says which sound it makes; who
-/// hears it chooses the file and the pitch, as the original's client and engine choose them.
+/// the entity that makes them, how loud, how fast they fade with distance and at what pitch. The game
+/// says which sound it makes; who hears it chooses the file and the pitch, as the original's client and
+/// engine choose them.
 export module cs.shared:sounds;
 
 import std;
@@ -37,6 +38,12 @@ inline constexpr SoundPitch kNormalPitch{100};
 /// The highest pitch: the original's is a byte.
 inline constexpr SoundPitch kMostPitch{255};
 
+/// How fast most sounds fade with distance (the original's ATTN_NORM): to nothing 1250 units away
+/// (docs/11-audio.md, section 3).
+inline constexpr nx::Attenuation kNormalAttenuation{0.8F};
+/// The most a sound may be attenuated: the original's server refuses a sound attenuated more.
+inline constexpr nx::Attenuation kMostAttenuation{4.0F};
+
 /// A pitch from `least` to `most`, at random.
 struct PitchRange {
     SoundPitch least{kNormalPitch};
@@ -56,15 +63,23 @@ enum class NoiseKind : std::uint8_t {
 };
 
 /// A sound the game makes: one of its files at random (paths under `sound/`), on a channel of the
-/// entity that makes it, at `volume`, at most nx::kFullGain, a pitch of its range, as recorded without
-/// one, and the noise an agent that hears it takes it for, none for a sound agents do not heed.
+/// entity that makes it, at `volume`, at most nx::kFullGain, fading with distance by its attenuation, as
+/// most of the original's sounds do without one (attenuationOf), a pitch of its range, as recorded
+/// without one, and the noise an agent that hears it takes it for, none for a sound agents do not heed.
 struct GameSound {
     std::vector<std::string> files{};
     SoundChannel channel{};
     nx::Gain volume{nx::kFullGain};
+    std::optional<nx::Attenuation> attenuation{};
     std::optional<PitchRange> pitch{};
     std::optional<NoiseKind> noise{};
 };
+
+/// How fast `sound` fades with distance: its attenuation, kNormalAttenuation without one; none for a
+/// sound heard everywhere at its volume.
+[[nodiscard]] inline auto attenuationOf(const GameSound& sound) noexcept -> nx::Attenuation {
+    return sound.attenuation.value_or(kNormalAttenuation);
+}
 
 /// A sound the game made, the moment of the tick it made it at, and how loud: what lets it be heard
 /// as it was made, though a frame of the client runs many ticks at once.
@@ -99,6 +114,8 @@ struct nx::meta::Description<cs::GameSound> {
         nx::meta::field<&cs::GameSound::channel>("channel"),
         nx::meta::field<&cs::GameSound::volume>(
             "volume", nx::data::Range{.minimum = 0.0, .maximum = double{nx::kFullGain.value()}}),
+        nx::meta::field<&cs::GameSound::attenuation>(
+            "attenuation", nx::data::Range{.minimum = 0.0, .maximum = double{cs::kMostAttenuation.value()}}),
         nx::meta::field<&cs::GameSound::pitch>("pitch"),
         nx::meta::field<&cs::GameSound::noise>("noise"),
     };
