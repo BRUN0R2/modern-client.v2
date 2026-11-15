@@ -447,7 +447,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] `s_play_unfocused` (0: silent while the window is not focused, as the original is; [11 §8](11-audio.md#8-cvars))
 - [ ] Streaming ahead in jobs with a prefetch margin: an underrun is survived, counted (`snd_stats`) and reported, never a silent stop; tested with slow, simulated I/O
 - [ ] Device loss and change: reopen the default and resume every voice and stream where it was; tested with a fake device
-- [ ] Per-entity channels with replacement as in the original
+- [x] Per-entity channels with replacement as in the original ([11 §3](11-audio.md#3-original-semantics-to-preserve)): a sound on a channel of its maker replaces the one its maker plays there, but on `Auto`, and any other takes the voice with the least left to play on the mixer's clock (`cs::voiceFor`, `nx::audio::Mixer::framesMixed`), every voice of the mixer one to choose from; the player's own sounds and `play`, until the other players' come
+- [ ] The other players' sounds heard ([11 §5](11-audio.md#5-spatialization)): their steps, landings, shots, dry fires, knives, pain, death, breath, use and purchases told to each client with their maker, channel, volume, attenuation, pitch, place and moment, as the original's server sends a sound with its entity, and heard at the moment of their tick with the original's stereo panning and distance attenuation (`s_spatial legacy`); their reloads stay the reloading player's own, as no player model or weapon's player model the others see has a sound event; the potentially audible set with interest management
+- [ ] Positional sounds follow their maker and the listener's place and turn as they play ([11 §3](11-audio.md#3-original-semantics-to-preserve))
 - [ ] Attenuation, pitch and volume with parity
 - [ ] `room_type` DSP
 - [ ] Sentences (`sentences.txt`)

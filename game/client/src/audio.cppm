@@ -3,8 +3,9 @@
 
 /// What the player hears (docs/11-audio.md): the system's sound output playing the mixer, the
 /// game's sounds read by their names, the sounds the player makes on its channels, and those the
-/// client plays itself, as the original's `play` and `playvol` do. Every sound is heard as the
-/// player's own, at full level in both ears, until spatialization comes (TODO.md).
+/// client plays itself, as the original's `play` and `playvol` do, each in the voice the original's
+/// engine would choose (voiceFor). Every sound is heard as the player's own, at full level in both
+/// ears, until spatialization comes (TODO.md).
 export module cs.client:audio;
 
 import std;
@@ -14,6 +15,7 @@ import nx.platform;
 import nx.console;
 import nx.audio;
 import cs.shared;
+import :voices;
 
 export namespace cs {
 
@@ -37,11 +39,6 @@ class ClientAudio {
     };
 
 public:
-    /// Voices of the mixer the sounds on SoundChannel::Auto take in turn, the client's own among them:
-    /// a sound played while all of them play takes the one that started first. The player's other
-    /// channels have a voice each, after them.
-    static constexpr std::uint32_t kLocalVoices = 8;
-
     /// Opens the output named `output`, or the system's default one without a name, and plays the
     /// mixer on it, everything heard at `volume`'s gain; sounds are read from `vfs`, which must outlive
     /// it, as `volume`'s console must. Errors: those of AudioDevice::open and AudioDevice::play.
@@ -61,7 +58,7 @@ public:
 
     /// Plays the sound `name` names (nx::audio::SoundLibrary::load) at `volume`, from 0 to 1 as it is,
     /// in both ears, as the original's `play` and `playvol` play a sound heard everywhere, `delay` from
-    /// now. Errors: NoSound, QueueFull.
+    /// now, on the player's SoundChannel::Auto. Errors: NoSound, QueueFull.
     [[nodiscard]] auto playLocal(std::string_view name, float volume, nx::Seconds delay = nx::Seconds{})
         -> nx::Result<void, PlayError>;
 
@@ -99,17 +96,16 @@ private:
         nx::Seconds delay{};
     };
 
-    /// Plays the sound `name` names in `voice` as `playing` says.
-    [[nodiscard]] auto playIn(nx::audio::VoiceId voice, std::string_view name, const Playing& playing)
+    /// Plays the sound `name` names on the player's channel `channel` as `playing` says, in the voice
+    /// voiceFor chooses.
+    [[nodiscard]] auto playOn(SoundChannel channel, std::string_view name, const Playing& playing)
         -> nx::Result<void, PlayError>;
-    /// Plays the sound `name` names in the next of the kLocalVoices.
-    [[nodiscard]] auto playAuto(std::string_view name, const Playing& playing) -> nx::Result<void, PlayError>;
 
     nx::console::Cvar<float> m_volumeCvar;
     nx::audio::SoundLibrary m_sounds;
     nx::audio::Mixer m_mixer;
     nx::platform::AudioDevice m_device; ///< Last: it stops reading the mixer before the mixer goes.
-    std::uint32_t m_nextLocalVoice = 0; ///< Of the kLocalVoices, the first ones.
+    std::vector<VoiceUse> voiceUses;    ///< What each voice of the mixer was last given, by its VoiceId.
     std::optional<float> m_volume;      ///< The gain the mixer was last sent.
     Muting m_muting = Muting::Off;
     nx::Random m_random; ///< What chooses the files and the pitches.
