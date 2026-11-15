@@ -39,6 +39,7 @@ nxAddModuleLibrary(csClient
         src/fpsLabel.cppm
         src/killFeed.cppm
         src/scoreboard.cppm
+        src/voices.cppm
         src/audio.cppm
         src/weaponCommands.cppm
         src/buyCommands.cppm
@@ -84,6 +85,7 @@ nxAddModuleLibrary(csClient
         src/fpsLabel.cpp
         src/killFeed.cpp
         src/scoreboard.cpp
+        src/voices.cpp
         src/audio.cpp
         src/weaponCommands.cpp
         src/buyCommands.cpp

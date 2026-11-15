@@ -28,6 +28,7 @@ nxAddTest(csClientTests
         optionsPageTests.cpp
         menuBackgroundTests.cpp
         hearingTests.cpp
+        voicesTests.cpp
         audioTests.cpp
         windowFontsTests.cpp
         navigationDrawingTests.cpp
