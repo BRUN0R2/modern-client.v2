@@ -81,9 +81,8 @@ auto Mixer::send(MixerCommand command, Seconds delay) -> Result<void, MixerError
         m_unfinished.fetch_sub(1, std::memory_order_acq_rel);
         return fail(MixerError::QueueFull, std::format("{} commands not done yet", kCommandCapacity));
     }
-    const auto frames = static_cast<std::uint64_t>(std::llround(
-        static_cast<double>(std::max(delay.count(), 0.0F)) * static_cast<double>(m_rate.value())));
-    if (auto sent = m_commands->push(SentCommand{.command = std::move(command), .delay = frames}); !sent) {
+    if (auto sent = m_commands->push(SentCommand{.command = std::move(command), .delay = framesIn(delay)});
+        !sent) {
         m_unfinished.fetch_sub(1, std::memory_order_acq_rel);
         return fail(MixerError::QueueFull, std::format("{} commands not taken yet", kCommandCapacity),
                     std::move(sent.error()));
@@ -95,6 +94,29 @@ auto Mixer::isPlaying(VoiceId voice) const noexcept -> bool {
     return voice.value < m_voices.size() && m_playing[voice.value].load(std::memory_order_acquire);
 }
 
+auto Mixer::framesMixed() const noexcept -> std::uint64_t {
+    return mixedFrames.load(std::memory_order_acquire);
+}
+
+auto Mixer::framesIn(Seconds delay) const noexcept -> std::uint64_t {
+    return static_cast<std::uint64_t>(std::llround(static_cast<double>(std::max(delay.count(), 0.0F)) *
+                                                   static_cast<double>(m_rate.value())));
+}
+
+auto Mixer::framesOf(const Sound& sound, float pitch) const noexcept -> std::uint64_t {
+    const double step = stepOf(&sound, pitch);
+    // A voice ends at the first frame its place in the sound reaches the sound's end.
+    return step > 0.0 ? static_cast<std::uint64_t>(std::ceil(static_cast<double>(sound.frames()) / step)) : 0;
+}
+
+auto Mixer::stepOf(const Sound* sound, float pitch) const noexcept -> double {
+    const bool isPlayable =
+        sound != nullptr && sound->frames() > 0 && sound->rate().value() > 0 && pitch > 0.0F;
+    return isPlayable ? static_cast<double>(sound->rate().value()) / static_cast<double>(m_rate.value()) *
+                            static_cast<double>(pitch)
+                      : 0.0;
+}
+
 void Mixer::render(std::span<float> out) noexcept {
     while (std::optional<SentCommand> sent = m_commands->pop()) {
         schedule(std::move(*sent));
@@ -102,19 +124,21 @@ void Mixer::render(std::span<float> out) noexcept {
     std::ranges::fill(out, 0.0F);
     // The block mixed in parts, each from a frame a command is due at to the next.
     const std::uint64_t frames = out.size() / kStereo;
+    const std::uint64_t mixed = mixedFrames.load(std::memory_order_relaxed);
     std::uint64_t done = 0;
     while (done < frames) {
-        doDue(m_mixed + done);
+        doDue(mixed + done);
         const std::uint64_t until =
-            m_scheduled.empty() ? frames : std::min(frames, m_scheduled.back().frame - m_mixed);
+            m_scheduled.empty() ? frames : std::min(frames, m_scheduled.back().frame - mixed);
         mixFrames(out.subspan(done * kStereo, (until - done) * kStereo));
         done = until;
     }
-    m_mixed += frames;
+    mixedFrames.store(mixed + frames, std::memory_order_release);
 }
 
 void Mixer::schedule(SentCommand sent) noexcept {
-    ScheduledCommand scheduled{.command = std::move(sent.command), .frame = m_mixed + sent.delay};
+    ScheduledCommand scheduled{.command = std::move(sent.command),
+                               .frame = mixedFrames.load(std::memory_order_relaxed) + sent.delay};
     // Before those due at the same frame, which were sent first: the next due is the last.
     const auto at = std::ranges::lower_bound(m_scheduled, scheduled.frame, std::ranges::greater{},
                                              &ScheduledCommand::frame);
@@ -157,12 +181,8 @@ void Mixer::apply(const MixerCommand& command) noexcept {
         if (voice == nullptr) {
             return;
         }
-        const bool isPlayable = play->sound != nullptr && play->sound->frames() > 0 &&
-                                play->sound->rate().value() > 0 && play->pitch > 0.0F;
-        const double step = isPlayable
-                                ? static_cast<double>(play->sound->rate().value()) /
-                                      static_cast<double>(m_rate.value()) * static_cast<double>(play->pitch)
-                                : 0.0;
+        const double step = stepOf(play->sound, play->pitch);
+        const bool isPlayable = step > 0.0;
         *voice = Voice{.sound = isPlayable ? play->sound : nullptr,
                        .position = 0.0,
                        .step = step,

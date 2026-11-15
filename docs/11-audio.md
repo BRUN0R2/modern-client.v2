@@ -40,8 +40,10 @@ for their time too, so the audio thread never makes room for them. Each voice re
 crossings each way), narrowed when the sound is sped up so that nothing folds back: a sine at
 another rate comes out over 90 dB clean, and one sped up past the mix's band over 80 dB down.
 Voices sum in float; a master gain and a stereo-linked limiter (instant attack, 100 ms release)
-keep every sample under 0.98 of full scale. A voice pool with priorities and stealing,
-spatialization, the room's DSP and streaming come with what plays sounds.
+keep every sample under 0.98 of full scale. The frames it mixed are its own clock (`framesMixed`),
+by which the game tells when a voice it gave a sound is done (`framesOf`: the frames of the mix a
+sound lasts at its pitch). A voice pool with priorities and stealing, spatialization, the room's DSP and
+streaming come with what plays sounds.
 
 `nx.platform:audio` opens the system's default output with SDL3 at its own rate, in two channels
 of 32-bit floats, and pulls an `AudioSource` (the mixer is one) on SDL's real-time thread in
@@ -50,10 +52,13 @@ blocks of whole frames; when the default output changes, SDL moves the stream to
 separator too, any case), once each, and keeps them while it lives: a missing or broken file is a
 typed `SoundError` and is tried again the next time. In `next`, `cs::ClientAudio` plays the mixer
 on the output and the console's `play <sound>` and `playvol <sound> <volume>` as the original's:
-heard everywhere, `.wav` added to a name without an extension, the volume bounded to [0, 1]. They
-take 8 voices in turn, a ninth sound the voice of the one that started first, until the voice pool
-of §4. `volume` (0.7, from 0) is the mixer's master gain, sent before each sound and each frame.
-Without an output the game plays on, silent, and says so once. The tests run on SDL's dummy output,
+heard everywhere, `.wav` added to a name without an extension, the volume bounded to [0, 1], on the
+player's `auto` channel. Each sound the client plays takes a voice of the mixer as the original's
+engine chooses a channel for one (`cs::voiceFor`): on a channel other than `auto`, the voice that
+channel last played, whose sound it replaces; else the voice with the least left to play, a done one
+before any that plays, timed on the mixer's clock. Every voice of the mixer is one to choose from,
+never a fixed few, until the voice pool of §4. `volume` (0.7, from 0) is the mixer's master gain, sent
+before each sound and each frame. Without an output the game plays on, silent, and says so once. The tests run on SDL's dummy output,
 which pulls at a real device's pace; the client was checked end to end on SDL's disk output: `play
 weapons/ak47-1` is the WAV resampled from 22 050 to 44 100 Hz at 0.7 of its level, to float
 precision at the WAV's own instants.
@@ -129,6 +134,10 @@ disappears and returns.
 | Footsteps | Sound per material (`materials.txt`) and per surface (ladder, water, grate) with `mp_footsteps` |
 | Music | The `mp3`/`cd` command for `media/*.mp3` (menu and maps) |
 
+**Today**, the channels: the sounds the client plays take their voices as the original's engine
+chooses a channel for each (§2): a sound on a channel of its maker replaces the one its maker plays
+there, but on `Auto`. The player is the only maker heard yet.
+
 **Today**, the footsteps: the movement says each step of the player's feet, where it is and where
 it stood ([07 §3.1](07-simulation-and-physics.md#31-purity-requirements)); the local game looks up
 the texture 64 units under it, on the world or turned into the entity it stands on
@@ -161,6 +170,9 @@ seconds before a power of two of seconds bubbles now and then; the game's time d
   (channel priority × perceived volume). Stealing produces a metric, never a silent failure.
 - Gameplay-critical sounds (footsteps, gunshots, bomb, radio) have high priority through
   data.
+
+Today a sound takes the voice of the mixer's 64 with the least left to play (§2), as the original
+takes a channel; the pool's size, the priorities and the metric come with this pool.
 
 ## 5. Spatialization
 
