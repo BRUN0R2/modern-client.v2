@@ -100,6 +100,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] `x64-windows-nx` and `x64-linux-nx` triplets (dependencies without exceptions and without RTTI)
 - [x] `.clang-format` and `.clang-tidy` with `readability-magic-numbers` and naming as errors
 - [x] Warnings as errors, deterministic floating point, no exceptions and no RTTI
+- [x] Clang refuses a constructor parameter named like a member, as GCC's `-Wshadow` does (`-Wshadow-field-in-constructor`, [17 §2.2](17-build-and-tools.md#22-known-quirks))
 - [x] Functions defined in module interfaces are `inline`, so importers can inline them ([02 §2](02-coding-standards.md#2-file-and-module-organization))
 - [x] `scripts/devShell.ps1` for command-line builds on Windows
 - [x] `buildMenu.cmd`: a double-click builds and opens the game, in Release or as a developer, or cleans the build
