@@ -46,8 +46,8 @@ using MapLoader = std::move_only_function<nx::Result<std::unique_ptr<Played>, nx
 template <typename Played>
 class MapChange {
 public:
-    /// Loads the maps asked for with `load`.
-    explicit MapChange(MapLoader<Played> load) noexcept : load{std::move(load)} {}
+    /// Loads the maps asked for with `loader`.
+    explicit MapChange(MapLoader<Played> loader) noexcept : load{std::move(loader)} {}
 
     MapChange(const MapChange&) = delete;
     auto operator=(const MapChange&) -> MapChange& = delete;
