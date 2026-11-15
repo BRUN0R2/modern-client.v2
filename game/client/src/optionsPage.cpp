@@ -69,6 +69,9 @@ constexpr float kRowsANotch = 3.0F;
                                                         .cursorBytes = typed->textBeforeCursor().size()}
                                             : ShownText{.text = field->text()}};
     }
+    if (const auto* const button = std::get_if<OptionButton>(&row.control)) {
+        return {.name = row.name, .control = ShownButton{.label = button->label}};
+    }
     return {.name = row.name, .control = ShownSwitch{.isOn = std::get<OptionSwitch>(row.control).isOn()}};
 }
 
@@ -163,6 +166,8 @@ void OptionsPage::activate() {
     } else if (const auto* const field = std::get_if<OptionText>(&control)) {
         typingRow = selected;
         typed.setText(field->text());
+    } else if (const auto* const button = std::get_if<OptionButton>(&control)) {
+        button->press();
     } else if (std::holds_alternative<OptionSwitch>(control) ||
                std::holds_alternative<OptionChoice>(control)) {
         change(1);

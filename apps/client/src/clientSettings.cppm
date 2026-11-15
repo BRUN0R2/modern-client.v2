@@ -33,9 +33,12 @@ struct ClientSettings {
     cs::BotCvars bots;                    ///< `bot_*`.
 };
 
-/// Registers the client's cvars and buttons in `console`, and Counter-Strike's binds in `bindings`, with
-/// `noclip` on a key it leaves free, and the commands that change them (`bind`, `unbind`...), until the
-/// player's files say otherwise. Errors: SettingsUnavailable, with the cause.
+/// The binds the client starts with until the player's files say otherwise, and those its options restore:
+/// Counter-Strike 1.6's (nx::settings::defaultBindings), and `noclip` on a key they leave free.
+[[nodiscard]] auto defaultClientBindings() -> nx::settings::KeyBindings;
+
+/// Registers the client's cvars and buttons in `console`, and the commands that change `bindings` (`bind`,
+/// `unbind`...), which must outlive their use. Errors: SettingsUnavailable, with the cause.
 [[nodiscard]] auto registerClientSettings(nx::console::Console& console, nx::settings::KeyBindings& bindings)
     -> nx::Result<ClientSettings, ClientError>;
 

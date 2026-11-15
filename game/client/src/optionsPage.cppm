@@ -3,9 +3,9 @@
 
 /// The options of the main menu (docs/12-ui-hud-and-console.md, section 4): the player's settings by what
 /// they set, each on a row with what changes it, a slider, a switch, a choice among a few values, a text
-/// typed or the keys of an action, changed by the keys or the mouse and set as it is changed. Here is the
-/// page's state and what it shows (OptionsFrame), its texts named by the fields of OptionsTexts; what a
-/// setting reads and sets is given by whoever runs the menu, and drawing it is apart
+/// typed, the keys of an action or a button, changed by the keys or the mouse and set as it is changed. Here
+/// is the page's state and what it shows (OptionsFrame), its texts named by the fields of OptionsTexts; what
+/// a setting reads and sets is given by whoever runs the menu, and drawing it is apart
 /// (cs.client:mainMenuPanel), in the player's language as it is when it draws.
 export module cs.client:optionsPage;
 
@@ -82,8 +82,16 @@ struct OptionText {
     std::function<void(std::string)> set;
 };
 
+/// A button that does something to the settings once it is pressed: the text of the options' it is written
+/// by, and what it does.
+struct OptionButton {
+    std::string OptionsTexts::* label = nullptr;
+    std::function<void()> press;
+};
+
 /// What changes a setting.
-using OptionControl = std::variant<OptionSlider, OptionSwitch, OptionKeys, OptionChoice, OptionText>;
+using OptionControl =
+    std::variant<OptionSlider, OptionSwitch, OptionKeys, OptionChoice, OptionText, OptionButton>;
 
 /// A setting the options list: the tab it is on, the text of the options' that names it, and what changes
 /// it, which takes effect as it is changed.
@@ -135,8 +143,15 @@ struct ShownText {
     [[nodiscard]] inline auto operator==(const ShownText&) const noexcept -> bool = default;
 };
 
+/// A button as it shows: the text of the options' it is written by.
+struct ShownButton {
+    std::string OptionsTexts::* label = nullptr;
+
+    [[nodiscard]] inline auto operator==(const ShownButton&) const noexcept -> bool = default;
+};
+
 /// What changes a setting, as it shows.
-using ShownControl = std::variant<ShownSlider, ShownSwitch, ShownKeys, ShownChoice, ShownText>;
+using ShownControl = std::variant<ShownSlider, ShownSwitch, ShownKeys, ShownChoice, ShownText, ShownButton>;
 
 /// A row of the tab shown: the text that names its setting, and what changes it as it stands.
 struct ShownOption {
@@ -193,9 +208,10 @@ public:
     /// switch over, a choice to the value before or after it, going around past either end. Up and Down
     /// select the setting before and the one after, the tabs above the first, the list following it; the
     /// wheel scrolls the list. Enter switches a switch over, takes a choice to its next value, has an action
-    /// wait for its key, and has a text typed; Delete and Backspace take an action's keys from it. The mouse
-    /// selects the row it is over; its left button shows the tab it is pressed on, does to a row what Enter
-    /// does, and sets a slider to where it is pressed on its track, and on as it moves until it comes up.
+    /// wait for its key, has a text typed, and presses a button; Delete and Backspace take an action's keys
+    /// from it. The mouse selects the row it is over; its left button shows the tab it is pressed on, does to
+    /// a row what Enter does, and sets a slider to where it is pressed on its track, and on as it moves until
+    /// it comes up.
     /// While an action waits, the next key, button or notch of the wheel is given to it, and Escape leaves
     /// it as it was. While a text is typed, the text typed goes in it at its cursor, as much as its setting
     /// would take, the keys edit it (nx::ui::TextLine), Enter sets it, when its setting takes it, and Escape
@@ -222,7 +238,7 @@ private:
     /// over.
     void change(std::int32_t steps);
     /// What Enter, or the left button, does to the setting selected: a switch over, a choice to its next
-    /// value, an action waits, a text is typed.
+    /// value, an action waits, a text is typed, a button is pressed.
     void activate();
     /// Sets `slider` to where the cursor's `x` is on `track`.
     static void drag(const OptionSlider& slider, const nx::ui::PixelRect& track, float x);

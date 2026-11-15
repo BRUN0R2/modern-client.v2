@@ -13,8 +13,9 @@ namespace app {
 
 /// The settings the options list, by their tabs: each reads and sets a cvar of `settings`, which takes
 /// effect as it is set and which config.cfg keeps, or the keys `bindings` binds to an action of the game's,
-/// which it keeps too. The language is one of `languages`, the tags the game has its texts in. The cvars are
-/// the console's, which outlive what is returned, as `bindings` must.
+/// which it keeps too, the keys' tab ending with a button that restores those the client starts with
+/// (defaultClientBindings). The language is one of `languages`, the tags the game has its texts in. The cvars
+/// are the console's, which outlive what is returned, as `bindings` must.
 [[nodiscard]] auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& bindings,
                                    std::span<const std::string> languages) -> std::vector<cs::OptionRow>;
 

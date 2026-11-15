@@ -55,7 +55,9 @@ using cs::TextsError;
         "rebuy = \"x\"\n"
         "showScores = \"x\"\n"
         "toggleConsole = \"x\"\n"
-        "noclip = \"x\"\n",
+        "noclip = \"x\"\n"
+        "defaultKeys = \"x\"\n"
+        "restore = \"x\"\n",
         quit);
 }
 
