@@ -101,16 +101,8 @@ void look(nx::EulerAngles& view, const nx::platform::MouseMoved& moved,
                                         -cs::kMaxPitch.value(), cs::kMaxPitch.value())};
 }
 
-/// A map the console asked to play, loaded once a frame told the player so: its loading holds the frames
-/// for as long as it takes.
-struct MapAsked {
-    std::string name;
-    KeptMesh kept = KeptMesh::Read; ///< Whether the cache's mesh of its agents is read.
-    bool isToldLoading = false;     ///< Whether a frame showed that it is loading.
-};
-
-/// The client: the player's settings and console, the map it plays, and the window and GPU it plays
-/// it in. It stays where it is made: the console's commands and the binds' input point into it.
+/// The client: the player's settings and console, the map it plays (MapChange), and the window and GPU it
+/// plays it in. It stays where it is made: the console's commands and the binds' input point into it.
 class Client {
 public:
     Client(const ClientOptions& options, const std::filesystem::path& userFolder)
@@ -145,27 +137,10 @@ private:
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
-    /// Asks for the map a line names (map): loaded with the next frame but one (askForMap).
-    /// Errors: InvalidArguments.
-    [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
-    /// Asks for the map `name`, its agents' mesh read from the cache or not as `kept` says: the next frame
-    /// tells that it is loading, the one after loads it, and the console's commands that follow run once
-    /// it is loaded, so that they act on it.
-    void askForMap(std::string name, KeptMesh kept);
-    /// Loads the map asked for, once a frame told that it is loading, to be played from this frame; one
-    /// that cannot be loaded is reported as its command would report it, and the client stays where it
-    /// was, on its menu when it plays no map.
+    /// Loads the map asked for, once a frame told that it is loading (MapChange::loadAsked); one that cannot
+    /// be loaded is reported as its command would report it, and the client stays where it was, on its menu
+    /// when it plays no map.
     void loadMapAsked();
-    /// Builds the agents' mesh of the map played again, what the cache keeps of it left aside, and plays
-    /// the map again on it from the next frame (nav_generate), as Condition Zero restarts the game once it
-    /// analyzed a map. Errors: InvalidArguments, CommandFailed.
-    [[nodiscard]] auto generateNavigationCommand(const nx::console::CommandLine& line)
-        -> nx::Result<void, ConsoleError>;
-    /// The map loaded last, as the commands that follow `map` on a line act on it; none before the first.
-    [[nodiscard]] auto playedSession() const noexcept -> Session*;
-    /// Leaves the map played, or the one `map` loaded, from the next frame (disconnect), as the original
-    /// leaves a game; nothing without one.
-    void disconnectCommand();
     /// The navigation profiles of data/cstrike/navigation.toml. Errors: CommandFailed.
     [[nodiscard]] auto readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError>;
     void noclipCommand();
@@ -204,10 +179,10 @@ private:
     void handleInput(const nx::platform::WindowEvent& event);
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
-    /// Plays the map the console asked for, if any: its scene is made with the next frame, and
-    /// r_decals is held as entering a game of more than one player holds it. Plays none once the console
-    /// asked to leave the map played.
-    void startNextSession();
+    /// Plays from this frame what the console asked for, when a switch is due (MapChange::switchMap): the map
+    /// loaded, its scene made with the next frame, r_decals held as entering a game of more than one player
+    /// holds it; or none, on the menu, once the console asked to leave the map played.
+    void switchMap();
     /// Plays `elapsed` of the session's game, as a listen server plays it: each tick due, the command the
     /// player's input makes is the server's game's tick, whose snapshot the client's game takes.
     void playSession(nx::Seconds elapsed);
@@ -262,10 +237,12 @@ private:
     std::optional<ClientSounds> sounds; ///< On the system's sound output, once the content is open.
     std::optional<cs::SceneShaders> m_shaders;
     std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
-    std::unique_ptr<Session> m_session;             ///< The map played.
-    std::unique_ptr<Session> m_nextSession;         ///< The map `map` loaded, played from the next frame.
-    bool isLeavingMap = false;                      ///< `disconnect` asked: no map from the next frame.
-    std::optional<MapAsked> mapAsked;               ///< Told as loading, then loaded.
+    /// The map played, and how it changes; each loaded by the game's content and the settings as they are.
+    MapChange<Session> mapChange{
+        [this](std::string_view name, KeptMesh kept) -> nx::Result<std::unique_ptr<Session>, ConsoleError> {
+            return startSession(*m_content, name, settings->client.player, settings->game, *m_jobs,
+                                navigationData, kept);
+        }};
     /// Made or changed since the scene put their view models on the GPU.
     std::vector<cs::WeaponIndex> m_changedWeapons;
     nx::Random m_bulletHoles{0, kBulletHoleStream};
@@ -352,7 +329,8 @@ auto Client::start() -> nx::Result<void, ClientError> {
     navigationData = readNavigation();
     // The bots of the map loaded last, as the commands that follow `map` on a line act on it.
     bots.emplace(readBotRules(dataFolder), *m_jobs, settings->bots);
-    if (auto registered = bots->registerCommands(m_console, [this] { return playedSession(); });
+    if (auto registered =
+            bots->registerCommands(m_console, [this]() -> Session* { return mapChange.actedOn(); });
         !registered) {
         return registered;
     }
@@ -365,12 +343,12 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return registered;
     }
     // The menu buys for the player of the map played; its notices are timed as the map is.
-    buyMenu.emplace(*m_content, [this] { return m_session.get(); }, m_mapClock);
+    buyMenu.emplace(*m_content, [this]() -> Session* { return mapChange.played(); }, m_mapClock);
     if (auto registered = buyMenu->registerCommands(m_console, m_content->weapons); !registered) {
         return registered;
     }
     if (auto registered = registerZombieCommands(m_console, *m_content, dataFolder, *m_jobs,
-                                                 [this] { return playedSession(); });
+                                                 [this]() -> Session* { return mapChange.actedOn(); });
         !registered) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }
@@ -405,7 +383,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     texts.emplace(std::move(*written));
     mainMenu.emplace(*m_content, texts->written(),
                      clientOptionsOf(*settings, m_bindings, texts->languages()));
-    if (!mapAsked) {
+    if (!mapChange.askedMap()) {
         mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
     }
     sounds->openNamedOutput();
@@ -428,23 +406,15 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
     const auto add = [this](nx::console::CommandDesc desc, nx::console::CommandHandler handler) {
         return m_console.registerCommand(desc, std::move(handler));
     };
+    if (auto registered = mapChange.registerCommands(m_console); !registered) {
+        return registered;
+    }
     for (auto&& registered :
-         {add({.name = "map", .description = "Plays a map: map <name>."},
-              [this](Console&, const CommandLine& line) { return mapCommand(line); }),
-          add({.name = "nav_draw",
+         {add({.name = "nav_draw",
                .description = "Draws the agents' navigation mesh and the way each bot and zombie follows "
                               "over the scene, or stops."},
               [this](Console&, const CommandLine& line) {
-                  return navigationView.toggle(line, m_session.get());
-              }),
-          add({.name = "nav_generate",
-               .description = "Builds the agents' navigation mesh of the map again, the cache's left "
-                              "aside, and plays the map again on it."},
-              [this](Console&, const CommandLine& line) { return generateNavigationCommand(line); }),
-          add({.name = "disconnect", .description = "Leaves the map played."},
-              [this](Console&, const CommandLine&) {
-                  disconnectCommand();
-                  return nx::Result<void, ConsoleError>{};
+                  return navigationView.toggle(line, mapChange.played());
               }),
           add({.name = "noclip", .description = "Flies through everything, or walks again."},
               [this](Console&, const CommandLine&) {
@@ -484,24 +454,26 @@ auto Client::isTakenByBuyMenu(const nx::platform::WindowEvent& event) -> bool {
 auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
     cs::WeaponActions actions{
         .select = [this](cs::WeaponIndex weapon) -> nx::Result<void, cs::WeaponActionError> {
-            if (!m_session) {
+            if (mapChange.played() == nullptr) {
                 return nx::fail(cs::WeaponActionError::NoMap);
             }
             settings->input.selectWeapon(weapon);
             return {};
         },
         .give = [this](cs::WeaponIndex weapon) -> nx::Result<void, cs::WeaponActionError> {
-            if (!m_session) {
+            const Session* session = mapChange.played();
+            if (session == nullptr) {
                 return nx::fail(cs::WeaponActionError::NoMap);
             }
-            m_session->game->give(m_session->player, weapon);
+            session->game->give(session->player, weapon);
             return {};
         },
         .giveArmor = [this](cs::ArmorKind kind) -> nx::Result<void, cs::WeaponActionError> {
-            if (!m_session) {
+            const Session* session = mapChange.played();
+            if (session == nullptr) {
                 return nx::fail(cs::WeaponActionError::NoMap);
             }
-            m_session->game->giveArmor(m_session->player, kind);
+            session->game->giveArmor(session->player, kind);
             return {};
         }};
     if (auto registered = cs::registerWeaponCommands(m_console, m_content->weapons, std::move(actions));
@@ -509,21 +481,6 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }
     return {};
-}
-
-auto Client::playedSession() const noexcept -> Session* {
-    if (isLeavingMap) {
-        return nullptr;
-    }
-    return m_nextSession ? m_nextSession.get() : m_session.get();
-}
-
-void Client::disconnectCommand() {
-    if (playedSession() == nullptr) {
-        return;
-    }
-    m_nextSession.reset();
-    isLeavingMap = true;
 }
 
 auto Client::readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError> {
@@ -539,63 +496,31 @@ auto Client::readNavigation() const -> nx::Result<nx::game::NavigationData, Cons
     return std::move(*navigation);
 }
 
-auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
-    if (line.arguments().size() != 1) {
-        return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
-    }
-    askForMap(line.arguments().front(), KeptMesh::Read);
-    return {};
-}
-
-void Client::askForMap(std::string name, KeptMesh kept) {
-    mapAsked = MapAsked{.name = std::move(name), .kept = kept};
-    m_console.wait();
-}
-
 void Client::loadMapAsked() {
-    if (!mapAsked || !mapAsked->isToldLoading) {
-        return;
-    }
-    const MapAsked asked = *std::exchange(mapAsked, std::nullopt);
-    auto session = startSession(*m_content, asked.name, settings->client.player, settings->game, *m_jobs,
-                                navigationData, asked.kept);
-    if (!session) {
-        m_output.reportFailure(session.error());
-        if (!m_session && !mainMenu->isOpen()) {
+    if (auto loaded = mapChange.loadAsked(); !loaded) {
+        m_output.reportFailure(loaded.error());
+        if (mapChange.played() == nullptr && !mainMenu->isOpen()) {
             openMainMenu(); // asked for as the client started: it opens on its menu after all
         }
-        return;
     }
-    m_nextSession = std::move(*session);
-    isLeavingMap = false;
-}
-
-auto Client::generateNavigationCommand(const nx::console::CommandLine& line)
-    -> nx::Result<void, ConsoleError> {
-    if (!line.arguments().empty()) {
-        return nx::fail(ConsoleError::InvalidArguments, "usage: nav_generate");
-    }
-    if (!m_session) {
-        return nx::fail(ConsoleError::CommandFailed, "nav_generate: load a map first");
-    }
-    askForMap(std::string{m_session->map->name()}, KeptMesh::Ignored);
-    return {};
 }
 
 void Client::noclipCommand() {
-    if (!m_session) {
+    const Session* session = mapChange.played();
+    if (session == nullptr) {
         m_console.print("Can't \"noclip\", not playing a map");
         return;
     }
-    m_console.print(m_session->game->toggleNoclip(m_session->player) ? "noclip ON" : "noclip OFF");
+    m_console.print(session->game->toggleNoclip(session->player) ? "noclip ON" : "noclip OFF");
 }
 
 void Client::lastWeaponCommand() {
-    if (!m_session) {
+    const Session* session = mapChange.played();
+    if (session == nullptr) {
         m_console.print("Can't \"lastinv\", not playing a map");
         return;
     }
-    if (const std::optional<cs::WeaponIndex> last = m_session->client.inventory().lastWeapon()) {
+    if (const std::optional<cs::WeaponIndex> last = session->client.inventory().lastWeapon()) {
         settings->input.selectWeapon(*last);
     }
 }
@@ -683,7 +608,7 @@ auto Client::togglesConsole(const nx::platform::KeyChanged& key) const -> bool {
 }
 
 auto Client::menuGame() const noexcept -> cs::MenuGame {
-    return m_session ? cs::MenuGame::Played : cs::MenuGame::None;
+    return mapChange.played() != nullptr ? cs::MenuGame::Played : cs::MenuGame::None;
 }
 
 void Client::openMainMenu() {
@@ -709,8 +634,9 @@ auto Client::run() -> nx::Result<void, ClientError> {
         // fps_max: the limiter waits before the input is read, so that the frame shows the latest
         // (docs/05-rendering.md, section 12). The local game is one of more than one player, as a
         // Counter-Strike server's.
-        const nx::settings::GamePlayers players =
-            m_session ? nx::settings::GamePlayers::MoreThanOne : nx::settings::GamePlayers::One;
+        const nx::settings::GamePlayers players = mapChange.played() != nullptr
+                                                      ? nx::settings::GamePlayers::MoreThanOne
+                                                      : nx::settings::GamePlayers::One;
         const nx::Seconds interval = nx::settings::frameIntervalOf(settings->client.video, players);
         m_video->sleepTimer.sleepUntil(
             m_frameStart + std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(interval));
@@ -735,7 +661,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         loadMapAsked();
         // What the keys queued, and what a `wait` left, before the frame's commands are made; held while
         // a map asked for is not loaded yet, so that the commands after it act on it.
-        if (!mapAsked) {
+        if (!mapChange.holdsCommands()) {
             std::ignore = m_console.execute();
         }
         followLanguage();
@@ -743,35 +669,33 @@ auto Client::run() -> nx::Result<void, ClientError> {
         showCursorAsNeeded();
         typeAsNeeded();
         sounds->update(m_isFocused);
-        startNextSession();
+        switchMap();
         updateWeapons();
         const nx::Seconds elapsed = m_frameClock.restart();
         settings->input.turn(m_camera.angles, elapsed);
         m_fog.update(settings->fog, elapsed);
         // A session plays once its scene is made, from the frame after the first image of it: what the
         // player hears of it, they see.
-        if (m_session && m_scene) {
-            const cs::Hearing hearing = m_session->client.hearing(); // from what the last frame showed
+        if (Session* session = mapChange.played(); session != nullptr && m_scene) {
+            const cs::Hearing hearing = session->client.hearing(); // from what the last frame showed
             // The player's own setting, as its client tells the server of it.
-            m_session->game->setAutoSwitch(m_session->player, autoSwitchOf(settings->client.player));
+            session->game->setAutoSwitch(session->player, autoSwitchOf(settings->client.player));
             playSession(elapsed);
-            m_camera.position = m_session->client.eye();
-            m_session->client.updatePlayers(elapsed, settings->corpses.stayTime(), m_players);
+            m_camera.position = session->client.eye();
+            session->client.updatePlayers(elapsed, settings->corpses.stayTime(), m_players);
             turnAsTheGameDid();
-            sounds->hear(*m_session, hearing);
+            sounds->hear(*session, hearing);
             // r_decals as it is now, as the original reads it at each decal.
             m_scene->setDecalLimit(decalLimitOf(settings->client.video));
-            stampMarks(*m_session, *m_scene, *m_content, m_bulletHoles);
+            stampMarks(*session, *m_scene, *m_content, m_bulletHoles);
             const nx::Seconds now{m_mapClock.elapsed()};
-            showNotices(*m_session, hud.notices(m_console, *settings), m_content->weapons, now);
-            showEffects(*m_session, *m_scene, *m_content, now, elapsed);
+            showNotices(*session, hud.notices(m_console, *settings), m_content->weapons, now);
+            showEffects(*session, *m_scene, *m_content, now, elapsed);
         }
         if (auto drawn = drawFrame(commands->get()); !drawn) {
             return drawn;
         }
-        if (mapAsked) {
-            mapAsked->isToldLoading = true; // by the frame drawn, or by none while the window shows none
-        }
+        mapChange.frameShown(); // by the frame drawn, or by none while the window shows none
     }
     return finish();
 }
@@ -831,18 +755,18 @@ void Client::handleInput(const nx::platform::WindowEvent& event) {
     }
 }
 
-void Client::startNextSession() {
-    if (!m_nextSession && !isLeavingMap) {
+void Client::switchMap() {
+    const MapSwitch due = mapChange.switchDue();
+    if (due == MapSwitch::Stay) {
         return;
     }
     m_video->device->waitIdle(); // the old scene may still be drawing
     m_scene.reset();
-    m_session = std::exchange(m_nextSession, nullptr);
-    isLeavingMap = false;
+    mapChange.switchMap();
     hud.clear();
     buyMenu->reset();
     m_changedWeapons.clear(); // the new level read every weapon's view model
-    if (!m_session) {
+    if (due == MapSwitch::Leave) {
         openMainMenu(); // the map was left: none is played
         return;
     }
@@ -852,15 +776,16 @@ void Client::startNextSession() {
     if (auto held = nx::settings::enterMultiplayerGame(settings->client.video); !held) {
         nx::log::warning(kLog, "r_decals not held to mp_decals: {}", nx::describe(held.error()));
     }
-    sounds->readWeapons(m_content->weapons, *m_session->level, m_session->level->weapons());
+    const Session& session = *mapChange.played();
+    sounds->readWeapons(m_content->weapons, *session.level, session.level->weapons());
     sounds->readPlayer(*m_content);
-    m_camera.position = m_session->client.eye();
+    m_camera.position = session.client.eye();
     turnAsTheGameDid();
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
 }
 
 void Client::playSession(nx::Seconds elapsed) {
-    Session& session = *m_session;
+    Session& session = *mapChange.played();
     const nx::platform::Stopwatch ticking;
     for (std::uint32_t due = session.client.ticksDue(elapsed, cs::CatchUp::Limited);
          due > 0 && ticking.elapsed() < kMostTickingInAFrame; --due) {
@@ -879,18 +804,19 @@ void Client::playSession(nx::Seconds elapsed) {
 }
 
 void Client::turnAsTheGameDid() {
-    if (const std::optional<nx::EulerAngles> turned = m_session->client.takeTurnedView()) {
+    if (const std::optional<nx::EulerAngles> turned = mapChange.played()->client.takeTurnedView()) {
         m_camera.angles = *turned;
     }
 }
 
 void Client::updateWeapons() {
-    if (!m_session) {
+    const Session* session = mapChange.played();
+    if (session == nullptr) {
         return;
     }
     const std::vector<cs::WeaponIndex> changed =
-        m_session->level->updateViewModels(m_content->vfs, m_content->weapons);
-    sounds->readWeapons(m_content->weapons, *m_session->level, changed);
+        session->level->updateViewModels(m_content->vfs, m_content->weapons);
+    sounds->readWeapons(m_content->weapons, *session->level, changed);
     m_changedWeapons.insert(m_changedWeapons.end(), changed.begin(), changed.end());
 }
 
@@ -914,8 +840,8 @@ auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientErr
     }
     appendScreen(frame.size);
     std::optional<cs::FrameScene> scene;
-    if (m_session) {
-        scene.emplace(cs::FrameScene{.scene = *m_scene, .level = *m_session->level, .view = sessionView()});
+    if (const Session* session = mapChange.played(); session != nullptr) {
+        scene.emplace(cs::FrameScene{.scene = *m_scene, .level = *session->level, .view = sessionView()});
     }
     if (auto recorded = m_frames->record(list, frame.texture, frame.size, scene, m_screenQuads); !recorded) {
         return nx::fail(ClientError::GpuFailed, std::move(recorded.error()));
@@ -935,7 +861,7 @@ auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientErr
 auto Client::makeScene(nx::rhi::CommandList& list) -> nx::Result<cs::Scene, ClientError> {
     const nx::settings::VideoCvars& video = settings->client.video;
     const nx::render::StudioLook look = lookOf(video);
-    auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders,
+    auto scene = cs::Scene::create(*m_video->device, list, *mapChange.played()->level, *m_shaders,
                                    m_frames->sceneFormatOf(look), m_frames->effectsFormatOf(look),
                                    gammaOf(video), look, decalLimitOf(video));
     if (!scene) {
@@ -962,7 +888,7 @@ auto Client::followPicture(nx::rhi::CommandList& list) -> nx::Result<void, Clien
     m_scene.emplace(std::move(*scene));
     m_changedWeapons.clear();             // the scene put every weapon's view model on the GPU
     std::ignore = m_frameClock.restart(); // making it is no time of the game's
-    return NavigationView::keepOn(*m_scene, *m_session, list);
+    return NavigationView::keepOn(*m_scene, *mapChange.played(), list);
 }
 
 /// Puts on the GPU what the frame draws that is not there yet, its uploads recorded in `list` before
@@ -995,7 +921,7 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
     if (auto followed = followPicture(list); !followed) {
         return followed;
     }
-    if (mainMenu->isOpen() || mapAsked) {
+    if (mainMenu->isOpen() || mapChange.askedMap()) {
         if (auto loaded = mainMenu->load(m_fonts, m_frames->screen(), list, frame.size); !loaded) {
             return loaded;
         }
@@ -1008,7 +934,8 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
         }
         buyMenu->load(m_fonts, m_content->vfs, m_frames->screen(), list, extentOf(*size).height);
     }
-    if (m_session && !m_scene) {
+    Session* session = mapChange.played();
+    if (session != nullptr && !m_scene) {
         auto scene = makeScene(list);
         if (!scene) {
             return std::unexpected{std::move(scene.error())};
@@ -1021,7 +948,7 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
     if (m_scene && !m_changedWeapons.empty()) {
         // The weapons made or changed since (updateWeapons): their view models put on the GPU now.
         m_video->device->waitIdle(); // the frames in flight may still draw a model replaced
-        if (auto loaded = m_scene->loadWeapons(list, *m_session->level, m_changedWeapons); !loaded) {
+        if (auto loaded = m_scene->loadWeapons(list, *session->level, m_changedWeapons); !loaded) {
             return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
         }
         m_changedWeapons.clear();
@@ -1032,7 +959,7 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
         }
     }
     if (m_scene) {
-        return navigationView.upload(*m_session, *m_scene, list, navigationData);
+        return navigationView.upload(*session, *m_scene, list, navigationData);
     }
     return {};
 }
@@ -1041,7 +968,7 @@ auto Client::kickedCamera() const -> nx::render::Camera {
     // The view is drawn turned by the kick the player's weapon gave it, as the original's client adds
     // the punch to it.
     nx::render::Camera kicked = m_camera;
-    const nx::EulerAngles punch = m_session->client.punch();
+    const nx::EulerAngles punch = mapChange.played()->client.punch();
     kicked.angles = nx::EulerAngles{.pitch = m_camera.angles.pitch + punch.pitch,
                                     .yaw = m_camera.angles.yaw + punch.yaw,
                                     .roll = m_camera.angles.roll + punch.roll};
@@ -1050,27 +977,28 @@ auto Client::kickedCamera() const -> nx::render::Camera {
 
 auto Client::sessionView() -> cs::SceneView {
     const nx::render::Camera kicked = kickedCamera();
-    m_session->client.writePlacements(m_placements);
-    m_session->client.writeHostages(m_hostages);
-    m_session->client.writeCorpses(m_content->entities, settings->corpses.stayTime(), m_jobs.get(),
-                                   shownEntities);
+    Session& session = *mapChange.played();
+    session.client.writePlacements(m_placements);
+    session.client.writeHostages(m_hostages);
+    session.client.writeCorpses(m_content->entities, settings->corpses.stayTime(), m_jobs.get(),
+                                shownEntities);
     const nx::Seconds time{m_mapClock.elapsed()};
     return {.camera = kicked,
             .time = time,
-            .lightStyles = m_session->client.lightStylesAt(time),
+            .lightStyles = session.client.lightStylesAt(time),
             .placements = m_placements,
             .hostages = m_hostages,
             .players = m_players,
             .entities = shownEntities,
-            .crowd = m_session->client.crowd(),
-            .viewModel = m_session->viewPose,
-            .tempEntities = m_session->effects.shown(),
-            .particles = m_session->particles.shown(),
-            .streaks = m_session->particles.shownStreaks(),
-            .blood = m_session->blood.shown(time, m_content->blood.enhancedLook),
-            .clientEvents = m_session->clientEvents,
+            .crowd = session.client.crowd(),
+            .viewModel = session.viewPose,
+            .tempEntities = session.effects.shown(),
+            .particles = session.particles.shown(),
+            .streaks = session.particles.shownStreaks(),
+            .blood = session.blood.shown(time, m_content->blood.enhancedLook),
+            .clientEvents = session.clientEvents,
             .hand = settings->hud.hand(),
-            .overlay = navigationView.overlay(*m_session, *m_jobs),
+            .overlay = navigationView.overlay(session, *m_jobs),
             .fog = m_fog.shown(),
             .jobs = m_jobs.get()};
 }
@@ -1079,8 +1007,8 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
     m_screenQuads.clear();
     // Measured each frame, whether it shows or not.
     const std::optional<double> framesPerSecond = m_frameRate.framesPerSecond();
-    if (m_session) {
-        const HudFrame frame{.session = *m_session,
+    if (const Session* session = mapChange.played(); session != nullptr) {
+        const HudFrame frame{.session = *session,
                              .content = *m_content,
                              .settings = *settings,
                              .view = kickedCamera(),
@@ -1095,8 +1023,8 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         buyMenu->appendNotice(m_screenQuads, size);
     }
     mainMenu->append(m_screenQuads, size, menuGame());
-    if (mapAsked) {
-        mainMenu->appendLoading(m_screenQuads, size, mapAsked->name);
+    if (const std::optional<std::string_view> asked = mapChange.askedMap()) {
+        mainMenu->appendLoading(m_screenQuads, size, *asked);
     }
     if (m_consoleWindow != nullptr && m_consoleWindow->dialog() != nullptr) {
         m_logSink->showIn(*m_consoleWindow->dialog());
