@@ -497,8 +497,9 @@ the menu by what runs it (`app.client:options`, the client's cvars), so that the
 which plays the map again) only asks for the map: the next frame tells that it is loading, over the menu's
 background, the game's name where the menu writes it and `LOADING` and the map's name where its items stand; the
 frame after loads it, and the screen stays as told until the first frame of the map shows. The console's commands
-that follow on the same line run once the map is loaded, so that they act on it (`map de_dust2; bot_add`), held
-as a `wait` holds them (`nx::console::Console::wait`), as the original's run after its own loading. A map that
+that follow on the same line run once the map is loaded, so that they act on it (`map de_dust2; bot_add`), as the
+original's run after its own loading: the console holds them until then (`nx::console::Console::hold`), whoever runs
+it, so the start too leaves those that follow a map `autoexec.cfg` or `+map` asks for to the frames. A map that
 cannot be loaded is reported as its command would report it, on the console, and the client stays where it was: on
 its menu when it plays no map. The screen does not move while the map loads: a bar that follows the loading comes
 with loading off the main thread. The change of map has named states of its own (`app.client:mapChange`): a map
@@ -622,8 +623,8 @@ player holds `r_decals` to as it is entered, [05 §8](05-rendering.md#8-bsp-worl
 [10 §7.3](10-counter-strike-gameplay.md#73-behaviors)), `volume` (0.7,
 from 0, the gain of everything heard, [11 §8](11-audio.md#8-cvars)), `s_device` (empty: the
 system's default sound output; else one `s_devices` lists, opened once the startup files and the
-command line ran), `s_play_unfocused` (0: silent while the window is not focused, as the original
-is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
+command line ran, up to a map they ask for), `s_play_unfocused` (0: silent while the window is not
+focused, as the original is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
 `next` registers them, with the game's and the HUD's below, as one `ClientSettings` (`app.client:settings`),
 reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
 effect as soon as what reads it reads it again: `in_keymap` with the next key press, the mouse's
@@ -681,7 +682,9 @@ views over an `nx::console::Console`, which writes replies and failures to a
   at the start of a file is ignored.
 - **Command buffer:** `addText` queues, `insertText` jumps ahead (aliases and `exec` run at
   the point where they are called) and `execute()` runs until the buffer is empty or until
-  a `wait`, which leaves the rest for the next frame. More than 65,536 alias and `exec`
+  a `wait`, which leaves the rest for the next frame. A command whose work goes on after it
+  returned (`map`) holds the rest instead (`hold()`): `execute()` runs nothing until the
+  `CommandHold` it keeps ends, as it is destroyed. More than 65,536 alias and `exec`
   expansions in a single execution are a loop: the buffer is discarded and the
   `ExpansionLimit` failure is reported.
 - **Aliases:** the body is the rest of the words, joined by spaces. Arguments after the

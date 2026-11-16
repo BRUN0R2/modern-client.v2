@@ -236,18 +236,53 @@ TEST_F(ConsoleTest, WaitResumesOnTheNextExecute) {
     EXPECT_EQ(console.execute(), BufferState::Empty);
 }
 
-TEST_F(ConsoleTest, ACommandMayHoldTheRestForTheNextExecute) {
-    ASSERT_TRUE(console
-                    .registerCommand({.name = "load", .description = "Does its work between two runs."},
-                                     [](Console& held, const CommandLine&) -> nx::Result<void, ConsoleError> {
-                                         held.wait();
-                                         return {};
-                                     })
-                    .has_value());
-    EXPECT_EQ(run("echo before; load; echo after"), BufferState::Waiting);
+TEST_F(ConsoleTest, ACommandHoldsTheRestUntilItsWorkIsDone) {
+    std::optional<nx::console::CommandHold> work;
+    ASSERT_TRUE(
+        console
+            .registerCommand({.name = "load", .description = "Does its work after it returned."},
+                             [&work](Console& held, const CommandLine&) -> nx::Result<void, ConsoleError> {
+                                 work.emplace(held.hold());
+                                 return {};
+                             })
+            .has_value());
+    EXPECT_EQ(run("echo before; load; echo after"), BufferState::Held);
     EXPECT_EQ(output.lines, (Lines{"before"}));
+    EXPECT_EQ(console.execute(), BufferState::Held) << "whoever runs the console, the rest waits";
+    EXPECT_EQ(run("echo typed"), BufferState::Held) << "and what is queued after it";
+    EXPECT_EQ(output.lines, (Lines{"before"}));
+
+    work.reset();
     EXPECT_EQ(console.execute(), BufferState::Empty);
-    EXPECT_EQ(output.lines, (Lines{"before", "after"}));
+    EXPECT_EQ(output.lines, (Lines{"before", "after", "typed"}));
+}
+
+TEST_F(ConsoleTest, TheRestRunsOnceEveryHoldEnded) {
+    std::optional<nx::console::CommandHold> first{console.hold()};
+    std::optional<nx::console::CommandHold> second{console.hold()};
+    EXPECT_EQ(run("echo held"), BufferState::Held);
+
+    first.reset();
+    EXPECT_EQ(console.execute(), BufferState::Held);
+    EXPECT_TRUE(output.lines.empty());
+
+    second.reset();
+    EXPECT_EQ(console.execute(), BufferState::Empty);
+    EXPECT_EQ(output.lines, (Lines{"held"}));
+}
+
+TEST_F(ConsoleTest, AMovedHoldIsStillOneHold) {
+    std::optional<nx::console::CommandHold> moved{console.hold()};
+    std::optional<nx::console::CommandHold> kept{std::move(*moved)};
+    moved.reset();
+    EXPECT_EQ(run("echo held"), BufferState::Held) << "the hold moved with it";
+
+    // One taking another's place ends its own.
+    *kept = console.hold();
+    EXPECT_EQ(console.execute(), BufferState::Held);
+    kept.reset();
+    EXPECT_EQ(console.execute(), BufferState::Empty);
+    EXPECT_EQ(output.lines, (Lines{"held"}));
 }
 
 TEST_F(ConsoleTest, AWaitInsideAnAliasDelaysTheRestOfTheBuffer) {

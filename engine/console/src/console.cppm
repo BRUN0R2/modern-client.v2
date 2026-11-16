@@ -80,9 +80,31 @@ enum class Cheats : std::uint8_t {
 enum class BufferState : std::uint8_t {
     Empty,   ///< Every buffered command ran.
     Waiting, ///< A `wait` stopped the run; the rest runs on the next execute().
+    Held,    ///< A command's work holds the rest (Console::hold); it runs once that work is done.
 };
 
 class Console;
+
+/// What a command whose work goes on after it returned, such as one that loads a map, holds the
+/// console with (Console::hold): while it lasts, the console runs none of its buffered commands, so that
+/// those that follow act on that work done. It ends as it is destroyed, whatever became of the work, and it
+/// must not outlive its console.
+class CommandHold {
+public:
+    CommandHold(const CommandHold&) = delete;
+    auto operator=(const CommandHold&) -> CommandHold& = delete;
+    CommandHold(CommandHold&& other) noexcept;
+    auto operator=(CommandHold&& other) noexcept -> CommandHold&;
+    ~CommandHold();
+
+private:
+    friend class Console;
+
+    explicit CommandHold(Console& held) noexcept;
+    void end() noexcept;
+
+    Console* console = nullptr; ///< None once moved from.
+};
 
 /// A command: runs with the words of its line. Failures go to the console output.
 using CommandHandler =
@@ -134,7 +156,8 @@ public:
     Console(Console&&) = delete;
     auto operator=(const Console&) -> Console& = delete;
     auto operator=(Console&&) -> Console& = delete;
-    ~Console() = default;
+    /// Expects that no CommandHold of it lasts: one would be left pointing at no console.
+    ~Console();
 
     /// Whether a cvar can be registered as `name` now. Errors: InvalidName (a name the console
     /// language cannot invoke), NameTaken (a cvar, command or alias already has it, in any case).
@@ -179,13 +202,20 @@ public:
     /// Queues `script` before what is buffered, to run next. Its end is the end of a command.
     void insertText(std::string_view script);
 
-    /// Runs buffered commands until the buffer is empty or a `wait` stops the run; called once a
-    /// frame. A failing command is reported and the run goes on with the next one.
+    /// Runs buffered commands until the buffer is empty, a `wait` stops the run or a command holds the
+    /// rest (hold()); runs none while a hold lasts, whoever calls. Called once a frame. A failing command is
+    /// reported and the run goes on with the next one.
     auto execute() -> BufferState;
 
-    /// Stops the run after the command running, as `wait` does: the rest of the buffer runs on the next
-    /// execute(). For a command whose work is done between two runs, such as one that loads a map.
+    /// Stops the run after the command running, as the `wait` command does: the rest of the buffer runs
+    /// on the next execute(), whenever it comes. A command whose work goes on after it holds the rest
+    /// instead (hold()).
     inline void wait() noexcept { m_waitRequested = true; }
+
+    /// Holds the buffered commands for a command whose work goes on after it returned, such as one that
+    /// loads a map: the run stops after the command running, and none runs until the hold returned ends,
+    /// so that those that follow act on that work done.
+    [[nodiscard]] auto hold() noexcept -> CommandHold;
 
     /// Sets a cvar from text, as typing `name text` does: refused for ServerProtected cvars, for
     /// Cheat cvars while cheats are forbidden, and for text the cvar does not accept.
@@ -250,7 +280,10 @@ private:
     std::deque<Segment> m_buffer;      // front runs first
     std::size_t m_expansions = 0;
     bool m_waitRequested = false;
+    std::size_t holds = 0; ///< The CommandHold that last.
     Cheats m_cheats = Cheats::Forbidden;
+
+    friend class CommandHold;
 };
 
 } // namespace nx::console

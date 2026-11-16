@@ -367,10 +367,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return registered;
     }
     // The player's files, then the command line's commands, as the original's valve.rc runs them; the
-    // output s_device names is opened once they ran, the default's sounds heard until then.
+    // output s_device names is opened once they ran, the default's sounds heard until then. What a `wait`
+    // leaves, and what a map asked for holds until it is loaded, runs with the frames.
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
-    std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
+    std::ignore = m_console.execute();
     // The language the player's files and the command line chose, once they ran.
     const std::string& language = settings->client.player.language.value();
     auto written = cs::PlayerTexts::open(dataFolder, language);
@@ -659,11 +660,9 @@ auto Client::run() -> nx::Result<void, ClientError> {
             return read;
         }
         loadMapAsked();
-        // What the keys queued, and what a `wait` left, before the frame's commands are made; held while
-        // a map asked for is not loaded yet, so that the commands after it act on it.
-        if (!mapChange.holdsCommands()) {
-            std::ignore = m_console.execute();
-        }
+        // What the keys queued, and what a `wait` left, before the frame's commands are made; what follows
+        // a map asked for is held by the console until it is loaded, so that it acts on it.
+        std::ignore = m_console.execute();
         followLanguage();
         buyMenu->update();
         showCursorAsNeeded();
