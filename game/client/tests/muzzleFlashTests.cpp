@@ -80,7 +80,7 @@ TEST(MuzzleFlashTest, AnOriginalEventsNumberChoosesTheSpriteAndItsSize) {
     EXPECT_EQ(rifle.sprite, "sprites/muzzleflash3.spr");
     EXPECT_FLOAT_EQ(rifle.scale.value(), 0.2F);
     EXPECT_EQ(rifle.firstFrame, std::nullopt) << "a frame at random";
-    EXPECT_EQ(rifle.frameRate, nx::PerSecond{}) << "held";
+    EXPECT_EQ(rifle.frameRate, cs::FlashFrameRate{}) << "held";
     EXPECT_FLOAT_EQ(rifle.time.count(), 0.01F);
     EXPECT_FLOAT_EQ(rifle.roll.value(), 359.0F);
     EXPECT_FLOAT_EQ(rifle.brightness, 1.0F);
@@ -126,7 +126,7 @@ TEST(MuzzleFlashTest, CounterStrikeOnlinesKeysStyleItsFlash) {
     EXPECT_EQ(drakar.sprite, "sprites/muzzleflash341.spr");
     EXPECT_FLOAT_EQ(drakar.scale.value(), 0.16F);
     EXPECT_EQ(drakar.firstFrame, 0U);
-    EXPECT_EQ(drakar.frameRate, nx::PerSecond{30.0F});
+    EXPECT_EQ(drakar.frameRate, cs::FlashFrameRate{30.0F});
     EXPECT_FLOAT_EQ(drakar.time.count(), 999.0F);
     EXPECT_FLOAT_EQ(drakar.roll.value(), 20.0F) << "rolled at first as the original's of 0";
     EXPECT_FLOAT_EQ(drakar.rollRate.value(), 60.0F) << "R2: 2 degrees a frame of its 30 a second";
@@ -136,7 +136,7 @@ TEST(MuzzleFlashTest, CounterStrikeOnlinesKeysStyleItsFlash) {
     const cs::MuzzleFlashStyle partial = cs::muzzleFlashStyleOf("#S0.3  Pfast T-1 U Iten F2", std::nullopt);
     EXPECT_EQ(partial.sprite, "sprites/muzzleflash1.spr");
     EXPECT_FLOAT_EQ(partial.scale.value(), 0.3F);
-    EXPECT_EQ(partial.frameRate, nx::PerSecond{});
+    EXPECT_EQ(partial.frameRate, cs::FlashFrameRate{});
     EXPECT_FLOAT_EQ(partial.time.count(), 0.01F);
     EXPECT_EQ(partial.firstFrame, 2U);
     EXPECT_FLOAT_EQ(partial.rollRate.value(), 0.0F) << "no R: it does not turn";
@@ -194,7 +194,7 @@ TEST(MuzzleFlashTest, AWeaponsLookIsOverItsEventsStyle) {
     EXPECT_EQ(style.sprite, "sprites/drakarFlash.spr");
     EXPECT_FLOAT_EQ(style.scale.value(), 0.16F) << "the event's";
     EXPECT_EQ(style.firstFrame, 2U);
-    EXPECT_EQ(style.frameRate, nx::PerSecond{}) << "held";
+    EXPECT_EQ(style.frameRate, cs::FlashFrameRate{}) << "held";
     EXPECT_FLOAT_EQ(style.time.count(), 999.0F) << "the event's";
     EXPECT_FLOAT_EQ(style.roll.value(), 0.0F);
     EXPECT_FLOAT_EQ(style.rollRate.value(), -30.0F) << "over the events' R";

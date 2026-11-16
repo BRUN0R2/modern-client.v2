@@ -66,7 +66,7 @@ template <class Number>
     return MuzzleFlashStyle{.sprite = spriteOf(sprite + 1),
                             .scale = tens == nx::Scale{} ? kScaleWithoutTens : tens,
                             .firstFrame = std::nullopt,
-                            .frameRate = nx::PerSecond{},
+                            .frameRate = FlashFrameRate{},
                             .time = kMuzzleFlashTime,
                             .roll = sprite == 0 ? kRifleRoll : kOtherRoll,
                             .rollRate = nx::DegreesPerSecond{},
@@ -102,7 +102,7 @@ void readKeys(std::string_view keys, MuzzleFlashStyle& style) {
             break;
         case kFrameRateKey:
             if (const std::optional<float> frameRate = numberOf<float>(value)) {
-                style.frameRate = nx::PerSecond{*frameRate};
+                style.frameRate = FlashFrameRate{*frameRate};
             }
             break;
         case kTimeKey:
@@ -159,7 +159,7 @@ auto muzzleFlashStyleOf(std::string_view options, const std::optional<MuzzleFlas
             style.firstFrame = look->firstFrame;
         }
         if (look->frameRate) {
-            style.frameRate = nx::PerSecond{*look->frameRate};
+            style.frameRate = FlashFrameRate{*look->frameRate};
         }
         over(style.time, look->time);
         over(style.roll, look->roll);
