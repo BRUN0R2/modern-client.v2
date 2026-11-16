@@ -175,7 +175,8 @@ constexpr unsigned char kLinkEndEdge = 1;
     return MeshLink{.start = start,
                     .end = end,
                     .kind = kind,
-                    .through = goesThrough ? detail::throughOfId(connection.userId, start.z) : Vec3{},
+                    .through =
+                        goesThrough ? detail::throughOfId(connection.userId, HammerUnits{start.z}) : Vec3{},
                     .takeoff = isFlight(kind) ? detail::takeoffOfId(connection.userId, room) : std::nullopt};
 }
 
@@ -328,7 +329,8 @@ private:
             detail::kindOfArea(polygon.getArea()) != AreaKind::Door) {
             return 0.0F;
         }
-        const Vec3 through = detail::throughOfId(tile.offMeshCons[linkNumberOf(tile, polygon)].userId, 0.0F);
+        const Vec3 through =
+            detail::throughOfId(tile.offMeshCons[linkNumberOf(tile, polygon)].userId, HammerUnits{});
         const auto gate = std::ranges::find_if(
             doors, [through](const Gate& door) { return isSameDoor(door.middle, through); });
         if (gate == doors.end()) {
@@ -350,7 +352,8 @@ private:
         if (doors.empty() || detail::kindOfArea(polygon.getArea()) != AreaKind::Door) {
             return false;
         }
-        const Vec3 through = detail::throughOfId(tile.offMeshCons[linkNumberOf(tile, polygon)].userId, 0.0F);
+        const Vec3 through =
+            detail::throughOfId(tile.offMeshCons[linkNumberOf(tile, polygon)].userId, HammerUnits{});
         return std::ranges::any_of(doors, [this, through](const Gate& gate) {
             return !gate.isOpen && (!opensDoors || gate.openers.empty()) && isSameDoor(gate.middle, through);
         });
@@ -752,8 +755,8 @@ auto NavigationMesh::assemble(detail::BuiltTiles built, const AgentProfile& prof
     detour->mesh.reset(dtAllocNavMesh());
     dtNavMeshParams params{};
     std::ranges::copy(built.origin, std::begin(params.orig));
-    params.tileWidth = built.tileSide;
-    params.tileHeight = built.tileSide;
+    params.tileWidth = built.tileSide.value();
+    params.tileHeight = built.tileSide.value();
     params.maxTiles = 1 << tileBits;
     params.maxPolys = 1 << polygonBits;
     endUnlessAllocated(detour->mesh != nullptr && dtStatusSucceed(detour->mesh->init(&params)), "a mesh");
@@ -878,7 +881,7 @@ auto NavigationMesh::load(std::span<const std::byte> bytes, MeshKey key, const A
     for (float& coordinate : built.origin) {
         coordinate = reader.next<float>().value_or(0.0F);
     }
-    built.tileSide = reader.next<float>().value_or(0.0F);
+    built.tileSide = HammerUnits{reader.next<float>().value_or(0.0F)};
     const std::uint32_t tileCount = reader.next<std::uint32_t>().value_or(0);
     if (tileCount > reader.left() / kTileRecordBytes) {
         return damaged(std::format("{} tiles in {} bytes", tileCount, reader.left()));
@@ -1489,7 +1492,7 @@ auto Corridor::steer(NavigationQuery& query, const SteeringRequest& request) -> 
     }
     // The ledge the link it crosses next leaves from is its way on, no wall to keep off: the link's start is
     // on it, or just inside it where it is the side of a tile.
-    constexpr float kOnLedge = detail::kLinkInsetFromTileSide + kTouching;
+    constexpr float kOnLedge = detail::kLinkInsetFromTileSide.value() + kTouching;
     const std::optional<std::array<float, 3>> linkStart =
         nextLinkOf(detourState->corridor, *search.query->getAttachedNavMesh(), *search.query, search.filter,
                    *search.linkRooms)
