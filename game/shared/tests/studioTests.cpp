@@ -83,42 +83,50 @@ void expectNear(Vec3 actual, Vec3 expected, std::string_view what = {}) {
 
 TEST(SequenceFrameTest, ALoopingSequenceWrapsAtItsLastFrame) {
     const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}, 1.0F).value(), 3.0F);
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.5F}, 1.0F).value(), 5.0F)
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}, cs::kOwnSpeed).value(), 3.0F);
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.5F}, cs::kOwnSpeed).value(), 5.0F)
         << "15 frames: past 10, 5";
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{-1.0F}, 1.0F).value(), 0.0F) << "not started";
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{-1.0F}, cs::kOwnSpeed).value(), 0.0F)
+        << "not started";
 }
 
 TEST(SequenceFrameTest, ASequenceThatDoesNotLoopStopsShortOfItsLastFrame) {
     const StudioSequence draw{.label = "draw", .fps = 30.0F, .frameCount = 11};
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(draw, nx::Seconds{0.2F}, 1.0F).value(), 6.0F);
-    EXPECT_NEAR(cs::sequenceFrameAt(draw, nx::Seconds{1.0F}, 1.0F).value(), 9.999F, kTolerance);
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(draw, nx::Seconds{0.2F}, cs::kOwnSpeed).value(), 6.0F);
+    EXPECT_NEAR(cs::sequenceFrameAt(draw, nx::Seconds{1.0F}, cs::kOwnSpeed).value(), 9.999F, kTolerance);
     const StudioSequence still{.label = "still", .fps = 30.0F, .isLooping = true, .frameCount = 1};
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(still, nx::Seconds{2.0F}, 1.0F).value(), 0.0F) << "a single frame";
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(still, nx::Seconds{2.0F}, cs::kOwnSpeed).value(), 0.0F)
+        << "a single frame";
 }
 
 TEST(SequenceFrameTest, TheEntitysFramerateScalesItsSpeed) {
     const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}, 2.0F).value(), 6.0F);
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}, nx::Scale{2.0F}).value(), 6.0F);
 }
 
 TEST(SequenceFrameTest, TheClientEstimatesAFrameFromTheOneTheServerSent) {
     const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
     // 128 of 256: half of its ten frames after its first, then 0.1 seconds on.
-    EXPECT_FLOAT_EQ(cs::estimatedFrameOf(idle, 128.0F, nx::Seconds{0.1F}, 1.0F).value(), 8.0F);
-    EXPECT_FLOAT_EQ(cs::estimatedFrameOf(idle, 128.0F, nx::Seconds{0.2F}, 1.0F).value(), 1.0F) << "wrapped";
-    EXPECT_FLOAT_EQ(cs::estimatedFrameOf(idle, 128.0F, nx::Seconds{-0.2F}, 1.0F).value(), 5.0F)
+    EXPECT_FLOAT_EQ(
+        cs::estimatedFrameOf(idle, cs::EntityFrame{128.0F}, nx::Seconds{0.1F}, cs::kOwnSpeed).value(), 8.0F);
+    EXPECT_FLOAT_EQ(
+        cs::estimatedFrameOf(idle, cs::EntityFrame{128.0F}, nx::Seconds{0.2F}, cs::kOwnSpeed).value(), 1.0F)
+        << "wrapped";
+    EXPECT_FLOAT_EQ(
+        cs::estimatedFrameOf(idle, cs::EntityFrame{128.0F}, nx::Seconds{-0.2F}, cs::kOwnSpeed).value(), 5.0F)
         << "nothing passed before it was sent";
     const StudioSequence draw{.label = "draw", .fps = 30.0F, .frameCount = 11};
-    EXPECT_NEAR(cs::estimatedFrameOf(draw, 255.0F, nx::Seconds{0.5F}, 1.0F).value(), 9.999F, kTolerance);
+    EXPECT_NEAR(cs::estimatedFrameOf(draw, cs::EntityFrame{255.0F}, nx::Seconds{0.5F}, cs::kOwnSpeed).value(),
+                9.999F, kTolerance);
 }
 
 TEST(SequenceFrameTest, TheServerPosesAFrameAsItsShareOfTheSequence) {
     const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
-    EXPECT_FLOAT_EQ(cs::serverFrameOf(idle, 128.0F).value(), 5.0F);
-    EXPECT_FLOAT_EQ(cs::serverFrameOf(idle, 255.0F).value(), 10.0F * 255.0F / 256.0F) << "short of its last";
+    EXPECT_FLOAT_EQ(cs::serverFrameOf(idle, cs::EntityFrame{128.0F}).value(), 5.0F);
+    EXPECT_FLOAT_EQ(cs::serverFrameOf(idle, cs::EntityFrame{255.0F}).value(), 10.0F * 255.0F / 256.0F)
+        << "short of its last";
     const StudioSequence still{.label = "still", .fps = 30.0F, .frameCount = 1};
-    EXPECT_FLOAT_EQ(cs::serverFrameOf(still, 200.0F).value(), 0.0F);
+    EXPECT_FLOAT_EQ(cs::serverFrameOf(still, cs::EntityFrame{200.0F}).value(), 0.0F);
 }
 
 TEST(ActivityTest, ASequenceOfTheActivityIsDrawnAsLikelyAsItsWeight) {
@@ -161,19 +169,20 @@ TEST(ActivityTest, SequencesThatWeighNothingAreDrawnAlike) {
 }
 
 TEST(AnimationTest, ASequenceStartsAtItsOwnSpeed) {
-    cs::Animation animation{.frame = 40.0F, .framerate = 2.0F, .isFinished = true};
+    cs::Animation animation{
+        .frame = cs::EntityFrame{40.0F}, .framerate = nx::Scale{2.0F}, .isFinished = true};
     const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
     const nx::GameTime now = nx::GameTime::atTick(7);
     cs::resetSequence(animation, idle, now);
-    EXPECT_FLOAT_EQ(animation.frameSpeed, 30.0F * 256.0F / 10.0F);
-    EXPECT_FLOAT_EQ(animation.framerate, 1.0F);
+    EXPECT_FLOAT_EQ(animation.frameSpeed.value(), 30.0F * 256.0F / 10.0F);
+    EXPECT_EQ(animation.framerate, cs::kOwnSpeed);
     EXPECT_TRUE(animation.isLooping);
     EXPECT_FALSE(animation.isFinished);
     EXPECT_EQ(animation.advancedAt, now);
-    EXPECT_FLOAT_EQ(animation.frame, 40.0F) << "where it is is left";
+    EXPECT_EQ(animation.frame, cs::EntityFrame{40.0F}) << "where it is is left";
     const StudioSequence still{.label = "still", .fps = 30.0F, .frameCount = 1};
     cs::resetSequence(animation, still, now);
-    EXPECT_FLOAT_EQ(animation.frameSpeed, 256.0F) << "a sequence of one frame";
+    EXPECT_EQ(animation.frameSpeed, cs::EntityFramesPerSecond{256.0F}) << "a sequence of one frame";
 }
 
 TEST(AnimationTest, AFrameAdvancesByTheTimeSinceAndWrapsOrStops) {
@@ -182,20 +191,21 @@ TEST(AnimationTest, AFrameAdvancesByTheTimeSinceAndWrapsOrStops) {
     cs::Animation animation{};
     cs::resetSequence(animation, idle, nx::GameTime{});
     cs::advanceFrame(animation, nx::GameTime::atTick(10), rate);
-    EXPECT_NEAR(animation.frame, 76.8F, 0.001F) << "0.1 seconds at 768 a second";
+    EXPECT_NEAR(animation.frame.value(), 76.8F, 0.001F) << "0.1 seconds at 768 a second";
     EXPECT_EQ(animation.advancedAt, nx::GameTime::atTick(10));
     cs::advanceFrame(animation, nx::GameTime::atTick(10, 0.05F), rate);
-    EXPECT_NEAR(animation.frame, 76.8F, 0.001F) << "a thousandth of a second or less does not advance it";
+    EXPECT_NEAR(animation.frame.value(), 76.8F, 0.001F)
+        << "a thousandth of a second or less does not advance it";
     EXPECT_EQ(animation.advancedAt, nx::GameTime::atTick(10, 0.05F));
     cs::advanceFrame(animation, nx::GameTime::atTick(40, 0.05F), rate);
-    EXPECT_NEAR(animation.frame, 76.8F + 230.4F - 256.0F, 0.01F) << "wrapped";
+    EXPECT_NEAR(animation.frame.value(), 76.8F + 230.4F - 256.0F, 0.01F) << "wrapped";
     EXPECT_TRUE(animation.isFinished);
 
     const StudioSequence draw{.label = "draw", .fps = 30.0F, .frameCount = 11};
     cs::Animation drawn{};
     cs::resetSequence(drawn, draw, nx::GameTime{});
     cs::advanceFrame(drawn, nx::GameTime::atTick(100), rate);
-    EXPECT_FLOAT_EQ(drawn.frame, 255.0F) << "past its end, at 255";
+    EXPECT_EQ(drawn.frame, cs::EntityFrame{255.0F}) << "past its end, at 255";
     EXPECT_TRUE(drawn.isFinished);
 }
 

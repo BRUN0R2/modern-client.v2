@@ -181,7 +181,7 @@ TEST(MapModelTest, ModelEntitiesAreReadAsTheGameMakesThem) {
     EXPECT_EQ(palm.model, "models/palmtree.mdl");
     expectNear(palm.origin, {.x = 1.0F, .y = 2.0F, .z = 3.0F});
     EXPECT_FLOAT_EQ(palm.angles.yaw.value(), 90.0F) << "a cycler keeps its yaw";
-    EXPECT_FLOAT_EQ(palm.framerate, 10.0F);
+    EXPECT_EQ(palm.framerate, nx::Scale{10.0F});
     EXPECT_EQ(palm.mode, RenderMode::TransAlpha);
     EXPECT_EQ(palm.amount, 255);
 
@@ -190,7 +190,7 @@ TEST(MapModelTest, ModelEntitiesAreReadAsTheGameMakesThem) {
     EXPECT_EQ(named.model, "/models/hostage.mdl");
     EXPECT_FLOAT_EQ(named.angles.yaw.value(), 270.0F) << "\"angle\" is the yaw";
     EXPECT_EQ(named.skin, 2U);
-    EXPECT_FLOAT_EQ(named.framerate, 1.0F) << "at its sequence's own speed";
+    EXPECT_EQ(named.framerate, cs::kOwnSpeed) << "at its sequence's own speed";
 
     EXPECT_EQ(models[2].model, "models/scientist.mdl") << "a hostage without a model";
     EXPECT_EQ(models[2].skin, 0U) << "a negative skin is 0";

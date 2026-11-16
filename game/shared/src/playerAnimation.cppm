@@ -41,7 +41,7 @@ enum class PlayerAction : std::uint8_t {
 struct Gait {
     float yaw = 0.0F;            ///< The way its legs face, in degrees.
     float movement = 0.0F;       ///< How far it went in the last frame: negative when it went backwards.
-    float frame = 0.0F;          ///< Of the gait sequence, counted in its frames.
+    SequenceFrame frame{};       ///< Of the gait sequence.
     float yawModifier = 0.0F;    ///< How fast its legs turn after its body while it stands.
     nx::Vec3 previousOrigin{};   ///< Where it was in the last frame.
     float yawBlend = 0.0F;       ///< 0 to 255: its aim from its legs' right (0) to their left (255).
@@ -108,7 +108,8 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
 /// the distance moved over the sequence's length, or by time for a sequence that does not move, wrapped
 /// into the sequence.
 void processGait(Gait& gait, const nx::assets::MdlView& model, nx::assets::SequenceIndex gaitSequence,
-                 nx::Vec3 origin, nx::EulerAngles angles, nx::Seconds frameTime, float framerate) noexcept;
+                 nx::Vec3 origin, nx::EulerAngles angles, nx::Seconds frameTime,
+                 nx::Scale framerate) noexcept;
 
 /// The angles a player's model is turned by when its view is `view` (SV_RunCmd): its pitch a third of
 /// the view's, negated, in double; its yaw and roll the view's.
