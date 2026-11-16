@@ -23,10 +23,10 @@ export namespace nx::ui {
 /// characters to those after it.
 class SchemeFontSet {
 public:
-    /// `font` made for a screen `screenHeight` pixels tall, its faces from `catalog`. Errors: NoFace
-    /// (no candidate for that height opens; the detail names them).
-    [[nodiscard]] static auto open(const assets::SchemeFont& font, std::uint32_t screenHeight,
-                                   FontCatalog& catalog) -> Result<SchemeFontSet, FontError>;
+    /// `font` made for a screen `screenHeight` tall, its faces from `catalog`. Errors: NoFace (no
+    /// candidate for that height opens; the detail names them).
+    [[nodiscard]] static auto open(const assets::SchemeFont& font, Pixels screenHeight, FontCatalog& catalog)
+        -> Result<SchemeFontSet, FontError>;
 
     /// The line of the first candidate that opened, which text is laid out by.
     [[nodiscard]] auto metrics() const noexcept -> const FontMetrics&;
