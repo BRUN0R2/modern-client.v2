@@ -71,6 +71,7 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
         m_turnedView = snapshot.turnedView;
     }
     std::ranges::move(snapshot.sounds, std::back_inserter(m_sounds));
+    std::ranges::move(snapshot.playerSounds, std::back_inserter(playerSounds));
     std::ranges::move(snapshot.impacts, std::back_inserter(m_impacts));
     std::ranges::move(snapshot.bloodMarks, std::back_inserter(bloodMarks));
     std::ranges::move(snapshot.bloodSprays, std::back_inserter(bloodSprays));

@@ -9,6 +9,7 @@ import nx.core;
 import nx.console;
 import nx.assets;
 import nx.settings;
+import nx.render;
 import cs.shared;
 import cs.client;
 import :client;
@@ -40,8 +41,9 @@ public:
     /// Each frame: silent while the window is not `isFocused`, as the original is, but with
     /// `s_play_unfocused`; the gain of `volume` as it is now.
     void update(bool isFocused);
-    /// Plays what the frame played of `session` made heard, as the player hears it (`hearing`).
-    void hear(Session& session, const cs::Hearing& hearing);
+    /// Plays what the frame played of `session` made heard, as the player hears it (`hearing`) from the view
+    /// the frame draws, `view`.
+    void hear(Session& session, const cs::Hearing& hearing, const nx::render::Camera& view);
 
     /// Reads the sounds the player hears of the weapons `changed` of `weapons`, whose view models `level`
     /// read (cs::soundFilesOf), so that no frame waits on a file of one it plays. One that cannot be read is

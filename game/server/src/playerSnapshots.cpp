@@ -56,11 +56,16 @@ auto scoresFor(const GameState& game, const Player& viewer) -> std::vector<Score
 auto snapshotFor(GameState& game, PlayerIndex index) -> PlayerSnapshot {
     const Player& player = playerAt(game, index);
     std::vector<PlayerEntityState> others;
+    std::vector<PlayerSound> heard;
     for (std::uint32_t other = 0; other < game.players.size(); ++other) {
         if (other == index.value || !game.players[other]) {
             continue;
         }
         const Player& shown = *game.players[other];
+        // Heard from where it is, the middle of its box, as the original's server places an entity's sound.
+        for (const SoundMade& made : shown.sounds) {
+            heard.push_back({.player = PlayerIndex{other}, .made = made, .position = shown.movement.origin});
+        }
         const OwnedWeapon* const held = shown.inventory.held();
         const Animation& torso = shown.animation.torso;
         others.push_back(
@@ -90,6 +95,7 @@ auto snapshotFor(GameState& game, PlayerIndex index) -> PlayerSnapshot {
                           .turnedView = player.turnedView,
                           .wasPlaced = player.wasPlaced,
                           .sounds = player.sounds,
+                          .playerSounds = std::move(heard),
                           .impacts = game.events.impacts,
                           .bloodMarks = game.events.bloodMarks,
                           .bloodSprays = game.events.bloodSprays,

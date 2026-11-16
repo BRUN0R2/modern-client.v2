@@ -84,7 +84,7 @@ struct EntityBodyData {
 /// What an entity body's hitboxes were placed for: its sequence and frame, and where it stood, turned.
 struct HitboxPose {
     nx::assets::SequenceIndex sequence{};
-    float frame = 0.0F;
+    EntityFrame frame{};
     nx::Vec3 origin{};
     nx::EulerAngles angles{};
 
@@ -127,7 +127,7 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
     if (body.motion != motion || body.animation.sequence != sequence || motion == EntityMotion::Attacking) {
         body.motion = motion;
         body.animation.sequence = sequence;
-        body.animation.frame = 0.0F;
+        body.animation.frame = EntityFrame{};
         resetSequence(body.animation, catalog.model(type.model).files->view->sequences()[sequence.value],
                       now);
     }

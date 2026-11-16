@@ -11,12 +11,15 @@ nxAddModuleLibrary(nxAudio
         src/sound.cppm
         src/library.cppm
         src/mixer.cppm
+        src/spatial.cppm
     SOURCES
         src/sound.cpp
         src/library.cpp
         src/mixer.cpp
+        src/spatial.cpp
     DEPENDS
         nx::core
+        nx::math
         nx::jobs
         nx::platform
         nx::assets

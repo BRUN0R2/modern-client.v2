@@ -74,26 +74,47 @@ struct BoneFramePose {
 /// The skeleton of `model`, a view of it.
 [[nodiscard]] auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton;
 
+/// The unit of EntityFrame: none.
+struct EntityFrameTag {};
+
+/// Where an entity is in its sequence, as the original's server keeps it and sends it (pev->frame): from
+/// 0 at the sequence's first frame to kFrameScale at its last, however many frames it has.
+using EntityFrame = nx::Quantity<float, EntityFrameTag>;
+
+/// What an entity's frame counts its sequence in: 0 is its first frame, this its last.
+inline constexpr EntityFrame kFrameScale{256.0F};
+
+/// The unit of EntityFramesPerSecond: none.
+struct EntityFramesPerSecondTag {};
+
+/// How fast an entity's frame goes, in EntityFrame a second (m_flFrameRate).
+using EntityFramesPerSecond = nx::Quantity<float, EntityFramesPerSecondTag>;
+
+/// How far an entity's frame goes in `time` at `speed`.
+[[nodiscard]] constexpr auto operator*(EntityFramesPerSecond speed, nx::Seconds time) noexcept
+    -> EntityFrame {
+    return EntityFrame{speed.value() * time.count()};
+}
+
+/// A sequence played at its own speed: the entity's framerate as ResetSequenceInfo sets it.
+inline constexpr nx::Scale kOwnSpeed{1.0F};
+
 /// Where `sequence` is `elapsed` after it started, at `framerate` times its own speed (the entity's
 /// `framerate`), as the original estimates it (R_StudioEstimateFrame, from its first frame), in double
 /// precision: a looping sequence wraps at its last frame, which is its first again; another stops 0.001
 /// short of its last; one of a single frame stays at it, and so does any before it started.
 [[nodiscard]] auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed,
-                                   float framerate) noexcept -> SequenceFrame;
+                                   nx::Scale framerate) noexcept -> SequenceFrame;
 
-/// What an entity's frame counts its sequence in (pev->frame): 0 is its first frame, this its last.
-inline constexpr float kFrameScale = 256.0F;
+/// Where `sequence` is `elapsed` after an entity showed it at `frame`, at `framerate` times its own
+/// speed, as the original's client estimates it from what the server last sent (R_StudioEstimateFrame):
+/// `frame` as a frame of the sequence, then on as sequenceFrameAt goes.
+[[nodiscard]] auto estimatedFrameOf(const nx::assets::StudioSequence& sequence, EntityFrame frame,
+                                    nx::Seconds elapsed, nx::Scale framerate) noexcept -> SequenceFrame;
 
-/// Where `sequence` is `elapsed` after an entity showed it at `frame` (of kFrameScale), at `framerate`
-/// times its own speed, as the original's client estimates it from what the server last sent
-/// (R_StudioEstimateFrame): `frame` as a frame of the sequence, then on as sequenceFrameAt goes.
-[[nodiscard]] auto estimatedFrameOf(const nx::assets::StudioSequence& sequence, float frame,
-                                    nx::Seconds elapsed, float framerate) noexcept -> SequenceFrame;
-
-/// Where `sequence` is at `frame` of an entity (of kFrameScale), as the server poses its bones
-/// (SV_StudioSetupBones): `frame` as a frame of the sequence, in single precision; its first frame for a
-/// sequence of one.
-[[nodiscard]] auto serverFrameOf(const nx::assets::StudioSequence& sequence, float frame) noexcept
+/// Where `sequence` is at `frame` of an entity, as the server poses its bones (SV_StudioSetupBones):
+/// `frame` as a frame of the sequence, in single precision; its first frame for a sequence of one.
+[[nodiscard]] auto serverFrameOf(const nx::assets::StudioSequence& sequence, EntityFrame frame) noexcept
     -> SequenceFrame;
 
 /// What the game plays a model's sequences for, by the original's numbers (ACT_*): those it asks for.
@@ -139,18 +160,18 @@ enum class Activity : std::int32_t {
 /// framerate and animtime; CBaseAnimating's m_flFrameRate, m_fSequenceLoops and m_fSequenceFinished).
 struct Animation {
     nx::assets::SequenceIndex sequence{};
-    float frame = 0.0F;        ///< Where it is, of kFrameScale.
-    float frameSpeed = 0.0F;   ///< How far its frame goes a second at its own speed (m_flFrameRate).
-    float framerate = 1.0F;    ///< Times its own speed it plays at (pev->framerate).
-    nx::GameTime advancedAt{}; ///< When its frame was last advanced (pev->animtime).
+    EntityFrame frame{};                ///< Where it is.
+    EntityFramesPerSecond frameSpeed{}; ///< How fast its frame goes at its own speed (m_flFrameRate).
+    nx::Scale framerate{kOwnSpeed};     ///< Times its own speed it plays at (pev->framerate).
+    nx::GameTime advancedAt{};          ///< When its frame was last advanced (pev->animtime).
     bool isLooping = false;
     bool isFinished = false; ///< Its frame went past its sequence's end.
 };
 
 /// `animation` playing `sequence`, its own, from `now` (ResetSequenceInfo): its frame's speed the
 /// sequence's (GetSequenceInfo: kFrameScale a second for a sequence of one frame, else its frames a
-/// second over the frames after its first), looping as the sequence does, at its own speed, not
-/// finished; its frame left where it is.
+/// second over the frames after its first), looping as the sequence does, at kOwnSpeed, not finished; its
+/// frame left where it is.
 void resetSequence(Animation& animation, const nx::assets::StudioSequence& sequence,
                    nx::GameTime now) noexcept;
 

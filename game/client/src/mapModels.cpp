@@ -42,13 +42,13 @@ constexpr std::string_view kSpriteExtension = ".spr";
     if (classname == "cycler_sprite" && !model.empty() && !isSprite(model)) {
         made.model = std::string{model};
         made.kind = ModelClass::Cycler;
-        made.framerate = entity.findNumber("framerate").value_or(0.0F);
+        made.framerate = nx::Scale{entity.findNumber("framerate").value_or(0.0F)};
         return made;
     }
     if (classname == kHostageClass) {
         made.model = std::string{model.empty() ? kDefaultHostageModel : model};
         made.kind = ModelClass::Hostage;
-        made.framerate = 1.0F; // ResetSequenceInfo
+        made.framerate = cs::kOwnSpeed; // ResetSequenceInfo
         made.skin = static_cast<std::uint32_t>(std::max(entity.findInteger("skin").value_or(0), 0));
         return made;
     }

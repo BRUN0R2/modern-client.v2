@@ -69,7 +69,7 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
 }
 
 /// The round a shot of `firing`, of a weapon whose ammo is `ammo`, fires, at `rangeModifier`.
-[[nodiscard]] auto roundOf(const WeaponFiring& firing, const AmmoType* ammo, float rangeModifier) noexcept
+[[nodiscard]] auto roundOf(const WeaponFiring& firing, const AmmoType* ammo, nx::Scale rangeModifier) noexcept
     -> ShotRound {
     return ShotRound{.damage = firing.damage,
                      .rangeModifier = rangeModifier,
@@ -576,7 +576,7 @@ void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint3
     if (hits && met.entity) {
         nx::Damage damage = attack.damage;
         if (attack.backMultiplier && met.playerAngles && isInTheBack(forward, *met.playerAngles)) {
-            damage = nx::Damage{damage.value() * *attack.backMultiplier};
+            damage = damage * *attack.backMultiplier;
         }
         blows.push_back(
             Blow{.entity = *met.entity, .trace = met.trace, .damage = damage, .direction = forward});

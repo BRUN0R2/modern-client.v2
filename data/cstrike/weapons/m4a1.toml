@@ -59,7 +59,7 @@ air = { upBase = 1.2, lateralBase = 0.5, upModifier = 0.23, lateralModifier = 0.
 ducked = { upBase = 0.6, lateralBase = 0.3, upModifier = 0.2, lateralModifier = 0.0125, upMax = 3.25, lateralMax = 2.0, directionChange = 7 }
 standing = { upBase = 0.65, lateralBase = 0.35, upModifier = 0.25, lateralModifier = 0.015, upMax = 3.5, lateralMax = 2.25, directionChange = 7 }
 
-[firing.sound] # its client event plays one of them, which to be measured on the original
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
 files = ["weapons/m4a1_unsil-1.wav", "weapons/m4a1_unsil-2.wav"]
 channel = "weapon"
 volume = 1.0
@@ -111,7 +111,7 @@ air = { upBase = 1.2, lateralBase = 0.5, upModifier = 0.23, lateralModifier = 0.
 ducked = { upBase = 0.6, lateralBase = 0.3, upModifier = 0.2, lateralModifier = 0.0125, upMax = 3.25, lateralMax = 2.0, directionChange = 7 }
 standing = { upBase = 0.65, lateralBase = 0.35, upModifier = 0.25, lateralModifier = 0.015, upMax = 3.5, lateralMax = 2.25, directionChange = 7 }
 
-[alternate.firing.sound] # its client event plays one of them, which to be measured on the original
+[alternate.firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
 files = ["weapons/m4a1-1.wav"]
 channel = "weapon"
 volume = 1.0

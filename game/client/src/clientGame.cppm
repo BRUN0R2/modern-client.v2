@@ -60,8 +60,8 @@ public:
     /// The command of the next tick asking nothing, looking along `view`, numbered after the last: the
     /// player stands, as a tool's frame shows it.
     [[nodiscard]] auto standingCommand(nx::EulerAngles view) -> UserCommand;
-    /// What the server told after the tick of the last command: what shows now; its sounds, marks and
-    /// turn of the view kept with those not yet taken.
+    /// What the server told after the tick of the last command: what shows now; its sounds and the other
+    /// players', its marks and turn of the view kept with those not yet taken.
     void receive(PlayerSnapshot snapshot);
 
     /// The player's eye, between where the last two ticks left it by the time left over; where the game
@@ -124,6 +124,11 @@ public:
     /// The sounds the player made since the last call, in the order of their ticks, each with its
     /// moment.
     [[nodiscard]] inline auto takeSounds() -> std::vector<SoundMade> { return std::exchange(m_sounds, {}); }
+    /// The sounds the other players made since the last call, in the order of their ticks, each with its
+    /// moment and where it was made.
+    [[nodiscard]] inline auto takePlayerSounds() -> std::vector<PlayerSound> {
+        return std::exchange(playerSounds, {});
+    }
     /// Where the shots met the world and the brush entities since the last call, in their order: where
     /// a bullet leaves its mark.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
@@ -190,6 +195,7 @@ private:
     CommandNumber m_lastCommand{};                 ///< The number of the last command the player made.
     std::optional<nx::EulerAngles> m_turnedView{}; ///< Since takeTurnedView.
     std::vector<SoundMade> m_sounds;               ///< Since takeSounds.
+    std::vector<PlayerSound> playerSounds;         ///< Since takePlayerSounds.
     std::vector<Impact> m_impacts;                 ///< Since takeImpacts.
     std::vector<BloodMark> bloodMarks;             ///< Since takeBloodMarks.
     std::vector<BloodSpray> bloodSprays;           ///< Since takeBloodSprays.

@@ -108,7 +108,7 @@ using WeaponTracer = std::function<WeaponHit(nx::collision::Hull hull, nx::Vec3 
 /// flRangeModifier, iPenetration, and its bullet type's power and distance).
 struct ShotRound {
     nx::Damage damage{};
-    float rangeModifier{};
+    nx::Scale rangeModifier{};
     std::uint32_t penetration{};
     std::uint32_t penetrationPower{};
     nx::HammerUnits penetrationDistance{};

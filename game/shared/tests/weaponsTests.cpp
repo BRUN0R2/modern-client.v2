@@ -387,11 +387,15 @@ TEST(WeaponsTest, TheRepositorysGunsFireAsTheOriginals) {
         const Weapon& weapon = *catalog->findWeapon(expected.id);
         const cs::WeaponFiring& firing = expected.isAlternate ? *weapon.alternate->firing : *weapon.firing;
         EXPECT_EQ(firing.damage, nx::Damage{expected.damage}) << expected.id;
-        EXPECT_EQ(firing.rangeModifier, expected.rangeModifier) << expected.id;
+        EXPECT_EQ(firing.rangeModifier, nx::Scale{expected.rangeModifier}) << expected.id;
         EXPECT_EQ(firing.penetration, expected.penetration) << expected.id;
+        // The Glock's burst alone fires rounds after a shot, at FireRemaining's range modifier.
+        EXPECT_EQ(firing.followUps.has_value(), expected.id == "glock18" && expected.isAlternate)
+            << expected.id;
+        if (firing.followUps) {
+            EXPECT_EQ(firing.followUps->rangeModifier, nx::Scale{0.9F}) << expected.id;
+        }
     }
-    EXPECT_EQ(catalog->findWeapon("glock18")->alternate->firing->followUps->rangeModifier, 0.9F)
-        << "FireRemaining's";
 }
 
 TEST(WeaponsTest, TheRepositorysAlternatesAreTheOriginals) {
@@ -437,7 +441,7 @@ TEST(WeaponsTest, TheRepositorysKnifeAttacksAsTheOriginals) {
     EXPECT_EQ(knife.stab.hit.primary, nx::Seconds{1.1F});
     EXPECT_FALSE(knife.stab.idleAfter.has_value()) << "the original's stab leaves the idle as it was";
     EXPECT_FALSE(knife.slash.backMultiplier.has_value());
-    EXPECT_EQ(knife.stab.backMultiplier, 3.0F) << "KnifeBackStabMultiplier";
+    EXPECT_EQ(knife.stab.backMultiplier, nx::Scale{3.0F}) << "KnifeBackStabMultiplier";
 }
 
 TEST(WeaponsTest, TheRepositorysWeaponsHurtPlayersAsTheOriginals) {
@@ -466,8 +470,11 @@ TEST(WeaponsTest, TheRepositorysWeaponsSoundAsTheOriginals) {
     EXPECT_EQ(knife.view.drawSound->files, Files{"weapons/knife_deploy1.wav"});
     EXPECT_EQ(knife.view.drawSound->channel, cs::SoundChannel::Item);
     EXPECT_FLOAT_EQ(knife.view.drawSound->volume.value(), 0.3F);
+    EXPECT_FLOAT_EQ(cs::attenuationOf(*knife.view.drawSound).value(), 2.4F)
+        << "Deploy's, heard 416 units away";
     for (const cs::MeleeAttack* const attack : {&knife.melee->slash, &knife.melee->stab}) {
         ASSERT_TRUE(attack->missSound.has_value());
+        EXPECT_EQ(cs::attenuationOf(*attack->missSound), cs::kNormalAttenuation) << "ATTN_NORM's";
         EXPECT_EQ(attack->missSound->files, (Files{"weapons/knife_slash1.wav", "weapons/knife_slash2.wav"}));
         EXPECT_EQ(attack->missSound->channel, cs::SoundChannel::Weapon);
         ASSERT_TRUE(attack->missSound->pitch.has_value());

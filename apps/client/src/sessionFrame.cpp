@@ -9,6 +9,7 @@ import nx.math;
 import nx.assets;
 import nx.console;
 import nx.render;
+import nx.audio;
 import cs.shared;
 import cs.client;
 
@@ -29,16 +30,23 @@ void reportSound(const nx::Result<void, cs::PlayError>& played, nx::log::RateLim
 } // namespace
 
 void hearSession(Session& session, cs::ClientAudio* audio, const cs::Hearing& hearing,
-                 nx::log::RateLimit& soundFailures) {
+                 const nx::render::Camera& view, nx::log::RateLimit& soundFailures) {
     session.viewPose = session.client.viewModel();
     session.clientEvents = session.viewModelEvents.passed(
         session.viewPose ? session.level->viewModel(session.viewPose->weapon) : nullptr, session.viewPose);
     const std::vector<cs::SoundMade> sounds = session.client.takeSounds();
+    const std::vector<cs::PlayerSound> heard = session.client.takePlayerSounds();
     if (audio == nullptr) {
         return;
     }
     for (const cs::SoundMade& made : sounds) {
         reportSound(audio->play(*made.sound, made.volume, hearing.delayOf(made.at)), soundFailures);
+    }
+    // The original's client hears from the view it draws: its origin and its right (S_Update).
+    const nx::audio::Listener listener{.position = view.position,
+                                       .right = nx::angleVectors(view.angles).right};
+    for (const cs::PlayerSound& sound : heard) {
+        reportSound(audio->playAt(sound, listener, hearing.delayOf(sound.made.at)), soundFailures);
     }
     for (const cs::PassedEvent& passed : session.clientEvents) {
         if (passed.event->event == cs::kSoundEvent) {

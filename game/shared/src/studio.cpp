@@ -51,7 +51,9 @@ constexpr double kShortOfTheLastFrame = 1.001;
 /// StudioFrameAdvance leaves a frame where it is when less time than this passed, or as much.
 constexpr double kLeastFrameAdvance = 0.001;
 /// Where a frame that does not loop stops past its sequence's end: its last whole 256th.
-constexpr float kLastFrameOfScale = 255.0F;
+constexpr EntityFrame kLastFrameOfScale{255.0F};
+/// How fast the frame of a sequence of a single frame goes (GetSequenceInfo): kFrameScale a second.
+constexpr EntityFramesPerSecond kSingleFrameSpeed{kFrameScale.value()};
 
 /// The position and the rotation of every bone of a pose, in its parent's space.
 struct LocalPose {
@@ -268,21 +270,21 @@ auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton {
 }
 
 auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed,
-                     float framerate) noexcept -> SequenceFrame {
-    return estimatedFrameOf(sequence, 0.0F, elapsed, framerate);
+                     nx::Scale framerate) noexcept -> SequenceFrame {
+    return estimatedFrameOf(sequence, EntityFrame{}, elapsed, framerate);
 }
 
-auto estimatedFrameOf(const nx::assets::StudioSequence& sequence, float frame, nx::Seconds elapsed,
-                      float framerate) noexcept -> SequenceFrame {
+auto estimatedFrameOf(const nx::assets::StudioSequence& sequence, EntityFrame frame, nx::Seconds elapsed,
+                      nx::Scale framerate) noexcept -> SequenceFrame {
     if (sequence.frameCount <= 1) {
         return SequenceFrame{0.0F};
     }
     const auto lastFrames = static_cast<float>(sequence.frameCount - 1);
     const auto last = static_cast<double>(lastFrames);
     // The frame sent, of the sequence in single precision, then what passed since, in double.
-    double estimated = static_cast<double>(frame * lastFrames / kFrameScale) +
-                       (std::max(static_cast<double>(elapsed.count()), 0.0) * static_cast<double>(framerate) *
-                        static_cast<double>(sequence.fps));
+    double estimated = static_cast<double>(frame.value() * lastFrames / kFrameScale.value()) +
+                       (std::max(static_cast<double>(elapsed.count()), 0.0) *
+                        static_cast<double>(framerate.value()) * static_cast<double>(sequence.fps));
     if (sequence.isLooping) {
         estimated -= std::trunc(estimated / last) * last;
         if (estimated < 0.0) {
@@ -295,9 +297,10 @@ auto estimatedFrameOf(const nx::assets::StudioSequence& sequence, float frame, n
     return SequenceFrame{static_cast<float>(estimated)};
 }
 
-auto serverFrameOf(const nx::assets::StudioSequence& sequence, float frame) noexcept -> SequenceFrame {
-    return SequenceFrame{
-        sequence.frameCount > 1 ? static_cast<float>(sequence.frameCount - 1) * frame / kFrameScale : 0.0F};
+auto serverFrameOf(const nx::assets::StudioSequence& sequence, EntityFrame frame) noexcept -> SequenceFrame {
+    return SequenceFrame{sequence.frameCount > 1 ? static_cast<float>(sequence.frameCount - 1) *
+                                                       frame.value() / kFrameScale.value()
+                                                 : 0.0F};
 }
 
 auto lookupActivity(std::span<const nx::assets::StudioSequence> sequences, Activity activity,
@@ -341,29 +344,29 @@ auto lookupActivity(std::span<const nx::assets::StudioSequence> sequences, Activ
 void resetSequence(Animation& animation, const nx::assets::StudioSequence& sequence,
                    nx::GameTime now) noexcept {
     animation.frameSpeed = sequence.frameCount <= 1
-                               ? kFrameScale
-                               : sequence.fps * kFrameScale / static_cast<float>(sequence.frameCount - 1);
+                               ? kSingleFrameSpeed
+                               : EntityFramesPerSecond{sequence.fps * kFrameScale.value() /
+                                                       static_cast<float>(sequence.frameCount - 1)};
     animation.isLooping = sequence.isLooping;
     animation.advancedAt = now;
-    animation.framerate = 1.0F;
+    animation.framerate = kOwnSpeed;
     animation.isFinished = false;
 }
 
 void advanceFrame(Animation& animation, nx::GameTime now, nx::TickRate rate) noexcept {
-    const float interval = now.since(animation.advancedAt, rate).count();
+    const nx::Seconds interval = now.since(animation.advancedAt, rate);
     animation.advancedAt = now;
-    if (static_cast<double>(interval) <= kLeastFrameAdvance) {
+    if (static_cast<double>(interval.count()) <= kLeastFrameAdvance) {
         return;
     }
-    animation.frame += interval * animation.frameSpeed * animation.framerate;
-    if (animation.frame < 0.0F || animation.frame >= kFrameScale) {
+    animation.frame += animation.frameSpeed * interval * animation.framerate.value();
+    if (animation.frame < EntityFrame{} || animation.frame >= kFrameScale) {
         if (animation.isLooping) {
-            const auto scale = static_cast<double>(kFrameScale);
-            animation.frame =
-                static_cast<float>(static_cast<double>(animation.frame) -
-                                   (std::trunc(static_cast<double>(animation.frame) / scale) * scale));
+            const auto scale = static_cast<double>(kFrameScale.value());
+            const auto frame = static_cast<double>(animation.frame.value());
+            animation.frame = EntityFrame{static_cast<float>(frame - (std::trunc(frame / scale) * scale))};
         } else {
-            animation.frame = animation.frame < 0.0F ? 0.0F : kLastFrameOfScale;
+            animation.frame = animation.frame < EntityFrame{} ? EntityFrame{} : kLastFrameOfScale;
         }
         animation.isFinished = true;
     }

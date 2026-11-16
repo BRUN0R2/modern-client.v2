@@ -3,9 +3,9 @@
 
 /// What the player hears (docs/11-audio.md): the system's sound output playing the mixer, the
 /// game's sounds read by their names, the sounds the player makes on its channels, and those the
-/// client plays itself, as the original's `play` and `playvol` do, each in the voice the original's
-/// engine would choose (voiceFor). Every sound is heard as the player's own, at full level in both
-/// ears, until spatialization comes (TODO.md).
+/// client plays itself, as the original's `play` and `playvol` do, at full level in both ears; and
+/// the sounds the other players make, heard where they were made as the original's stereo
+/// spatialization places them. Each takes the voice the original's engine would choose (voiceFor).
 export module cs.client:audio;
 
 import std;
@@ -29,6 +29,7 @@ enum class Muting : std::uint8_t {
 enum class PlayError : std::uint8_t {
     NoSound,   ///< The sound could not be read (cause: the SoundError).
     QueueFull, ///< The mixer has not taken the commands sent yet (cause: the MixerError).
+    NoVoice,   ///< Every voice plays one of the player's own sounds, which another's never cuts short.
 };
 
 /// The sound output and what plays on it. It stays where it is made: the output's thread reads its
@@ -69,6 +70,15 @@ public:
     [[nodiscard]] auto play(const GameSound& sound, nx::Gain volume, nx::Seconds delay = nx::Seconds{})
         -> nx::Result<void, PlayError>;
 
+    /// Plays the sound another player made, `heard`, `delay` from now, as `listener` hears it where it was
+    /// made: one of its files and a pitch at random as play chooses them, on its channel of its maker,
+    /// replacing what that channel plays as it starts, in each ear as the original's legacy stereo
+    /// spatialization makes it (nx::audio::legacyGains, by its attenuation); not at all when neither ear
+    /// hears it, as the original drops a sound out of reach as it starts. Errors: NoSound, QueueFull,
+    /// NoVoice.
+    [[nodiscard]] auto playAt(const PlayerSound& heard, const nx::audio::Listener& listener,
+                              nx::Seconds delay = nx::Seconds{}) -> nx::Result<void, PlayError>;
+
     /// Reads the sound `name` names (nx::audio::SoundLibrary::load) without playing it, so that
     /// playing it reads no file: a file read as a frame plays holds that frame up as long as the disk,
     /// and whatever scans the files opened, take, longer than a frame lasts when it is not in the
@@ -89,17 +99,27 @@ public:
     [[nodiscard]] inline auto rate() const noexcept -> nx::SampleRate { return m_device.rate(); }
 
 private:
-    /// How a sound plays: at `volume` and `pitch`, `delay` from now.
+    /// One of a sound's files, and the pitch it plays at.
+    struct Take {
+        std::string_view file{};
+        nx::audio::Pitch pitch{nx::audio::kRecordedPitch};
+    };
+
+    /// Who makes a sound and how it plays: its maker, none for the player itself, and the channel of
+    /// its maker it plays on; how loud in each ear, at what pitch, `delay` from now.
     struct Playing {
-        nx::Gain volume{nx::kFullGain};
+        std::optional<PlayerIndex> maker{};
+        SoundChannel channel = SoundChannel::Auto;
+        nx::audio::VoiceGains gains{};
         nx::audio::Pitch pitch{nx::audio::kRecordedPitch};
         nx::Seconds delay{};
     };
 
-    /// Plays the sound `name` names on the player's channel `channel` as `playing` says, in the voice
-    /// voiceFor chooses.
-    [[nodiscard]] auto playOn(SoundChannel channel, std::string_view name, const Playing& playing)
-        -> nx::Result<void, PlayError>;
+    /// One of `sound`'s files and a pitch of its range, at random, as the original's client and engine
+    /// choose them.
+    [[nodiscard]] auto takeOf(const GameSound& sound) -> Take;
+    /// Plays the sound `name` names as `playing` says, in the voice voiceFor chooses.
+    [[nodiscard]] auto playAs(std::string_view name, const Playing& playing) -> nx::Result<void, PlayError>;
 
     nx::console::Cvar<float> m_volumeCvar;
     nx::audio::SoundLibrary m_sounds;
