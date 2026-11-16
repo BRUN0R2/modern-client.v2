@@ -32,7 +32,7 @@ struct MapModel {
     nx::Vec3 origin{};
     nx::EulerAngles angles{};
     std::uint32_t sequence = 0;
-    float framerate = 0.0F;
+    nx::Scale framerate{}; ///< Times its sequence's own speed it plays at.
     std::uint32_t skin = 0;
     nx::render::RenderMode mode = nx::render::RenderMode::Normal;
     std::uint8_t amount = 0;
