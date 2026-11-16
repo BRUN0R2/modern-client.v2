@@ -19,8 +19,8 @@ constexpr std::int32_t kMuzzleFlashEventStep = 10;
 constexpr std::uint32_t kMuzzleFlashAttachments = 4;
 /// An event's number: its units choose the sprite, its tens are its size in tenths.
 constexpr std::uint32_t kDecimalBase = 10;
-constexpr float kScalePerTen = 0.1F;
-constexpr float kScaleWithoutTens = 0.5F;
+constexpr nx::Scale kScalePerTen{0.1F};
+constexpr nx::Scale kScaleWithoutTens{0.5F};
 /// The original's sprites, sprites/muzzleflash1.spr to 3.
 constexpr std::uint32_t kOriginalSprites = 3;
 /// The roll of the first sprite's flash, a rifle's, and of the others', at most.
@@ -61,11 +61,12 @@ template <class Number>
 /// The style of the original's options `type`, a whole number (R_MuzzleFlash).
 [[nodiscard]] auto originalStyleOf(std::uint32_t type) -> MuzzleFlashStyle {
     const std::uint32_t sprite = (type % kDecimalBase) % kOriginalSprites;
-    const float tens = static_cast<float>(type / kDecimalBase) * kScalePerTen;
+    const std::uint32_t tensDigit = type / kDecimalBase;
+    const nx::Scale tens = kScalePerTen * static_cast<float>(tensDigit);
     return MuzzleFlashStyle{.sprite = spriteOf(sprite + 1),
-                            .scale = tens == 0.0F ? kScaleWithoutTens : tens,
+                            .scale = tens == nx::Scale{} ? kScaleWithoutTens : tens,
                             .firstFrame = std::nullopt,
-                            .frameRate = 0.0F,
+                            .frameRate = nx::PerSecond{},
                             .time = kMuzzleFlashTime,
                             .roll = sprite == 0 ? kRifleRoll : kOtherRoll,
                             .rollRate = nx::DegreesPerSecond{},
@@ -90,7 +91,9 @@ void readKeys(std::string_view keys, MuzzleFlashStyle& style) {
             }
             break;
         case kScaleKey:
-            style.scale = numberOf<float>(value).value_or(style.scale);
+            if (const std::optional<float> scale = numberOf<float>(value)) {
+                style.scale = nx::Scale{*scale};
+            }
             break;
         case kFirstFrameKey:
             if (const std::optional<std::uint32_t> frame = numberOf<std::uint32_t>(value)) {
@@ -98,7 +101,9 @@ void readKeys(std::string_view keys, MuzzleFlashStyle& style) {
             }
             break;
         case kFrameRateKey:
-            style.frameRate = numberOf<float>(value).value_or(style.frameRate);
+            if (const std::optional<float> frameRate = numberOf<float>(value)) {
+                style.frameRate = nx::PerSecond{*frameRate};
+            }
             break;
         case kTimeKey:
             if (const std::optional<float> seconds = numberOf<float>(value)) {
@@ -115,7 +120,7 @@ void readKeys(std::string_view keys, MuzzleFlashStyle& style) {
         }
     }
     if (rollPerFrame) {
-        style.rollRate = nx::DegreesPerSecond{*rollPerFrame * style.frameRate};
+        style.rollRate = nx::DegreesPerSecond{*rollPerFrame * style.frameRate.value()};
     }
 }
 
@@ -147,11 +152,15 @@ auto muzzleFlashStyleOf(std::string_view options, const std::optional<MuzzleFlas
     }
     if (look) {
         over(style.sprite, look->sprite);
-        over(style.scale, look->scale);
+        if (look->scale) {
+            style.scale = nx::Scale{*look->scale};
+        }
         if (look->firstFrame) {
             style.firstFrame = look->firstFrame;
         }
-        over(style.frameRate, look->frameRate);
+        if (look->frameRate) {
+            style.frameRate = nx::PerSecond{*look->frameRate};
+        }
         over(style.time, look->time);
         over(style.roll, look->roll);
         over(style.rollRate, look->rollRate);
@@ -167,7 +176,7 @@ auto MuzzleFlash::frameAt(nx::Seconds time) const noexcept -> std::optional<floa
     if (time > until) {
         return std::nullopt;
     }
-    const float frame = firstFrame + (std::max((time - start).count(), 0.0F) * frameRate);
+    const float frame = firstFrame + (std::max((time - start).count(), 0.0F) * frameRate.value());
     return frame < static_cast<float>(frameCount) ? std::optional{frame} : std::nullopt;
 }
 

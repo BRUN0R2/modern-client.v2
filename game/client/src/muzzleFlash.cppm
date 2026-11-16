@@ -44,9 +44,9 @@ inline constexpr nx::Seconds kMuzzleFlashTime{0.01F};
 /// What a muzzle flash looks like and how it plays, every value given.
 struct MuzzleFlashStyle {
     std::string sprite{};                      ///< A path of the game's files.
-    float scale{};                             ///< Times its sprite's size; 0 is its own size.
+    nx::Scale scale{};                         ///< Times its sprite's size; 0 is its own size.
     std::optional<std::uint32_t> firstFrame{}; ///< None: a frame at random.
-    float frameRate{};               ///< The frames a second it plays on at from its first, once; 0 holds it.
+    nx::PerSecond frameRate{};       ///< The frames a second it plays on at from its first, once; 0 holds it.
     nx::Seconds time{};              ///< It shows this long at most.
     nx::Degrees roll{};              ///< It is rolled at random, by a whole number of degrees up to this,
     nx::DegreesPerSecond rollRate{}; ///< and turns this fast as it shows, counter-clockwise.
@@ -76,12 +76,12 @@ struct MuzzleFlashAnchor {
 struct MuzzleFlash {
     MuzzleFlashAnchor anchor{};
     std::uint32_t sprite{}; ///< Of the MuzzleFlashSprites.
-    float scale{};
+    nx::Scale scale{};
     nx::Degrees roll{};              ///< As it shows first,
     nx::DegreesPerSecond rollRate{}; ///< turning this fast, counter-clockwise.
     float brightness = 1.0F;
     float firstFrame{};
-    float frameRate{};
+    nx::PerSecond frameRate{};
     std::size_t frameCount{}; ///< Its sprite's.
     nx::Seconds start{};      ///< The map's time it shows from,
     nx::Seconds until{};      ///< and until, at most.

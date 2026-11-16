@@ -133,7 +133,7 @@ struct SpriteInstance {
     Vec3 origin{};
     EulerAngles angles{}; ///< Turn an oriented sprite; the roll turns a parallel one.
     float frame = 0.0F;   ///< The entity's `frame`: its whole part is the frame shown.
-    float scale = 0.0F;   ///< 0 is 1.
+    Scale scale{};        ///< Times its sprite's size; 0 is 1.
     RenderMode mode = RenderMode::Normal;
     RenderEffect effect = RenderEffect::None;
     std::uint8_t amount = 0; ///< `renderamt`.
