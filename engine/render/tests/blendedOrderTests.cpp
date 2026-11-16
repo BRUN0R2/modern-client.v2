@@ -48,8 +48,8 @@ private:
 static_assert(nx::render::OrderedRenderer<LoggingRenderer>);
 
 TEST(BlendedOrderTest, TheFartherIsDrawnFirst) {
-    const BlendedDraw near{.distance = 100.0F, .mode = RenderMode::Glow};
-    const BlendedDraw far{.distance = 400.0F, .mode = RenderMode::TransColor};
+    const BlendedDraw near{.distance = nx::render::SquaredDistance{100.0F}, .mode = RenderMode::Glow};
+    const BlendedDraw far{.distance = nx::render::SquaredDistance{400.0F}, .mode = RenderMode::TransColor};
     EXPECT_TRUE(nx::render::isDrawnBefore(far, near));
     EXPECT_FALSE(nx::render::isDrawnBefore(near, far));
     // A brush entity drawn TransAlpha, before every other.
@@ -63,22 +63,30 @@ TEST(BlendedOrderTest, AtOneDistanceTheModesAreDrawnAsTheOriginalRanksThem) {
                             RenderMode::Glow};
     for (std::size_t first = 0; first < ranked.size(); ++first) {
         for (std::size_t second = 0; second < ranked.size(); ++second) {
-            EXPECT_EQ(nx::render::isDrawnBefore({.distance = 1.0F, .mode = ranked.at(first)},
-                                                {.distance = 1.0F, .mode = ranked.at(second)}),
+            EXPECT_EQ(nx::render::isDrawnBefore(
+                          {.distance = nx::render::SquaredDistance{1.0F}, .mode = ranked.at(first)},
+                          {.distance = nx::render::SquaredDistance{1.0F}, .mode = ranked.at(second)}),
                       first < second)
                 << "modes " << first << " and " << second;
         }
     }
-    EXPECT_FALSE(nx::render::isDrawnBefore({.distance = 1.0F, .mode = RenderMode::TransAlpha},
-                                           {.distance = 1.0F, .mode = RenderMode::TransColor}));
+    EXPECT_FALSE(nx::render::isDrawnBefore(
+        {.distance = nx::render::SquaredDistance{1.0F}, .mode = RenderMode::TransAlpha},
+        {.distance = nx::render::SquaredDistance{1.0F}, .mode = RenderMode::TransColor}));
 }
 
 TEST(BlendedOrderTest, TheBlendedThingsOfEveryRendererTakeTheirTurnsInOneOrder) {
-    const std::array first{BlendedDraw{.distance = 100.0F, .mode = RenderMode::TransTexture, .index = 0},
-                           BlendedDraw{.distance = 400.0F, .mode = RenderMode::TransAdd, .index = 1},
-                           BlendedDraw{.distance = 100.0F, .mode = RenderMode::TransTexture, .index = 2}};
-    const std::array second{BlendedDraw{.distance = 100.0F, .mode = RenderMode::TransTexture, .index = 0},
-                            BlendedDraw{.distance = 900.0F, .mode = RenderMode::Glow, .index = 1}};
+    const std::array first{
+        BlendedDraw{
+            .distance = nx::render::SquaredDistance{100.0F}, .mode = RenderMode::TransTexture, .index = 0},
+        BlendedDraw{
+            .distance = nx::render::SquaredDistance{400.0F}, .mode = RenderMode::TransAdd, .index = 1},
+        BlendedDraw{
+            .distance = nx::render::SquaredDistance{100.0F}, .mode = RenderMode::TransTexture, .index = 2}};
+    const std::array second{
+        BlendedDraw{
+            .distance = nx::render::SquaredDistance{100.0F}, .mode = RenderMode::TransTexture, .index = 0},
+        BlendedDraw{.distance = nx::render::SquaredDistance{900.0F}, .mode = RenderMode::Glow, .index = 1}};
     const std::array<std::span<const BlendedDraw>, 2> renderers{first, second};
     // At one distance and of one mode, in the order of their renderers, then in their own.
     const std::vector<BlendedTurn> expected{{.renderer = 1, .index = 1},
@@ -100,17 +108,19 @@ TEST(BlendedOrderTest, TheSolidThingsOfEachRendererAreDrawnFirstThenTheBlendedOn
     std::vector<std::string> log;
     const LoggingRenderer world{
         "world",
-        {{.distance = 100.0F, .mode = RenderMode::TransTexture, .index = 0},
+        {{.distance = nx::render::SquaredDistance{100.0F}, .mode = RenderMode::TransTexture, .index = 0},
          {.distance = nx::render::kFarthest, .mode = RenderMode::TransAlpha, .index = 1}},
         log};
-    const LoggingRenderer models{"models",
-                                 {{.distance = 400.0F, .mode = RenderMode::TransAdd, .index = 0},
-                                  {.distance = 100.0F, .mode = RenderMode::TransAdd, .index = 1}},
-                                 log};
-    const LoggingRenderer sprites{"sprites",
-                                  {{.distance = 100.0F, .mode = RenderMode::Glow, .index = 0},
-                                   {.distance = 100.0F, .mode = RenderMode::TransTexture, .index = 1}},
-                                  log};
+    const LoggingRenderer models{
+        "models",
+        {{.distance = nx::render::SquaredDistance{400.0F}, .mode = RenderMode::TransAdd, .index = 0},
+         {.distance = nx::render::SquaredDistance{100.0F}, .mode = RenderMode::TransAdd, .index = 1}},
+        log};
+    const LoggingRenderer sprites{
+        "sprites",
+        {{.distance = nx::render::SquaredDistance{100.0F}, .mode = RenderMode::Glow, .index = 0},
+         {.distance = nx::render::SquaredDistance{100.0F}, .mode = RenderMode::TransTexture, .index = 1}},
+        log};
     nx::test::OffscreenTarget target{**device};
     std::ignore = target.draw(
         [&](nx::rhi::CommandList& list) { nx::render::drawInOrder(list, world, models, sprites); });
