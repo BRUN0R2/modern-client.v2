@@ -182,10 +182,10 @@ struct QuadShade {
 
 /// Appends the quad of `image` on `axes`, `scale` times its size, shaded as `shade` (R_DrawSpriteQuad).
 void addQuad(std::vector<SpriteVertex>& vertices, const SpriteImageDraw& image, const QuadAxes& axes,
-             float scale, const QuadShade& shade) {
+             Scale scale, const QuadShade& shade) {
     const auto corner = [&](HammerUnits along, HammerUnits across, float u, float v) {
-        const Vec3 point =
-            axes.origin + (axes.up * (along.value() * scale)) + (axes.right * (across.value() * scale));
+        const Vec3 point = axes.origin + (axes.up * (along.value() * scale.value())) +
+                           (axes.right * (across.value() * scale.value()));
         return SpriteVertex{.position = point,
                             .u = u,
                             .v = v,
@@ -458,7 +458,7 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
         if (model.m_frames.empty()) {
             continue;
         }
-        float scale = instance.scale > 0.0F ? instance.scale : 1.0F;
+        Scale scale = instance.scale > Scale{} ? instance.scale : Scale{1.0F};
         float blend = isSolid(instance.mode) ? 1.0F : static_cast<float>(instance.amount) / kChannelTop;
         if (!isSolid(instance.mode) && instance.amount == 0) {
             continue; // invisible (R_AddEntity)
@@ -479,9 +479,9 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
                 continue;
             }
         } else {
-            const Vec3 half{.x = model.halfWidth.value() * scale,
-                            .y = model.halfWidth.value() * scale,
-                            .z = model.halfHeight.value() * scale};
+            const Vec3 half{.x = model.halfWidth.value() * scale.value(),
+                            .y = model.halfWidth.value() * scale.value(),
+                            .z = model.halfHeight.value() * scale.value()};
             const Aabb box = Aabb::around(instance.origin, half);
             if (std::ranges::any_of(
                     frustum, [&box](const Plane& plane) { return plane.sideOf(box) == PlaneSide::Back; })) {

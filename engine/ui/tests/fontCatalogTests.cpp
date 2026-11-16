@@ -146,13 +146,13 @@ TEST_F(CatalogTest, AChosenFaceOpensAsAFont) {
     std::ignore = catalog.addFolder(directory.path());
     const auto choice = catalog.choose({.family = "Square", .weight = 600, .isItalic = false});
     ASSERT_TRUE(choice.has_value());
-    auto font = catalog.open(*choice, {.cellHeight = 20});
+    auto font = catalog.open(*choice, {.cellHeight = nx::Pixels{20}});
     ASSERT_TRUE(font.has_value()) << nx::describe(font.error());
     EXPECT_EQ(font->family(), "Square");
     const auto glyph = font->glyph(U'A');
     ASSERT_TRUE(glyph.has_value()) << glyph.error().detail;
-    EXPECT_EQ(glyph->width, 9) << "struck twice, a pixel wider";
-    EXPECT_EQ(glyph->advance, 11);
+    EXPECT_EQ(glyph->width, nx::Pixels{9}) << "struck twice, a pixel wider";
+    EXPECT_EQ(glyph->advance, nx::Pixels{11});
 }
 
 TEST_F(CatalogTest, FilesThatCannotBeReadAreRefused) {

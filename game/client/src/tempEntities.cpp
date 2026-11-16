@@ -60,8 +60,8 @@ void TempEntities::sprayBlood(const BloodSpray& spray, const BloodSprayLook& loo
     if (frames.spray) {
         const auto lastFrame = static_cast<float>(*frames.spray - 1);
         const float lift = random.between(look.leastLift.value(), look.mostLift.value());
-        const float scale =
-            random.between(size * look.leastSprayScale.value(), size * look.mostSprayScale.value());
+        const nx::Scale scale{
+            random.between(size * look.leastSprayScale.value(), size * look.mostSprayScale.value())};
         entities.push_back(TempEntity{.sprite = TempSprite::BloodSpray,
                                       .origin = spray.position + nx::Vec3{.z = lift},
                                       .roll = nx::Degrees{random.between(0.0F, kWidestRoll.value())},
@@ -82,8 +82,8 @@ void TempEntities::sprayBlood(const BloodSpray& spray, const BloodSprayLook& loo
         drops += 1 + nx::narrow<std::uint32_t>(random.below(look.extraDropFaces));
     }
     for (std::uint32_t drop = 0; drop < drops; ++drop) {
-        const float scale =
-            random.between(size * look.leastDropScale.value(), size * look.mostDropScale.value());
+        const nx::Scale scale{
+            random.between(size * look.leastDropScale.value(), size * look.mostDropScale.value())};
         const float across = random.between(look.leastDropSpeed.value(), look.mostDropSpeed.value());
         const float along = random.between(look.leastDropSpeed.value(), look.mostDropSpeed.value());
         const float rise = random.between(look.leastDropRise.value(), look.mostDropRise.value());

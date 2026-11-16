@@ -46,9 +46,9 @@ public:
                                     std::uint32_t width = kAtlasWidth) -> Result<GlyphAtlas, FontError>;
 
     /// The height of the font's line, which text is laid out by.
-    [[nodiscard]] inline auto lineHeight() const noexcept -> Pixels { return Pixels{m_metrics.height()}; }
+    [[nodiscard]] inline auto lineHeight() const noexcept -> Pixels { return m_metrics.height(); }
     /// From the top of the line to its baseline.
-    [[nodiscard]] inline auto ascent() const noexcept -> Pixels { return Pixels{m_metrics.ascent}; }
+    [[nodiscard]] inline auto ascent() const noexcept -> Pixels { return m_metrics.ascent; }
     [[nodiscard]] inline auto width() const noexcept -> std::uint32_t { return m_width; }
     [[nodiscard]] inline auto height() const noexcept -> std::uint32_t { return m_height; }
     /// The picture: RGBA texels, row by row from the top, for ScreenRenderer::loadImage.

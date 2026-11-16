@@ -53,16 +53,16 @@ TEST_F(SchemeFontTest, ACharacterIsDrawnByTheFirstCandidateWhoseRangeHoldsIt) {
             FontCandidate{.face = "Mark", .tall = 9}, FontCandidate{.face = "Square", .tall = 30}}};
     auto set = SchemeFontSet::open(font, 768, catalog);
     ASSERT_TRUE(set.has_value()) << nx::describe(set.error());
-    EXPECT_EQ(set->metrics().height(), 20) << "the first that opened";
+    EXPECT_EQ(set->metrics().height(), nx::Pixels{20}) << "the first that opened";
     ASSERT_NE(set->fontFor(U'A'), nullptr);
     EXPECT_EQ(set->fontFor(U'A')->family(), "Square");
     ASSERT_NE(set->fontFor(U'B'), nullptr);
     EXPECT_EQ(set->fontFor(U'B')->family(), "Mark") << "the range the first leaves";
-    EXPECT_EQ(set->fontFor(U'B')->metrics().height(), 9);
+    EXPECT_EQ(set->fontFor(U'B')->metrics().height(), nx::Pixels{9});
 
     const auto glyph = set->glyph(U'B');
     ASSERT_TRUE(glyph.has_value()) << glyph.error().detail;
-    EXPECT_EQ(glyph->advance, 4) << "Mark's square at 7 pixels per em: 1280 units are 4.4 pixels";
+    EXPECT_EQ(glyph->advance, nx::Pixels{4}) << "Mark's square at 7 pixels per em: 1280 units are 4.4 pixels";
 }
 
 TEST_F(SchemeFontTest, OnlyTheCandidatesForTheScreensHeightCount) {
@@ -76,10 +76,10 @@ TEST_F(SchemeFontTest, OnlyTheCandidatesForTheScreensHeightCount) {
                           .heights = SchemeRange<std::uint32_t>{600, 767}}}};
     const auto small = SchemeFontSet::open(font, 480, catalog);
     ASSERT_TRUE(small.has_value()) << nx::describe(small.error());
-    EXPECT_EQ(small->metrics().height(), 13);
+    EXPECT_EQ(small->metrics().height(), nx::Pixels{13});
     const auto large = SchemeFontSet::open(font, 600, catalog);
     ASSERT_TRUE(large.has_value()) << nx::describe(large.error());
-    EXPECT_EQ(large->metrics().height(), 20);
+    EXPECT_EQ(large->metrics().height(), nx::Pixels{20});
     EXPECT_EQ(large->fontFor(U'A')->smoothing(), nx::ui::FontSmoothing::Antialiased);
 
     const auto none = SchemeFontSet::open(font, 1080, catalog);

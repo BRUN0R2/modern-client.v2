@@ -323,7 +323,7 @@ TEST_F(ViewModelMuzzleFlashTest, ItsWeaponsLookStylesItsFlashes) {
     EXPECT_EQ(viewModel->muzzleFlashSprites(), (std::vector<std::string>{"sprites/goldFlash.spr"}));
     const cs::MuzzleFlashStyle style = viewModel->muzzleFlashStyleOf(viewModel->sequence(0).events.front());
     EXPECT_EQ(style.sprite, "sprites/goldFlash.spr");
-    EXPECT_FLOAT_EQ(style.scale, 0.2F) << "the event's";
+    EXPECT_FLOAT_EQ(style.scale.value(), 0.2F) << "the event's";
     EXPECT_FLOAT_EQ(style.brightness, 4.0F);
 }
 

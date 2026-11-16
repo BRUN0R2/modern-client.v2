@@ -106,14 +106,15 @@ void setBodySolidity(nx::ecs::World& world, nx::ecs::Entity body, std::optional<
     world.add(body, nx::game::ClipMethod{.clip = &clipPlayer});
 }
 
-auto playerBlendOf(const nx::assets::StudioSequence& sequence, float pitch) noexcept -> PlayerBlend {
+auto playerBlendOf(const nx::assets::StudioSequence& sequence, nx::Degrees pitch) noexcept -> PlayerBlend {
     const float start = sequence.blendStarts[0];
     const float end = sequence.blendEnds[0];
     // (int)(*pPitch * 3.0): in double, cut to a whole number; weighed against the start and end in float.
-    const auto blend = static_cast<std::int32_t>(static_cast<double>(pitch) * kPitchScale);
+    const auto blend = static_cast<std::int32_t>(static_cast<double>(pitch.value()) * kPitchScale);
     if (static_cast<float>(blend) < start) {
-        return PlayerBlend{.blending = 0,
-                           .pitch = pitch - static_cast<float>(static_cast<double>(start) / kPitchScale)};
+        return PlayerBlend{
+            .blending = 0,
+            .pitch = pitch - nx::Degrees{static_cast<float>(static_cast<double>(start) / kPitchScale)}};
     }
     if (static_cast<float>(blend) <= end) {
         const float way = end - start;
@@ -124,9 +125,9 @@ auto playerBlendOf(const nx::assets::StudioSequence& sequence, float pitch) noex
             static_cast<double>(static_cast<float>(blend) - start) * kBlendingTop / static_cast<double>(way);
         return PlayerBlend{.blending = static_cast<std::uint8_t>(static_cast<std::int32_t>(share))};
     }
-    return PlayerBlend{
-        .blending = kLastBlending,
-        .pitch = static_cast<float>(static_cast<double>(pitch) - (static_cast<double>(end) / kPitchScale))};
+    return PlayerBlend{.blending = kLastBlending,
+                       .pitch = nx::Degrees{static_cast<float>(static_cast<double>(pitch.value()) -
+                                                               (static_cast<double>(end) / kPitchScale))}};
 }
 
 auto tracedBonesOf(const PlayerPose& pose, nx::Vec3 origin) -> std::vector<nx::Mat3x4> {
@@ -136,10 +137,11 @@ auto tracedBonesOf(const PlayerPose& pose, nx::Vec3 origin) -> std::vector<nx::M
     // As SV_StudioSetupBones bounds it: a sequence the model lacks is its first.
     const nx::assets::StudioSequence& sequence =
         sequences[pose.sequence.value < sequences.size() ? pose.sequence.value : 0];
-    const PlayerBlend blend = playerBlendOf(sequence, pose.angles.pitch.value());
-    const float yaw = pose.gaitYaw < 0.0F ? pose.gaitYaw + nx::kFullTurnDegrees.value() : pose.gaitYaw;
+    const PlayerBlend blend = playerBlendOf(sequence, pose.angles.pitch);
+    const nx::Degrees yaw = pose.gaitYaw < nx::Degrees{} ? pose.gaitYaw + nx::kFullTurnDegrees : pose.gaitYaw;
+    // Negated as the original negates it: no pitch is -0, where Quantity's negation, 0 less it, gives +0.
     const nx::EulerAngles turn{
-        .pitch = nx::Degrees{-blend.pitch}, .yaw = nx::Degrees{yaw}, .roll = pose.angles.roll};
+        .pitch = nx::Degrees{-blend.pitch.value()}, .yaw = yaw, .roll = pose.angles.roll};
     return posePlayerBones(model, pose.model->animations, pose.sequence,
                            PlayerPoseQuery{.frame = serverFrameOf(sequence, pose.frame),
                                            .gaitSequence = pose.gaitSequence,

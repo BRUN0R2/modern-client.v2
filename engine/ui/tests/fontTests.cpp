@@ -14,77 +14,88 @@ import nx.ui;
 
 namespace {
 
+using nx::Pixels;
 using nx::test::SquareFont;
 using nx::ui::Font;
 using nx::ui::FontDeviceHeight;
 using nx::ui::FontError;
 using nx::ui::FontMetrics;
 using nx::ui::FontSmoothing;
+using nx::ui::FontUnits;
 using nx::ui::FontVerticalMetrics;
 
+/// The heights of a face of an em `unitsPerEm` units big, `ascent` above the baseline and `descent` below.
+[[nodiscard]] constexpr auto verticalOf(std::int32_t unitsPerEm, std::int32_t ascent,
+                                        std::int32_t descent) noexcept -> FontVerticalMetrics {
+    return {.unitsPerEm = FontUnits{unitsPerEm}, .ascent = FontUnits{ascent}, .descent = FontUnits{descent}};
+}
+
+/// A device height: at `pixelsPerEm`, the rows `top` above the baseline to `bottom`, negative below it.
+[[nodiscard]] constexpr auto deviceHeightOf(std::int32_t pixelsPerEm, std::int32_t top,
+                                            std::int32_t bottom) noexcept -> FontDeviceHeight {
+    return {.pixelsPerEm = Pixels{pixelsPerEm}, .top = Pixels{top}, .bottom = Pixels{bottom}};
+}
+
+/// A face's size: `pixelsPerEm`, and a line of `ascent` over `descent` pixels.
+[[nodiscard]] constexpr auto metricsOf(std::int32_t pixelsPerEm, std::int32_t ascent,
+                                       std::int32_t descent) noexcept -> FontMetrics {
+    return {.pixelsPerEm = Pixels{pixelsPerEm}, .ascent = Pixels{ascent}, .descent = Pixels{descent}};
+}
+
 /// Tahoma's heights: its VDMX table is a version 0 one for all its glyphs, which Windows ignores.
-constexpr FontVerticalMetrics kTahoma{.unitsPerEm = 2048, .ascent = 2049, .descent = 423};
+constexpr FontVerticalMetrics kTahoma = verticalOf(2048, 2049, 423);
 /// Verdana's heights, and the records of its VDMX table from 8 to 21 pixels per em.
-constexpr FontVerticalMetrics kVerdana{.unitsPerEm = 2048, .ascent = 2059, .descent = 430};
+constexpr FontVerticalMetrics kVerdana = verticalOf(2048, 2059, 430);
 constexpr std::array<FontDeviceHeight, 14> kVerdanaDeviceHeights{{
-    {.pixelsPerEm = 8, .top = 8, .bottom = -2},
-    {.pixelsPerEm = 9, .top = 10, .bottom = -2},
-    {.pixelsPerEm = 10, .top = 10, .bottom = -2},
-    {.pixelsPerEm = 11, .top = 11, .bottom = -2},
-    {.pixelsPerEm = 12, .top = 12, .bottom = -2},
-    {.pixelsPerEm = 13, .top = 13, .bottom = -3},
-    {.pixelsPerEm = 14, .top = 14, .bottom = -3},
-    {.pixelsPerEm = 15, .top = 15, .bottom = -3},
-    {.pixelsPerEm = 16, .top = 15, .bottom = -3},
-    {.pixelsPerEm = 17, .top = 17, .bottom = -3},
-    {.pixelsPerEm = 18, .top = 18, .bottom = -4},
-    {.pixelsPerEm = 19, .top = 19, .bottom = -4},
-    {.pixelsPerEm = 20, .top = 21, .bottom = -4},
-    {.pixelsPerEm = 21, .top = 21, .bottom = -4},
+    deviceHeightOf(8, 8, -2),
+    deviceHeightOf(9, 10, -2),
+    deviceHeightOf(10, 10, -2),
+    deviceHeightOf(11, 11, -2),
+    deviceHeightOf(12, 12, -2),
+    deviceHeightOf(13, 13, -3),
+    deviceHeightOf(14, 14, -3),
+    deviceHeightOf(15, 15, -3),
+    deviceHeightOf(16, 15, -3),
+    deviceHeightOf(17, 17, -3),
+    deviceHeightOf(18, 18, -4),
+    deviceHeightOf(19, 19, -4),
+    deviceHeightOf(20, 21, -4),
+    deviceHeightOf(21, 21, -4),
 }};
 
 TEST(FontSizeTest, ScaledLinesSizeAsWindowsDoes) {
     const auto sized = [](std::int32_t cellHeight) {
-        return nx::ui::fontMetricsFor(kTahoma, {}, cellHeight);
+        return nx::ui::fontMetricsFor(kTahoma, {}, Pixels{cellHeight});
     };
-    EXPECT_EQ(sized(16), (FontMetrics{.pixelsPerEm = 13, .ascent = 13, .descent = 3}))
-        << "the schemes' Default";
-    EXPECT_EQ(sized(13), (FontMetrics{.pixelsPerEm = 11, .ascent = 11, .descent = 2}));
-    EXPECT_EQ(sized(9), (FontMetrics{.pixelsPerEm = 7, .ascent = 7, .descent = 2}));
-    EXPECT_EQ(sized(20), (FontMetrics{.pixelsPerEm = 16, .ascent = 17, .descent = 3}))
-        << "17 pixels per em would make a line of 21";
-    EXPECT_EQ(sized(38), (FontMetrics{.pixelsPerEm = 31, .ascent = 31, .descent = 6}))
-        << "a line one pixel short of the cell";
-    EXPECT_EQ(sized(90), (FontMetrics{.pixelsPerEm = 74, .ascent = 75, .descent = 15}));
+    EXPECT_EQ(sized(16), metricsOf(13, 13, 3)) << "the schemes' Default";
+    EXPECT_EQ(sized(13), metricsOf(11, 11, 2));
+    EXPECT_EQ(sized(9), metricsOf(7, 7, 2));
+    EXPECT_EQ(sized(20), metricsOf(16, 17, 3)) << "17 pixels per em would make a line of 21";
+    EXPECT_EQ(sized(38), metricsOf(31, 31, 6)) << "a line one pixel short of the cell";
+    EXPECT_EQ(sized(90), metricsOf(74, 75, 15));
 }
 
 TEST(FontSizeTest, DeviceHeightsSizeAsWindowsDoes) {
     const auto sized = [](std::int32_t cellHeight) {
-        return nx::ui::fontMetricsFor(kVerdana, kVerdanaDeviceHeights, cellHeight);
+        return nx::ui::fontMetricsFor(kVerdana, kVerdanaDeviceHeights, Pixels{cellHeight});
     };
-    EXPECT_EQ(sized(12), (FontMetrics{.pixelsPerEm = 9, .ascent = 10, .descent = 2}))
-        << "the first em whose line is exactly the cell";
-    EXPECT_EQ(sized(18), (FontMetrics{.pixelsPerEm = 15, .ascent = 15, .descent = 3}));
-    EXPECT_EQ(sized(19), (FontMetrics{.pixelsPerEm = 16, .ascent = 15, .descent = 3}))
-        << "none exactly 19: the largest em whose line fits";
-    EXPECT_EQ(sized(20), (FontMetrics{.pixelsPerEm = 17, .ascent = 17, .descent = 3}));
-    EXPECT_EQ(sized(8), (FontMetrics{.pixelsPerEm = 6, .ascent = 7, .descent = 1}))
-        << "below the table: the scaled lines";
-    EXPECT_EQ(sized(9), (FontMetrics{.pixelsPerEm = 7, .ascent = 7, .descent = 2}));
+    EXPECT_EQ(sized(12), metricsOf(9, 10, 2)) << "the first em whose line is exactly the cell";
+    EXPECT_EQ(sized(18), metricsOf(15, 15, 3));
+    EXPECT_EQ(sized(19), metricsOf(16, 15, 3)) << "none exactly 19: the largest em whose line fits";
+    EXPECT_EQ(sized(20), metricsOf(17, 17, 3));
+    EXPECT_EQ(sized(8), metricsOf(6, 7, 1)) << "below the table: the scaled lines";
+    EXPECT_EQ(sized(9), metricsOf(7, 7, 2));
 }
 
 TEST(FontSizeTest, AnEmWithADeviceHeightIsSizedByIt) {
     // Trebuchet MS: its table starts at 8 pixels per em, whose line is already 13 pixels.
-    constexpr FontVerticalMetrics kTrebuchet{.unitsPerEm = 2048, .ascent = 1923, .descent = 455};
-    constexpr std::array<FontDeviceHeight, 4> kDeviceHeights{{{.pixelsPerEm = 8, .top = 10, .bottom = -3},
-                                                              {.pixelsPerEm = 9, .top = 11, .bottom = -4},
-                                                              {.pixelsPerEm = 10, .top = 11, .bottom = -4},
-                                                              {.pixelsPerEm = 11, .top = 12, .bottom = -4}}};
-    EXPECT_EQ(nx::ui::fontMetricsFor(kTrebuchet, kDeviceHeights, 12),
-              (FontMetrics{.pixelsPerEm = 7, .ascent = 10, .descent = 2}))
+    constexpr FontVerticalMetrics kTrebuchet = verticalOf(2048, 1923, 455);
+    constexpr std::array<FontDeviceHeight, 4> kDeviceHeights{
+        {deviceHeightOf(8, 10, -3), deviceHeightOf(9, 11, -4), deviceHeightOf(10, 11, -4),
+         deviceHeightOf(11, 12, -4)}};
+    EXPECT_EQ(nx::ui::fontMetricsFor(kTrebuchet, kDeviceHeights, Pixels{12}), metricsOf(7, 10, 2))
         << "10 pixels per em would scale to a line of 12, but its device height is 15";
-    EXPECT_EQ(nx::ui::fontMetricsFor(kTrebuchet, kDeviceHeights, 15),
-              (FontMetrics{.pixelsPerEm = 9, .ascent = 11, .descent = 4}));
+    EXPECT_EQ(nx::ui::fontMetricsFor(kTrebuchet, kDeviceHeights, Pixels{15}), metricsOf(9, 11, 4));
 }
 
 TEST(FontSizeTest, ReadsTheDeviceHeightsWindowsTakes) {
@@ -105,7 +116,7 @@ TEST(FontSizeTest, ReadsTheDeviceHeightsWindowsTakes) {
         }
         return bytes;
     };
-    const std::vector<FontDeviceHeight> sixteen{{.pixelsPerEm = 16, .top = 17, .bottom = -3}};
+    const std::vector<FontDeviceHeight> sixteen{deviceHeightOf(16, 17, -3)};
     EXPECT_EQ(nx::ui::readDeviceHeights(table(1, 1, {1, 1, 1})), sixteen);
     EXPECT_EQ(nx::ui::readDeviceHeights(table(1, 0, {2, 1, 2})), sixteen) << "1:1 through 2:1";
     EXPECT_EQ(nx::ui::readDeviceHeights(table(0, 1, {0, 0, 0})), sixteen) << "the group for every ratio";
@@ -148,8 +159,7 @@ TEST(FontSizeTest, ADeviceHeightWhoseLineIsLessThanHalfItsEmIsLeftOut) {
                              std::array<std::uint16_t, 3>{40, 10, kMinusNine},
                              std::array<std::uint16_t, 3>{64768, 18, kMinusThree}};
     EXPECT_EQ(nx::ui::readDeviceHeights(table(records)),
-              (std::vector<FontDeviceHeight>{{.pixelsPerEm = 16, .top = 17, .bottom = -3},
-                                             {.pixelsPerEm = 38, .top = 10, .bottom = -9}}))
+              (std::vector<FontDeviceHeight>{deviceHeightOf(16, 17, -3), deviceHeightOf(38, 10, -9)}))
         << "a line of half its em is one, less is none: 40 pixels per em in 19, 64768 in 21";
 }
 
@@ -161,7 +171,7 @@ TEST(FontSizeTest, ADeviceHeightWhoseLineIsLessThanHalfItsEmIsLeftOut) {
 
 /// The square font at 16 pixels per em, as a cell 20 pixels tall makes Tahoma.
 [[nodiscard]] auto squareFont(FontSmoothing smoothing) -> Font {
-    auto font = Font::open(squareFile(), {.cellHeight = 20, .smoothing = smoothing});
+    auto font = Font::open(squareFile(), {.cellHeight = Pixels{20}, .smoothing = smoothing});
     EXPECT_TRUE(font.has_value()) << (font ? "" : font.error().detail);
     return std::move(font).value();
 }
@@ -170,33 +180,32 @@ TEST(FontTest, OpensAFaceSizedAsWindowsSizesIt) {
     const Font font = squareFont(FontSmoothing::None);
     EXPECT_EQ(font.family(), "Square");
     EXPECT_EQ(font.style(), "Regular");
-    EXPECT_EQ(font.metrics(), (FontMetrics{.pixelsPerEm = 16, .ascent = 17, .descent = 3}));
-    EXPECT_EQ(font.metrics().height(), 20);
+    EXPECT_EQ(font.metrics(), metricsOf(16, 17, 3));
+    EXPECT_EQ(font.metrics().height(), Pixels{20});
     EXPECT_EQ(font.smoothing(), FontSmoothing::None);
 
     auto byDevice = Font::open(squareFile({.deviceHeights = {{15, 17, -3}, {16, 18, -3}, {17, 18, -4}}}),
-                               {.cellHeight = 20});
+                               {.cellHeight = Pixels{20}});
     ASSERT_TRUE(byDevice.has_value()) << byDevice.error().detail;
-    EXPECT_EQ(byDevice->metrics(), (FontMetrics{.pixelsPerEm = 15, .ascent = 17, .descent = 3}))
-        << "its VDMX table, read from the file";
+    EXPECT_EQ(byDevice->metrics(), metricsOf(15, 17, 3)) << "its VDMX table, read from the file";
 }
 
 TEST(FontTest, DrawsGlyphsWithoutAntialiasing) {
     const Font font = squareFont(FontSmoothing::None);
     const auto square = font.glyph(U'A');
     ASSERT_TRUE(square.has_value()) << square.error().detail;
-    EXPECT_EQ(square->left, 0);
-    EXPECT_EQ(square->top, 8);
-    EXPECT_EQ(square->width, 8);
-    EXPECT_EQ(square->height, 8);
-    EXPECT_EQ(square->advance, 10);
+    EXPECT_EQ(square->left, Pixels{0});
+    EXPECT_EQ(square->top, Pixels{8});
+    EXPECT_EQ(square->width, Pixels{8});
+    EXPECT_EQ(square->height, Pixels{8});
+    EXPECT_EQ(square->advance, Pixels{10});
     EXPECT_TRUE(std::ranges::all_of(square->coverage, [](std::uint8_t value) { return value == 255; }));
 
     const auto shifted = font.glyph(U'B');
     ASSERT_TRUE(shifted.has_value()) << shifted.error().detail;
-    EXPECT_EQ(shifted->left, 0);
-    EXPECT_EQ(shifted->width, 8) << "each pixel in or out by its centre: none in a ninth column";
-    EXPECT_EQ(shifted->height, 8);
+    EXPECT_EQ(shifted->left, Pixels{0});
+    EXPECT_EQ(shifted->width, Pixels{8}) << "each pixel in or out by its centre: none in a ninth column";
+    EXPECT_EQ(shifted->height, Pixels{8});
     EXPECT_TRUE(std::ranges::all_of(shifted->coverage, [](std::uint8_t value) { return value == 255; }));
 }
 
@@ -204,13 +213,13 @@ TEST(FontTest, DrawsGlyphsWithAntialiasing) {
     const Font font = squareFont(FontSmoothing::Antialiased);
     const auto square = font.glyph(U'A');
     ASSERT_TRUE(square.has_value()) << square.error().detail;
-    EXPECT_EQ(square->width, 8);
+    EXPECT_EQ(square->width, Pixels{8});
     EXPECT_TRUE(std::ranges::all_of(square->coverage, [](std::uint8_t value) { return value == 255; }));
 
     const auto shifted = font.glyph(U'B');
     ASSERT_TRUE(shifted.has_value()) << shifted.error().detail;
-    ASSERT_EQ(shifted->width, 9);
-    ASSERT_EQ(shifted->height, 8);
+    ASSERT_EQ(shifted->width, Pixels{9});
+    ASSERT_EQ(shifted->height, Pixels{8});
     for (std::size_t row = 0; row < 8; ++row) {
         EXPECT_NEAR(shifted->coverage[row * 9], 0.75 * 255, 1.0) << "three quarters covered";
         EXPECT_EQ(shifted->coverage[(row * 9) + 4], 255);
@@ -219,13 +228,14 @@ TEST(FontTest, DrawsGlyphsWithAntialiasing) {
 }
 
 TEST(FontTest, BoldIsSimulatedByStrikingEachGlyphTwice) {
-    auto font = Font::open(squareFile(),
-                           {.cellHeight = 20, .smoothing = FontSmoothing::Antialiased, .isEmboldened = true});
+    auto font =
+        Font::open(squareFile(),
+                   {.cellHeight = Pixels{20}, .smoothing = FontSmoothing::Antialiased, .isEmboldened = true});
     ASSERT_TRUE(font.has_value()) << font.error().detail;
     const auto shifted = font->glyph(U'B');
     ASSERT_TRUE(shifted.has_value()) << shifted.error().detail;
-    ASSERT_EQ(shifted->width, 10) << "a pixel wider";
-    EXPECT_EQ(shifted->advance, 11);
+    ASSERT_EQ(shifted->width, Pixels{10}) << "a pixel wider";
+    EXPECT_EQ(shifted->advance, Pixels{11});
     for (std::size_t row = 0; row < 8; ++row) {
         EXPECT_NEAR(shifted->coverage[row * 10], 0.75 * 255, 1.0) << "its left edge as it was";
         EXPECT_EQ(shifted->coverage[(row * 10) + 8], 255) << "the right edge struck over by the body";
@@ -233,26 +243,26 @@ TEST(FontTest, BoldIsSimulatedByStrikingEachGlyphTwice) {
     }
     const auto space = font->glyph(U' ');
     ASSERT_TRUE(space.has_value()) << space.error().detail;
-    EXPECT_EQ(space->advance, 5);
+    EXPECT_EQ(space->advance, Pixels{5});
 }
 
 TEST(FontTest, SmoothedOnlyWhereTheGaspTableSaysSo) {
     // As Tahoma's: fitted but not smoothed up to 16 pixels per em, fitted and smoothed above.
     const auto file = squareFile({.gaspRanges = {{16, 0x0005}, {0xFFFF, 0x000F}}});
-    auto sixteen = Font::open(file, {.cellHeight = 20, .smoothing = FontSmoothing::Antialiased});
+    auto sixteen = Font::open(file, {.cellHeight = Pixels{20}, .smoothing = FontSmoothing::Antialiased});
     ASSERT_TRUE(sixteen.has_value()) << sixteen.error().detail;
-    EXPECT_EQ(sixteen->metrics().pixelsPerEm, 16);
+    EXPECT_EQ(sixteen->metrics().pixelsPerEm, Pixels{16});
     const auto aliased = sixteen->glyph(U'B');
     ASSERT_TRUE(aliased.has_value()) << aliased.error().detail;
-    EXPECT_EQ(aliased->width, 8) << "each pixel in or out";
+    EXPECT_EQ(aliased->width, Pixels{8}) << "each pixel in or out";
     EXPECT_TRUE(std::ranges::all_of(aliased->coverage, [](std::uint8_t value) { return value == 255; }));
 
-    auto eighteen = Font::open(file, {.cellHeight = 22, .smoothing = FontSmoothing::Antialiased});
+    auto eighteen = Font::open(file, {.cellHeight = Pixels{22}, .smoothing = FontSmoothing::Antialiased});
     ASSERT_TRUE(eighteen.has_value()) << eighteen.error().detail;
-    EXPECT_EQ(eighteen->metrics().pixelsPerEm, 18);
+    EXPECT_EQ(eighteen->metrics().pixelsPerEm, Pixels{18});
     const auto smoothed = eighteen->glyph(U'B');
     ASSERT_TRUE(smoothed.has_value()) << smoothed.error().detail;
-    ASSERT_GT(smoothed->width, 0);
+    ASSERT_GT(smoothed->width, Pixels{0});
     EXPECT_GT(smoothed->coverage.front(), 0);
     EXPECT_LT(smoothed->coverage.front(), 255) << "its first column partly covered";
 }
@@ -260,8 +270,9 @@ TEST(FontTest, SmoothedOnlyWhereTheGaspTableSaysSo) {
 TEST(FontTest, ABrokenDeviceHeightCannotSizeAFaceBeyondItsCell) {
     // A record of 30000 pixels per em in a line of 21 would have sized the face to it, its 'A' a
     // square of 15000 pixels a side; left out, the face is sized by its scaled line.
-    const auto plain = Font::open(squareFile(), {.cellHeight = 28});
-    const auto broken = Font::open(squareFile({.deviceHeights = {{30000, 18, -3}}}), {.cellHeight = 28});
+    const auto plain = Font::open(squareFile(), {.cellHeight = Pixels{28}});
+    const auto broken =
+        Font::open(squareFile({.deviceHeights = {{30000, 18, -3}}}), {.cellHeight = Pixels{28}});
     ASSERT_TRUE(plain.has_value()) << plain.error().detail;
     ASSERT_TRUE(broken.has_value()) << broken.error().detail;
     EXPECT_EQ(broken->metrics(), plain->metrics());
@@ -272,7 +283,7 @@ TEST(FontTest, ABrokenDeviceHeightCannotSizeAFaceBeyondItsCell) {
 
 TEST(FontTest, GlyphsOfManyEmsAreRefused) {
     // Squares of 32000 units, 15 ems: no letter, but a font made to exhaust whoever draws it.
-    auto font = Font::open(squareFile({.side = 32000}), {.cellHeight = 20});
+    auto font = Font::open(squareFile({.side = 32000}), {.cellHeight = Pixels{20}});
     ASSERT_TRUE(font.has_value()) << font.error().detail;
     const auto giant = font->glyph(U'A');
     ASSERT_FALSE(giant.has_value());
@@ -283,10 +294,10 @@ TEST(FontTest, GlyphsOfManyEmsAreRefused) {
 TEST(FontTest, GlyphsWithoutOutlinesOnlyAdvance) {
     const auto space = squareFont(FontSmoothing::None).glyph(U' ');
     ASSERT_TRUE(space.has_value()) << space.error().detail;
-    EXPECT_EQ(space->width, 0);
-    EXPECT_EQ(space->height, 0);
+    EXPECT_EQ(space->width, Pixels{0});
+    EXPECT_EQ(space->height, Pixels{0});
     EXPECT_TRUE(space->coverage.empty());
-    EXPECT_EQ(space->advance, 4);
+    EXPECT_EQ(space->advance, Pixels{4});
 }
 
 TEST(FontTest, CharactersWithoutGlyphsAreRefused) {
@@ -303,19 +314,23 @@ TEST(FontTest, AMovedFontStillDraws) {
 }
 
 TEST(FontTest, RefusesWhatItCannotOpen) {
-    const auto notAFont =
-        Font::open(std::make_shared<const std::vector<std::byte>>(16, std::byte{'x'}), {.cellHeight = 16});
+    const auto notAFont = Font::open(std::make_shared<const std::vector<std::byte>>(16, std::byte{'x'}),
+                                     {.cellHeight = Pixels{16}});
     ASSERT_FALSE(notAFont.has_value());
     EXPECT_EQ(notAFont.error().code, FontError::NotAFont);
 
-    const auto noSuchFace = Font::open(squareFile(), {.cellHeight = 16, .faceIndex = 1});
+    const auto noSuchFace = Font::open(squareFile(), {.cellHeight = Pixels{16}, .faceIndex = 1});
     ASSERT_FALSE(noSuchFace.has_value());
     EXPECT_EQ(noSuchFace.error().code, FontError::NotAFont);
 
-    for (const std::int32_t cellHeight : {0, -16, nx::ui::kMaxCellHeight + 1}) {
+    for (const Pixels cellHeight :
+         {nx::ui::kMinCellHeight - Pixels{1}, Pixels{-16}, nx::ui::kMaxCellHeight + Pixels{1}}) {
         const auto badHeight = Font::open(squareFile(), {.cellHeight = cellHeight});
         ASSERT_FALSE(badHeight.has_value());
-        EXPECT_EQ(badHeight.error().code, FontError::BadHeight) << cellHeight;
+        EXPECT_EQ(badHeight.error().code, FontError::BadHeight) << cellHeight.value();
+    }
+    for (const Pixels cellHeight : {nx::ui::kMinCellHeight, nx::ui::kMaxCellHeight}) {
+        EXPECT_TRUE(Font::open(squareFile(), {.cellHeight = cellHeight}).has_value()) << cellHeight.value();
     }
 }
 

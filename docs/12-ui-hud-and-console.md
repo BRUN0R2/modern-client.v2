@@ -63,10 +63,10 @@ a cell height (`tall`), a weight and flags such as `antialias`, and Windows' GDI
 `nx.ui:font` reads the faces with FreeType (`Font::open`) and reproduces both.
 
 **Size.** A cell height is the height of a line. GDI turns it into a whole number of pixels per em
-by the face's tables, which `fontMetricsFor` reproduces (the rule below was found by asking GDI
-for every height from 4 to 120 in Tahoma, Verdana, Arial, Trebuchet MS, Courier New, Marlett,
-Times New Roman, Segoe UI, Georgia and Lucida Console, regular and bold, and matches it in every
-case):
+by the face's tables, written in its own units (`nx::ui::FontUnits`), which `fontMetricsFor`
+reproduces in `nx::Pixels` (the rule below was found by asking GDI for every height from 4 to 120
+in Tahoma, Verdana, Arial, Trebuchet MS, Courier New, Marlett, Times New Roman, Segoe UI, Georgia
+and Lucida Console, regular and bold, and matches it in every case):
 
 - The device heights of the face's `VDMX` table (the highest and lowest pixel of its glyphs at each
   size, recorded by the font maker), when Windows takes them: a version 1 table, or a version 0
