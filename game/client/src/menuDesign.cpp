@@ -60,8 +60,8 @@ auto makeMenuFace(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen
     const auto cellHeight = static_cast<std::int32_t>(
         std::lround(static_cast<float>(size.line.value()) * static_cast<float>(screenHeight) /
                     static_cast<float>(kMenuDesignHeight.value())));
-    auto opened = fonts.open(
-        *choice, {.cellHeight = std::max(cellHeight, 1), .smoothing = nx::ui::FontSmoothing::Antialiased});
+    auto opened = fonts.open(*choice, {.cellHeight = std::max(nx::Pixels{cellHeight}, nx::ui::kMinCellHeight),
+                                       .smoothing = nx::ui::FontSmoothing::Antialiased});
     if (!opened) {
         return nx::fail(MenuPanelError::Unusable, family, std::move(opened.error()));
     }
