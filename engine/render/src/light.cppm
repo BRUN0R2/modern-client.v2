@@ -52,10 +52,18 @@ struct SkyLight {
     Vec3 direction{.z = -1.0F}; ///< Where its light goes: unit length when it has a color.
 };
 
+/// The unit of LightLevel: a level of the original's light, printed as a number alone.
+struct LightLevelTag {};
+
+/// How bright the original's light is, as it counts it in a model's light: none at 0, a lightmap sample of
+/// 255 at the normal style as bright as one is, and a model lit by 255 of ambient and shade together lit as
+/// brightly as its light curve goes.
+using LightLevel = Quantity<float, LightLevelTag>;
+
 /// The light a studio model is drawn with, the original's alight_t.
 struct ModelLight {
-    float ambient = 0.0F;       ///< What every vertex gets, from 0 to 128.
-    float shade = 0.0F;         ///< What a vertex facing the light gets on top: ambient + shade <= 255.
+    LightLevel ambient{};       ///< What every vertex gets, from 0 to 128.
+    LightLevel shade{};         ///< What a vertex facing the light gets on top: ambient + shade <= 255.
     Vec3 direction{.z = -1.0F}; ///< Where the light goes, unit length.
     Vec3 color{.x = 1.0F, .y = 1.0F, .z = 1.0F}; ///< Its color, its brightest channel 1.
 };

@@ -181,15 +181,16 @@ void setSky(nx::rhi::Device& device, SurfaceScene& scene, int channel = kSkyChan
                                SurfaceDrawOptions options = {}) -> std::vector<std::byte> {
     const std::vector bones(scene.model.boneCount(), nx::Mat3x4{});
     const std::vector instances(
-        options.layers,
-        nx::render::StudioInstance{.model = scene.model,
-                                   .bones = bones,
-                                   .light = {.ambient = ambient, .shade = 0.0F, .color = options.lightColor},
-                                   .skin = options.skin,
-                                   .mode = options.mode,
-                                   .amount = options.amount,
-                                   .lights = lights,
-                                   .probes = probes});
+        options.layers, nx::render::StudioInstance{.model = scene.model,
+                                                   .bones = bones,
+                                                   .light = {.ambient = nx::render::LightLevel{ambient},
+                                                             .shade = nx::render::LightLevel{},
+                                                             .color = options.lightColor},
+                                                   .skin = options.skin,
+                                                   .mode = options.mode,
+                                                   .amount = options.amount,
+                                                   .lights = lights,
+                                                   .probes = probes});
     return target.draw([&](nx::rhi::CommandList& commands) {
         const auto drawn = scene.renderer.draw(
             commands, {.camera = cameraFrom(direction), .aspect = 1.0F, .instances = instances});
@@ -355,7 +356,7 @@ TEST(EnhancedStudioTest, ACrowdIsDrawnByTheProbesOfThisFrame) {
                     if (!room) {
                         return std::unexpected{std::move(room.error())};
                     }
-                    room->bodies[0] = {.ambient = 100.0F, .moveShare = 1.0F};
+                    room->bodies[0] = {.ambient = nx::render::LightLevel{100.0F}, .moveShare = 1.0F};
                     room->bodiesOfModel[0] = 1;
                     return scene->renderer.recordCrowd(commands, {.frustum = frustum});
                 });

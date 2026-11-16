@@ -33,8 +33,8 @@ constexpr float kGradientSide = 32.0F;
 /// share of light.
 constexpr float kGradientScale = 768.0F;
 /// The light a model's ambient and its ambient and shade together hold to.
-constexpr float kMostAmbient = 128.0F;
-constexpr float kMostLight = 255.0F;
+constexpr LightLevel kMostAmbient{128.0F};
+constexpr LightLevel kMostLight{255.0F};
 
 /// The first thing `meets` finds along the segment from `start` to `end` in the world of `map`
 /// (assets::firstAlong); none in a map without models.
@@ -176,8 +176,8 @@ auto WorldLight::modelLightAt(const ModelLightQuery& query, const LightStyleValu
     const float brightest = std::max({light.x, light.y, light.z});
     const float total = brightest == 0.0F ? 1.0F : brightest;
     direction = direction * total * std::clamp(query.direct, kLeastDirectLight, 1.0F);
-    ModelLight result{.shade = length(direction), .direction = normalized(direction)};
-    result.ambient = std::min(total - result.shade, kMostAmbient);
+    ModelLight result{.shade = LightLevel{length(direction)}, .direction = normalized(direction)};
+    result.ambient = std::min(LightLevel{total} - result.shade, kMostAmbient);
     if (result.ambient + result.shade > kMostLight) {
         result.shade = kMostLight - result.ambient;
     }
