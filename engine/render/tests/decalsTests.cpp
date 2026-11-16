@@ -117,7 +117,7 @@ TEST_F(DecalPoolTest, ADecalHalfTwiceAsSmallCoversHalfTheUnits) {
     ASSERT_EQ(decals.shoot({.image = DecalImageIndex{0},
                             .size = kShot,
                             .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F},
-                            .scale = 2.0F}),
+                            .scale = nx::Scale{2.0F}}),
               1U);
     const Bounds bounds = boundsOf(*decals.inOrder().front());
     EXPECT_EQ(bounds.positions.min, (nx::Vec3{.x = 28.0F, .y = 28.0F, .z = 0.0F}));
