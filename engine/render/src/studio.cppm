@@ -33,6 +33,7 @@ import nx.rhi;
 import nx.assets;
 import :camera;
 import :fog;
+import :frameSlots;
 import :gamma;
 import :world;
 import :light;
@@ -427,7 +428,7 @@ public:
     void setProbes(rhi::TextureHandle probes, std::uint32_t mipLevels);
 
     /// Whether it was made with the crowd's shader.
-    [[nodiscard]] inline auto drawsCrowds() const noexcept -> bool { return !m_crowdSlots.empty(); }
+    [[nodiscard]] inline auto drawsCrowds() const noexcept -> bool { return crowdSlots.has_value(); }
     /// Makes `model` one a crowd may be of, the next of the numbers CrowdBody::model counts, its tables'
     /// uploads recorded in `commands`. Errors: GpuFailed.
     [[nodiscard]] auto loadCrowdModel(rhi::CommandList& commands, const CrowdModelDesc& desc)
@@ -472,7 +473,7 @@ public:
     void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
 private:
-    inline explicit StudioRenderer(rhi::Device& device) noexcept : m_device{&device} {}
+    inline explicit StudioRenderer(rhi::Device& device) : m_device{&device} {}
     /// The shader, the bind group layouts, the samplers and the pipelines.
     [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat,
                                        StudioLook look) -> Result<void, rhi::RhiError>;
@@ -504,8 +505,6 @@ private:
     [[nodiscard]] auto solidCallOf(const StudioInstance& instance) -> std::uint32_t;
     /// Finds where each of `instances` goes (m_places), and the calls they take.
     void placeInstances(const StudioFrame& frame);
-    /// The frame slot the last prepare wrote.
-    [[nodiscard]] auto preparedSlot() const noexcept -> const StudioFrameSlot&;
     /// Records the model of m_modelCalls' `index`.
     void drawModel(rhi::CommandList& commands, std::size_t index) const;
 
@@ -530,8 +529,7 @@ private:
     rhi::TextureHandle m_probes{}; ///< setProbes's; none: m_noProbes.
     std::uint32_t m_probeLevels = 1;
     rhi::OwnedBuffer m_lightGamma;
-    std::vector<StudioFrameSlot> m_frameSlots;
-    std::uint64_t m_drawCount = 0;
+    FrameSlots<StudioFrameSlot> frameSlots{rhi::kMaxFramesInFlight};
 
     // What the last prepare found, kept to reuse the memory.
     std::vector<StudioModelCall> m_modelCalls;
@@ -567,8 +565,7 @@ private:
     rhi::OwnedBuffer m_crowdDrawArguments;
     std::size_t m_crowdDrawCapacity = 0;
     bool areCrowdBuffersNew = true;
-    std::vector<StudioCrowdSlot> m_crowdSlots;
-    std::uint64_t m_crowdFrames = 0;
+    std::optional<FrameSlots<StudioCrowdSlot>> crowdSlots; ///< With the crowd's shader.
     std::vector<StudioModelCall> m_crowdCalls;
     std::vector<StudioMeshCall> m_crowdMeshCalls;
 };

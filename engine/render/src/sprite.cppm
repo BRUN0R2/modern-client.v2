@@ -22,6 +22,7 @@ import nx.rhi;
 import nx.assets;
 import :camera;
 import :fog;
+import :frameSlots;
 import :gamma;
 import :light;
 import :lightStyle;
@@ -201,15 +202,13 @@ public:
     void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
 private:
-    inline explicit SpriteRenderer(rhi::Device& device) noexcept : m_device{&device} {}
+    inline explicit SpriteRenderer(rhi::Device& device) : m_device{&device} {}
     /// The shader, the bind group layouts, the sampler and a pipeline for each way sprites are drawn.
     [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
         -> Result<void, rhi::RhiError>;
     /// Makes room in `slot` for `quads` quads, at least.
     [[nodiscard]] auto reserve(SpriteFrameSlot& slot, std::size_t quads) -> Result<void, rhi::RhiError>;
     [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
-    /// The frame slot the last prepare wrote.
-    [[nodiscard]] auto preparedSlot() const noexcept -> const SpriteFrameSlot&;
     /// Records the quads of `sprite`.
     void drawSprite(rhi::CommandList& commands, const SpriteCall& sprite) const;
 
@@ -222,8 +221,7 @@ private:
     rhi::OwnedSampler m_sampler;
     EnumArray<RenderMode, rhi::OwnedRenderPipeline> m_pipelines;
     rhi::OwnedRenderPipeline m_lightPipeline; ///< Multiplies what is there by the light.
-    std::vector<SpriteFrameSlot> m_frameSlots;
-    std::uint64_t m_drawCount = 0;
+    FrameSlots<SpriteFrameSlot> frameSlots{rhi::kMaxFramesInFlight};
 
     // What the last prepare found, kept to reuse the memory.
     std::vector<SpriteQuadCall> m_quadCalls;

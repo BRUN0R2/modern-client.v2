@@ -186,10 +186,8 @@ auto ScreenRenderer::create(rhi::Device& device, const ScreenRendererDesc& desc)
     if (auto made = renderer.createPipelines(desc); !made) {
         return fail(ScreenError::GpuFailed, std::move(made.error()));
     }
-    renderer.m_frameSlots.reserve(rhi::kMaxFramesInFlight);
-    for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
-        if (auto reserved = renderer.reserve(renderer.m_frameSlots.emplace_back(), kFirstQuadCapacity);
-            !reserved) {
+    for (ScreenFrameSlot& slot : renderer.frameSlots) {
+        if (auto reserved = renderer.reserve(slot, kFirstQuadCapacity); !reserved) {
             return fail(ScreenError::GpuFailed, std::move(reserved.error()));
         }
     }
@@ -392,8 +390,7 @@ auto ScreenRenderer::loadImage(rhi::CommandList& commands, std::span<const std::
 auto ScreenRenderer::prepare(const ScreenDraw& draw) -> Result<void, ScreenError> {
     m_batches.clear();
     m_targetSize = draw.size;
-    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    ScreenFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    ScreenFrameSlot& slot = frameSlots.advance();
     if (draw.quads.empty()) {
         return {};
     }
@@ -436,8 +433,7 @@ void ScreenRenderer::record(rhi::CommandList& commands) const {
     if (m_batches.empty()) {
         return;
     }
-    expects(m_drawCount > 0, "ScreenRenderer: prepared before it is recorded");
-    const ScreenFrameSlot& slot = m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
+    const ScreenFrameSlot& slot = frameSlots.prepared();
     commands.setVertexBuffer(0, slot.vertices.get(), 0);
     for (const ScreenBatch& batch : m_batches) {
         commands.setScissor(batch.scissor);

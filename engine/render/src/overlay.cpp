@@ -77,10 +77,8 @@ auto OverlayRenderer::create(rhi::Device& device, const OverlayRendererDesc& des
     if (auto made = renderer.createPipelines(desc); !made) {
         return fail(OverlayError::GpuFailed, std::move(made.error()));
     }
-    renderer.m_frameSlots.reserve(rhi::kMaxFramesInFlight);
-    for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
-        if (auto reserved = renderer.reserve(renderer.m_frameSlots.emplace_back(), kFirstArrowCapacity);
-            !reserved) {
+    for (OverlayFrameSlot& slot : renderer.frameSlots) {
+        if (auto reserved = renderer.reserve(slot, kFirstArrowCapacity); !reserved) {
             return fail(OverlayError::GpuFailed, std::move(reserved.error()));
         }
     }
@@ -218,8 +216,7 @@ auto OverlayRenderer::reserve(OverlayFrameSlot& slot, std::size_t arrows) -> Res
 auto OverlayRenderer::prepare(const OverlayDraw& draw) -> Result<void, OverlayError> {
     m_isMeshDrawn = false;
     m_arrowCount = 0;
-    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    OverlayFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    OverlayFrameSlot& slot = frameSlots.advance();
     const bool isMeshDrawn = draw.isMeshShown && (m_meshTriangleVertices > 0 || m_meshLineVertices > 0);
     if (!isMeshDrawn && draw.arrows.empty()) {
         return {};
@@ -249,8 +246,7 @@ void OverlayRenderer::drawPrepared(rhi::CommandList& commands) const {
     if (!m_isMeshDrawn && m_arrowCount == 0) {
         return;
     }
-    expects(m_drawCount > 0, "OverlayRenderer: prepared before it is recorded");
-    const OverlayFrameSlot& slot = m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
+    const OverlayFrameSlot& slot = frameSlots.prepared();
     if (m_isMeshDrawn && m_meshTriangleVertices > 0) {
         commands.setPipeline(m_trianglePipeline.get());
         commands.setBindGroup(kFrameGroup, slot.group.get());

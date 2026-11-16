@@ -8,6 +8,7 @@ nxAddTest(nxRenderTests
         cameraTests.cpp
         decalsTests.cpp
         fogTests.cpp
+        frameSlotsTests.cpp
         enhancedStudioTests.cpp
         gammaTests.cpp
         lightStyleTests.cpp

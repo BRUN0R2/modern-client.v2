@@ -17,6 +17,7 @@ import nx.core;
 import nx.math;
 import nx.rhi;
 import :camera;
+import :frameSlots;
 import :gamma;
 
 namespace nx::render {
@@ -132,7 +133,7 @@ public:
         -> Result<void, OverlayError>;
 
 private:
-    inline OverlayRenderer(rhi::Device& device, ColorEncoding encoding) noexcept
+    inline OverlayRenderer(rhi::Device& device, ColorEncoding encoding)
         : m_device{&device}, m_encoding{encoding} {}
     /// The shader, the frame's bind group layout, and the pipelines of the mesh's triangles and lines and
     /// of the arrows.
@@ -151,10 +152,9 @@ private:
     rhi::OwnedBuffer m_meshLines;     ///< The kept mesh's, in GPU memory.
     std::uint32_t m_meshTriangleVertices = 0;
     std::uint32_t m_meshLineVertices = 0;
-    std::vector<OverlayFrameSlot> m_frameSlots;
+    FrameSlots<OverlayFrameSlot> frameSlots{rhi::kMaxFramesInFlight};
     bool m_isMeshDrawn = false;     ///< By the last prepare.
     std::uint32_t m_arrowCount = 0; ///< Of the last prepare.
-    std::uint64_t m_drawCount = 0;  ///< Prepares so far: the frame slot of the next is this one's.
 };
 
 } // namespace nx::render

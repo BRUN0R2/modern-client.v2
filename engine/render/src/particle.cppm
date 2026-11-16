@@ -18,6 +18,7 @@ import nx.rhi;
 import nx.assets;
 import :camera;
 import :fog;
+import :frameSlots;
 import :gamma;
 import :renderMode;
 
@@ -115,7 +116,7 @@ public:
         -> Result<void, ParticleError>;
 
 private:
-    inline explicit ParticleRenderer(rhi::Device& device) noexcept : m_device{&device} {}
+    inline explicit ParticleRenderer(rhi::Device& device) : m_device{&device} {}
     /// The shader, the bind group layouts, the sampler and the pipelines.
     [[nodiscard]] auto createPipeline(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
         -> Result<void, rhi::RhiError>;
@@ -137,8 +138,7 @@ private:
     rhi::OwnedBindGroup m_dotGroup;
     rhi::OwnedTexture streakImage;
     rhi::OwnedBindGroup streakGroup;
-    std::vector<ParticleFrameSlot> m_frameSlots;
-    std::uint64_t m_drawCount = 0;
+    FrameSlots<ParticleFrameSlot> frameSlots{rhi::kMaxFramesInFlight};
     std::uint32_t m_preparedQuads = 0; ///< Of the last prepare's particles.
     std::uint32_t preparedStreaks = 0; ///< Of the last prepare.
 };

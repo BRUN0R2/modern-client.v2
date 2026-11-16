@@ -68,10 +68,8 @@ auto BloodRenderer::create(rhi::Device& device, const BloodRendererDesc& desc)
     if (auto made = renderer.createPipeline(desc); !made) {
         return fail(BloodError::GpuFailed, std::move(made.error()));
     }
-    renderer.frameSlots.reserve(rhi::kMaxFramesInFlight);
-    for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
-        if (auto reserved = renderer.reserve(renderer.frameSlots.emplace_back(), kFirstDropCapacity);
-            !reserved) {
+    for (BloodFrameSlot& slot : renderer.frameSlots) {
+        if (auto reserved = renderer.reserve(slot, kFirstDropCapacity); !reserved) {
             return fail(BloodError::GpuFailed, std::move(reserved.error()));
         }
     }
@@ -158,8 +156,7 @@ auto BloodRenderer::reserve(BloodFrameSlot& slot, std::size_t drops) -> Result<v
 
 auto BloodRenderer::prepare(const BloodDraw& draw) -> Result<void, BloodError> {
     dropCount = 0;
-    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    BloodFrameSlot& slot = frameSlots[drawCount++ % frameSlots.size()];
+    BloodFrameSlot& slot = frameSlots.advance();
     if (draw.drops.empty()) {
         return {};
     }
@@ -189,8 +186,7 @@ void BloodRenderer::drawPrepared(rhi::CommandList& commands) const {
     if (dropCount == 0) {
         return;
     }
-    expects(drawCount > 0, "BloodRenderer: prepared before it is recorded");
-    const BloodFrameSlot& slot = frameSlots[(drawCount - 1) % frameSlots.size()];
+    const BloodFrameSlot& slot = frameSlots.prepared();
     commands.setPipeline(pipeline.get());
     commands.setBindGroup(kFrameGroup, slot.group.get());
     commands.draw(kQuadVertices, dropCount, 0, 0);

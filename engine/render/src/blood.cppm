@@ -19,6 +19,7 @@ import nx.math;
 import nx.rhi;
 import :camera;
 import :fog;
+import :frameSlots;
 import :gamma;
 import :renderMode;
 
@@ -111,7 +112,7 @@ public:
     [[nodiscard]] auto draw(rhi::CommandList& commands, const BloodDraw& draw) -> Result<void, BloodError>;
 
 private:
-    inline BloodRenderer(rhi::Device& device, ColorEncoding colorEncoding) noexcept
+    inline BloodRenderer(rhi::Device& device, ColorEncoding colorEncoding)
         : gpu{&device}, encoding{colorEncoding} {}
     /// The shader, the bind group layout and the pipeline.
     [[nodiscard]] auto createPipeline(const BloodRendererDesc& desc) -> Result<void, rhi::RhiError>;
@@ -123,8 +124,7 @@ private:
     rhi::OwnedShader shader;
     rhi::OwnedBindGroupLayout frameLayout;
     rhi::OwnedRenderPipeline pipeline;
-    std::vector<BloodFrameSlot> frameSlots;
-    std::uint64_t drawCount = 0;
+    FrameSlots<BloodFrameSlot> frameSlots{rhi::kMaxFramesInFlight};
     std::uint32_t dropCount = 0; ///< Of the last prepare.
 };
 

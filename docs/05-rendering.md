@@ -183,7 +183,9 @@ then the blended things of all of them in one list: the brush entities drawn `kR
 first, then the farthest middle of its bounds first, at one distance by mode (`R_TransEntityCompare`,
 `R_RankForRenderMode`: the others, then TransTexture, TransAdd and Glow), those still tied in the
 order of their renderers, then in their own. The view's own model is drawn after them, by a renderer
-of its own.
+of its own. Each renderer keeps the slots it writes as a ring (`nx.render:frameSlots`), one for each
+prepare the frames in flight may still be reading: a prepare writes the slot after the last prepare's,
+and the draws after it read the one it wrote.
 
 The world descriptor borrows its map for the world's lifetime; studio model descriptors borrow their
 model and texture views through loading, and studio and sprite instances borrow their models through

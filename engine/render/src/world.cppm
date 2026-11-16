@@ -23,6 +23,7 @@ import nx.rhi;
 import nx.assets;
 import :camera;
 import :fog;
+import :frameSlots;
 import :gamma;
 import :lightStyle;
 import :renderMode;
@@ -300,8 +301,9 @@ private:
         std::uint32_t faceCount = 0;
     };
 
-    inline explicit BspWorld(rhi::Device& device, const assets::BspView& map) noexcept
-        : m_device{&device}, m_map{&map} {}
+    /// Of `viewsPerFrame` views a frame (BspWorldDesc's, at least one).
+    inline explicit BspWorld(rhi::Device& device, const assets::BspView& map, std::size_t viewsPerFrame)
+        : m_device{&device}, m_map{&map}, frameSlots{viewsPerFrame * rhi::kMaxFramesInFlight} {}
     /// Where each brush model is drawn this frame, in m_placements: where `placements` puts it, else
     /// where its entity puts it, unturned.
     void place(std::span<const ModelPlacement> placements);
@@ -321,8 +323,6 @@ private:
     [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
     /// The pipeline the decals of a brush entity drawn in `mode` are drawn with.
     [[nodiscard]] auto decalPipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
-    /// The frame slot the last prepare wrote.
-    [[nodiscard]] auto preparedSlot() const noexcept -> const FrameSlot&;
     /// Records the faces of `entity`, with the index buffer bound, each with its texture's frame, and
     /// their decals as the original draws them: a normal entity's after all its faces, as one batch;
     /// another's after each face (DrawSurfaceDecals), as its render mode draws them, a face seen from
@@ -341,8 +341,7 @@ private:
     /// The buffers and bind groups of each view of each frame in flight: the frame's uniform, which
     /// binds `lightmaps`, `lightTable` and `sky`; its indices; its brush models' uniforms.
     [[nodiscard]] auto createFrameSlots(rhi::TextureHandle lightmaps, rhi::TextureHandle lightTable,
-                                        rhi::TextureHandle sky, std::uint32_t viewsPerFrame)
-        -> Result<void, rhi::RhiError>;
+                                        rhi::TextureHandle sky) -> Result<void, rhi::RhiError>;
     /// A bind group for each texture each bucket of `bucketTextures` shows.
     [[nodiscard]] auto createBucketGroups(std::span<const BucketTextures> bucketTextures)
         -> Result<void, rhi::RhiError>;
@@ -380,7 +379,7 @@ private:
     /// For each bucket of faces, a bind group for each texture it shows in turn, and for each of its
     /// alternate sequence.
     std::vector<BucketFrames> m_bucketFrames;
-    std::vector<FrameSlot> m_frameSlots;
+    FrameSlots<FrameSlot> frameSlots;         ///< BspWorldDesc::viewsPerFrame of each frame in flight.
     std::vector<FaceDraw> m_faces;            ///< Every face of the map, by its index.
     std::vector<std::uint32_t> m_faceIndices; ///< The triangles of every face, in the vertex buffer.
     std::vector<ModelDraw> m_models;
@@ -389,9 +388,8 @@ private:
     WorldStats m_stats;
 
     // What each frame gathers, kept to reuse the memory.
-    std::uint64_t m_drawCount = 0;
-    std::vector<std::uint64_t> m_faceGathered; ///< The draw each face was last looked at in.
-    std::vector<ModelPlacement> m_placements;  ///< Of each of m_models, this frame.
+    std::vector<PrepareNumber> faceGathered;  ///< The prepare each face was last looked at in.
+    std::vector<ModelPlacement> m_placements; ///< Of each of m_models, this frame.
     std::optional<assets::LeafIndex> m_visibleFrom;
     assets::LeafSet m_visibleSet;                   ///< What m_visibleFrom may see.
     std::vector<assets::LeafIndex> m_visibleLeaves; ///< Those of m_visibleFrom.
