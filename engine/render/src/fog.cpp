@@ -23,12 +23,12 @@ constexpr float kFromTheEye = 1.0F;
 }
 
 /// How thick `fog` is `past` its start, from 0 to 1, as its curve thickens.
-[[nodiscard]] auto thicknessOf(const Fog& fog, float past) noexcept -> float {
+[[nodiscard]] auto thicknessOf(const Fog& fog, HammerUnits past) noexcept -> float {
     switch (fog.curve) {
     case FogCurve::Linear:
-        return past / (fog.end.value() - fog.start.value());
+        return past / (fog.end - fog.start);
     case FogCurve::Exponential:
-        return 1.0F - std::exp(-fog.density * past);
+        return 1.0F - std::exp(-(fog.density * past));
     case FogCurve::ExponentialSquared: {
         const float scaled = fog.density * past;
         return 1.0F - std::exp(-(scaled * scaled));
@@ -60,7 +60,7 @@ constexpr float kFromTheEye = 1.0F;
                                  .green = between(from.color.green, to.color.green, share),
                                  .blue = between(from.color.blue, to.color.blue, share)},
                .curve = to.curve,
-               .density = between(from.density, to.density, share),
+               .density = FogDensity{between(from.density.value(), to.density.value(), share)},
                .start = HammerUnits{between(from.start.value(), to.start.value(), share)},
                .end = areEndsFinite ? HammerUnits{between(from.end.value(), to.end.value(), share)} : to.end,
                .opacity = between(from.opacity, to.opacity, share)};
@@ -72,13 +72,13 @@ auto isValid(const Fog& fog) noexcept -> bool {
     const bool isLinear = fog.curve == FogCurve::Linear;
     return isShare(fog.color.red) && isShare(fog.color.green) && isShare(fog.color.blue) &&
            std::to_underlying(fog.curve) < std::to_underlying(FogCurve::Count) &&
-           std::isfinite(fog.density) && fog.density >= 0.0F && std::isfinite(fog.start.value()) &&
-           fog.start >= HammerUnits{} && fog.end > fog.start &&
+           std::isfinite(fog.density.value()) && fog.density >= FogDensity{} &&
+           std::isfinite(fog.start.value()) && fog.start >= HammerUnits{} && fog.end > fog.start &&
            (std::isfinite(fog.end.value()) || !isLinear) && isShare(fog.opacity);
 }
 
 auto fogAmountAt(const Fog& fog, HammerUnits distance) noexcept -> float {
-    const float past = std::max(std::min(distance.value(), fog.end.value()) - fog.start.value(), 0.0F);
+    const HammerUnits past = std::max(std::min(distance, fog.end) - fog.start, HammerUnits{});
     return std::clamp(thicknessOf(fog, past), 0.0F, 1.0F) * fog.opacity;
 }
 
@@ -88,11 +88,11 @@ auto fogReachOf(const Fog& fog) noexcept -> HammerUnits {
     const float exponent = -std::log(1.0F - kFogReachThickness);
     float past = fog.end.value() - fog.start.value();
     if (fog.curve == FogCurve::Exponential || fog.curve == FogCurve::ExponentialSquared) {
-        if (fog.density <= 0.0F) {
+        if (fog.density <= FogDensity{}) {
             return fog.start;
         }
         const float reach =
-            (fog.curve == FogCurve::Exponential ? exponent : std::sqrt(exponent)) / fog.density;
+            (fog.curve == FogCurve::Exponential ? exponent : std::sqrt(exponent)) / fog.density.value();
         past = std::min(past, reach);
     }
     return fog.start + HammerUnits{past};
@@ -114,7 +114,7 @@ auto fogBlockOf(const std::optional<Fog>& fog, const Camera& camera, ColorEncodi
                                   .z = encoded(fog->color.blue),
                                   .w = fog->opacity},
                     .shape = Vec4{.x = static_cast<float>(std::to_underlying(fog->curve)),
-                                  .y = fog->density,
+                                  .y = fog->density.value(),
                                   .z = fog->start.value(),
                                   .w = fog->end.value()},
                     .eye = Vec4{.x = camera.position.x,

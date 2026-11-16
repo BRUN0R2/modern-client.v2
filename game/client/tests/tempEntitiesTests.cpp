@@ -88,8 +88,8 @@ TEST_F(TempEntitiesTest, ASprayShowsItsSpriteAboveTheHitAndItsDropsFlyingOff) {
     EXPECT_EQ(spray.origin.x, kSpray.position.x);
     EXPECT_GE(spray.origin.z, kSpray.position.z + 2.0F) << "lifted 2 to 4";
     EXPECT_LE(spray.origin.z, kSpray.position.z + 4.0F);
-    EXPECT_GE(spray.scale, 7.0F / 35.0F - 1e-5F);
-    EXPECT_LE(spray.scale, 7.0F / 25.0F + 1e-5F);
+    EXPECT_GE(spray.scale.value(), (7.0F / 35.0F) - 1e-5F);
+    EXPECT_LE(spray.scale.value(), (7.0F / 25.0F) + 1e-5F);
     EXPECT_GE(spray.color.red, 248U) << "the server's entry plus 1 to 3";
     EXPECT_LE(spray.color.red, 250U);
     EXPECT_EQ(spray.amount, 250U);

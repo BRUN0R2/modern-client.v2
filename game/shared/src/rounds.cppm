@@ -129,16 +129,21 @@ enum class RoundEvent : std::uint8_t {
 
 using RoundEvents = nx::Flags<RoundEvent>;
 
+/// Whole seconds, none below 0, as the game tells a HUD the round's time (the RoundTime message).
+using WholeSeconds = std::chrono::duration<std::uint32_t>;
+/// The whole minutes of such a time, as a clock shows them before its seconds.
+using WholeMinutes = std::chrono::duration<std::uint32_t, std::chrono::minutes::period>;
+
 /// What a player's HUD counts the round's time down from, as the game tells it as the player spawns
 /// and as the round's freeze ends (SyncRoundTimer, the RoundTime message): the whole seconds the
 /// round had left then, and when.
 struct RoundTimer {
-    std::uint32_t seconds{};
+    WholeSeconds left{};
     nx::GameTime toldAt{};
 
     /// The whole seconds it shows at `now`, the game running at `rate`: those told, less the time
     /// since, cut to whole seconds, none below 0, as the original's client counts them down.
-    [[nodiscard]] auto shownAt(nx::GameTime now, nx::TickRate rate) const noexcept -> std::uint32_t;
+    [[nodiscard]] auto shownAt(nx::GameTime now, nx::TickRate rate) const noexcept -> WholeSeconds;
 };
 
 /// The rounds of a map, as its game plays them: one at a time, each frozen as it starts, then running

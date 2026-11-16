@@ -895,8 +895,8 @@ TEST(BspWorldTest, DrawnAsLinearLightAFaceIsItsTextureTimesItsLightAsLight) {
 }
 
 /// The density of a GL_EXP2 fog that hides half of a color `distance` away: (density d)^2 = ln 2.
-[[nodiscard]] auto halfHiddenAt(float distance) -> float {
-    return std::sqrt(std::numbers::ln2_v<float>) / distance;
+[[nodiscard]] auto halfHiddenAt(float distance) -> nx::render::FogDensity {
+    return nx::render::FogDensity{std::sqrt(std::numbers::ln2_v<float>) / distance};
 }
 
 TEST(BspWorldTest, AFaceIsSeenThroughTheFogByHowFarItIsAlongTheView) {

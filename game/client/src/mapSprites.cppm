@@ -31,9 +31,9 @@ struct MapSprite {
     std::string model{}; ///< Its file, "sprites/glow01.spr".
     SpriteClass kind = SpriteClass::Sprite;
     nx::Vec3 origin{};
-    nx::EulerAngles angles{}; ///< An env_sprite's yaw alone is its roll, as the game moves it.
-    float scale = 0.0F;
-    float framerate = 0.0F; ///< Frames a second.
+    nx::EulerAngles angles{};  ///< An env_sprite's yaw alone is its roll, as the game moves it.
+    nx::Scale scale{};         ///< Times its sprite's size; 0 is 1.
+    nx::PerSecond framerate{}; ///< Its frames a second.
     nx::render::RenderMode mode = nx::render::RenderMode::Normal;
     nx::render::RenderEffect effect = nx::render::RenderEffect::None;
     std::uint8_t amount = 0;

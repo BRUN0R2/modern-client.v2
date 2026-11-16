@@ -63,7 +63,6 @@ constexpr float kMostDamage = 115.0F;
 constexpr float kMostRoundsAMinute = 900.0F;
 constexpr float kMostMoveSpeed = 260.0F;
 
-constexpr std::uint32_t kSecondsAMinute = 60;
 constexpr std::size_t kThousandDigits = 3;
 
 // How long a notice shows, the last of it fading.
@@ -251,8 +250,8 @@ void paintHeader(Paint& paint, const BuyMenuFrame& frame) {
                       topFor(BuyMenuFont::Body), paint.accent());
     pen = paint.write(BuyMenuFont::Body, "Time to buy ", pen + paint.px(kHeaderTextGap),
                       topFor(BuyMenuFont::Body), kMenuInkSoft);
-    std::ignore = paint.write(BuyMenuFont::Body, clockText(frame.secondsLeft), pen, topFor(BuyMenuFont::Body),
-                              kMenuInk);
+    std::ignore =
+        paint.write(BuyMenuFont::Body, clockText(frame.timeLeft), pen, topFor(BuyMenuFont::Body), kMenuInk);
 
     const nx::Pixels end = header.x + header.wide;
     const nx::Pixels moneyTop = topFor(BuyMenuFont::Headline);
@@ -558,8 +557,9 @@ auto dollarsText(nx::Money money) -> std::string {
     return std::format("${}", digits);
 }
 
-auto clockText(std::uint32_t seconds) -> std::string {
-    return std::format("{}:{:02}", seconds / kSecondsAMinute, seconds % kSecondsAMinute);
+auto clockText(WholeSeconds time) -> std::string {
+    const auto minutes = std::chrono::duration_cast<WholeMinutes>(time);
+    return std::format("{}:{:02}", minutes.count(), (time - minutes).count());
 }
 
 auto shareText(float share) -> std::string {
