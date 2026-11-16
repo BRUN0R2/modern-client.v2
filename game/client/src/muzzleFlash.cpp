@@ -70,7 +70,7 @@ template <class Number>
                             .time = kMuzzleFlashTime,
                             .roll = sprite == 0 ? kRifleRoll : kOtherRoll,
                             .rollRate = nx::DegreesPerSecond{},
-                            .brightness = 1.0F,
+                            .brightness = kAsMadeBrightness,
                             .light = std::nullopt};
 }
 
@@ -152,15 +152,11 @@ auto muzzleFlashStyleOf(std::string_view options, const std::optional<MuzzleFlas
     }
     if (look) {
         over(style.sprite, look->sprite);
-        if (look->scale) {
-            style.scale = nx::Scale{*look->scale};
-        }
+        over(style.scale, look->scale);
         if (look->firstFrame) {
             style.firstFrame = look->firstFrame;
         }
-        if (look->frameRate) {
-            style.frameRate = FlashFrameRate{*look->frameRate};
-        }
+        over(style.frameRate, look->frameRate);
         over(style.time, look->time);
         over(style.roll, look->roll);
         over(style.rollRate, look->rollRate);

@@ -389,7 +389,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                                                      .scale = shown.scale,
                                                      .mode = nx::render::RenderMode::TransAdd,
                                                      .amount = kFullAmount,
-                                                     .brightness = shown.brightness});
+                                                     .brightness = shown.brightness.value()});
     }
     if (auto prepared = m_viewSprites.prepare({.camera = view.camera,
                                                .aspect = view.aspect,

@@ -163,13 +163,13 @@ light = {{ color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 }}
     ASSERT_TRUE(weapon->view.muzzleFlash.has_value());
     const cs::MuzzleFlashLook& look = *weapon->view.muzzleFlash;
     EXPECT_EQ(look.sprite, "sprites/muzzleflash341.spr");
-    EXPECT_EQ(look.scale, 0.16F);
+    EXPECT_EQ(look.scale, nx::Scale{0.16F});
     EXPECT_EQ(look.firstFrame, 0U);
-    EXPECT_EQ(look.frameRate, 30.0F);
+    EXPECT_EQ(look.frameRate, cs::FlashFrameRate{30.0F});
     EXPECT_EQ(look.time, nx::Seconds{0.4F});
     EXPECT_EQ(look.roll, nx::Degrees{0.0F});
     EXPECT_EQ(look.rollRate, nx::DegreesPerSecond{-45.0F}) << "clockwise";
-    EXPECT_EQ(look.brightness, 6.0F);
+    EXPECT_EQ(look.brightness, nx::Scale{6.0F});
     ASSERT_TRUE(look.light.has_value());
     EXPECT_EQ(look.light->color, (std::array{3000.0F, 1800.0F, 600.0F}));
     EXPECT_EQ(look.light->reach, nx::HammerUnits{96.0F});
@@ -180,7 +180,7 @@ light = {{ color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 }}
         weaponText(kGunKeys, "", std::format("{}muzzleFlash = {{ brightness = 4.0 }}\n", kGunView)),
         "gun.toml");
     ASSERT_TRUE(bright.has_value()) << nx::describe(bright.error());
-    EXPECT_EQ(bright->view.muzzleFlash->brightness, 4.0F);
+    EXPECT_EQ(bright->view.muzzleFlash.value_or(cs::MuzzleFlashLook{}).brightness, nx::Scale{4.0F});
     EXPECT_FALSE(bright->view.muzzleFlash->sprite.has_value());
 }
 
