@@ -295,7 +295,7 @@ TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
     ASSERT_GT(pixelAt(expected, kMiddle, kMiddle)[3], 0) << "the model shows";
     ASSERT_NO_FATAL_FAILURE(loadCrowdOf(**device, *scene));
     // Half of a sequence's frames, in 256ths; its move ended where the second half of it started.
-    constexpr float kHalfOfTheFrames = 128.0F;
+    constexpr nx::render::EntityFrame kHalfOfTheFrames{128.0F};
     const nx::render::CrowdBody body{.previousOrigin = kOrigin,
                                      .origin = kOrigin,
                                      .frame = kHalfOfTheFrames,
@@ -326,7 +326,7 @@ TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
     // a second is half a frame, where the body above shows.
     constexpr nx::Seconds kSixtyFourth{1.0F / 64.0F};
     nx::render::CrowdBody played = body;
-    played.frame = 0.0F;
+    played.frame = nx::render::EntityFrame{};
     played.advancedAgo = kSixtyFourth;
     played.framerate = nx::Scale{2.0F};
     ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, played, 3, 1, kSixtyFourth));
