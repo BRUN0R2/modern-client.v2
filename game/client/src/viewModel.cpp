@@ -224,8 +224,9 @@ auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, n
             row.y = -row.y;
         }
     }
-    return cs::poseBones(cs::skeletonOf(model), played, m_animations[sequence],
-                         {.frame = cs::sequenceFrameAt(played, intoIt, 1.0F), .placement = placement});
+    return cs::poseBones(
+        cs::skeletonOf(model), played, m_animations[sequence],
+        {.frame = cs::sequenceFrameAt(played, intoIt, cs::kOwnSpeed), .placement = placement});
 }
 
 auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from, float to)
@@ -258,10 +259,10 @@ auto ViewModelEvents::passed(const ViewModel* viewModel, const std::optional<Vie
         return {};
     }
     const nx::assets::StudioSequence& sequence = viewModel->sequence(pose->sequence);
-    const float now = sequenceFrameAt(sequence, pose->intoIt, 1.0F).value();
+    const float now = sequenceFrameAt(sequence, pose->intoIt, kOwnSpeed).value();
     // A play already passed goes on from the frame it was at; a new one plays its events from its first.
     const float before = m_lastPose && m_lastPose->isSamePlay(*pose)
-                             ? sequenceFrameAt(sequence, m_lastPose->intoIt, 1.0F).value()
+                             ? sequenceFrameAt(sequence, m_lastPose->intoIt, kOwnSpeed).value()
                              : kBeforeTheFirstFrame;
     m_lastPose = pose;
     return clientEventsBetween(sequence, before, now) |

@@ -113,7 +113,7 @@ constexpr std::size_t kLongestSequenceLabel = 32;
 void playTorso(PlayerAnimation& animation, nx::assets::SequenceIndex sequence,
                const PlayerAnimationContext& context) {
     animation.torso.sequence = sequence;
-    animation.torso.frame = 0.0F;
+    animation.torso.frame = EntityFrame{};
     resetSequence(animation.torso, context.model->sequences()[sequence.value], context.now);
 }
 
@@ -240,7 +240,7 @@ void playTorso(PlayerAnimation& animation, nx::assets::SequenceIndex sequence,
 
 void spawnAnimation(PlayerAnimation& animation) noexcept {
     animation.gaitSequence = nx::assets::SequenceIndex{};
-    animation.gait.frame = 0.0F;
+    animation.gait.frame = SequenceFrame{};
     animation.gait.yaw = 0.0F;
     animation.gait.movement = 0.0F;
     animation.gait.previousOrigin = nx::Vec3{};
@@ -271,7 +271,7 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
         }
         desired = desiredSequence(held, Posture::Standing, context).value_or(nx::assets::SequenceIndex{});
         if (animation.torso.sequence != desired || !animation.torso.isLooping) {
-            animation.torso.frame = 0.0F;
+            animation.torso.frame = EntityFrame{};
         }
         animation.gaitSequence = sequenceOf(Activity::Hop, context, random);
         animation.activity = ideal;
@@ -283,7 +283,7 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
     } else if (ideal == Activity::Reload) {
         desired = desiredSequence("reload", Posture::AsItIs, context).value_or(nx::assets::SequenceIndex{});
         if (animation.torso.sequence != desired || !animation.torso.isLooping) {
-            animation.torso.frame = 0.0F;
+            animation.torso.frame = EntityFrame{};
         }
         animation.activity = ideal;
     } else if (ideal == Activity::Walk) {
@@ -363,7 +363,8 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
 }
 
 void processGait(Gait& gait, const nx::assets::MdlView& model, nx::assets::SequenceIndex gaitSequence,
-                 nx::Vec3 origin, nx::EulerAngles angles, nx::Seconds frameTime, float framerate) noexcept {
+                 nx::Vec3 origin, nx::EulerAngles angles, nx::Seconds frameTime,
+                 nx::Scale framerate) noexcept {
     const double frame = std::clamp(static_cast<double>(frameTime.count()), 0.0, kLongestGaitFrame);
     // StudioEstimateGait.
     if (frame == 0.0) {
@@ -437,15 +438,16 @@ void processGait(Gait& gait, const nx::assets::MdlView& model, nx::assets::Seque
         return;
     }
     const nx::assets::StudioSequence& sequence = sequences[gaitSequence.value];
-    const auto frames = static_cast<float>(sequence.frameCount);
+    const SequenceFrame frames{static_cast<float>(sequence.frameCount)};
     if (sequence.linearMovement.x > 0.0F) {
-        gait.frame += (gait.movement / sequence.linearMovement.x) * frames;
+        gait.frame += frames * (gait.movement / sequence.linearMovement.x);
     } else {
-        gait.frame = static_cast<float>(static_cast<double>(gait.frame) +
-                                        (static_cast<double>(framerate * sequence.fps) * frame));
+        gait.frame = SequenceFrame{
+            static_cast<float>(static_cast<double>(gait.frame.value()) +
+                               (static_cast<double>(framerate.value() * sequence.fps) * frame))};
     }
-    gait.frame -= std::trunc(gait.frame / frames) * frames;
-    if (gait.frame < 0.0F) {
+    gait.frame -= frames * std::trunc(gait.frame / frames);
+    if (gait.frame < SequenceFrame{}) {
         gait.frame += frames;
     }
 }
