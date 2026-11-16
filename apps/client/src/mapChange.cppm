@@ -24,7 +24,7 @@ enum class MapAskedStage : std::uint8_t {
 enum class MapSwitch : std::uint8_t {
     Stay,  ///< What it played: a map, or none.
     Play,  ///< The map just loaded.
-    Leave, ///< No map: `disconnect` left the map played, or the one just loaded.
+    Leave, ///< No map: `disconnect` left the map played.
 };
 
 /// What loads a map asked for: the map `name`, its agents' mesh read from the cache or not as `kept` says.
@@ -36,9 +36,10 @@ using MapLoader = std::move_only_function<nx::Result<std::unique_ptr<Played>, nx
 /// The map the client plays, `Played` (a Session), and how it changes as the console's `map`, `nav_generate`
 /// and `disconnect` ask. A frame carries a change out in this order, as the client's run does:
 ///  1. loadAsked(): the map a frame told loading is loaded, to be played from this frame;
-///  2. the console's commands run: those that follow a map asked for wait for it to be loaded, the console
-///     held (nx::console::Console::hold) whoever runs it, so that they act on it (actedOn());
-///  3. switchMap(), when switchDue() says that one is due: the client plays what was asked for from now on;
+///  2. the console's commands run, but those that follow a change of the map played: the console holds them
+///     (nx::console::Console::hold), whoever runs it, until the change is made;
+///  3. switchMap(), when switchDue() says that one is due: the client plays what was asked for from now on,
+///     and the commands held run from the next frame on, on the map played (played());
 ///  4. frameShown(): the frame drawn told that the map asked for is loading.
 /// A template so that what a map played is does not matter to how it changes: the tests change stand-ins of
 /// no game. It stays where it is made: the console's commands point into it.
@@ -91,8 +92,8 @@ public:
                      }),
                  console.registerCommand(
                      {.name = "disconnect", .description = "Leaves the map played."},
-                     [this](Console&, const CommandLine&) -> nx::Result<void, ConsoleError> {
-                         leave();
+                     [this](Console& asking, const CommandLine&) -> nx::Result<void, ConsoleError> {
+                         leave(asking);
                          return {};
                      }),
              }) {
@@ -103,22 +104,9 @@ public:
         return {};
     }
 
-    /// The map the frames play; none on the menu.
+    /// The map the frames play, and the console's commands act on, as a change of it holds those that follow
+    /// until it is made; none on the menu.
     [[nodiscard]] auto played() const noexcept -> Played* { return playing ? playing->map.get() : nullptr; }
-
-    /// The map the console's commands act on: the one just loaded, played from this frame's switch, as the
-    /// commands that follow `map` act on it; none once `disconnect` asked; else the map played, or none.
-    [[nodiscard]] auto actedOn() const noexcept -> Played* {
-        switch (due) {
-        case MapSwitch::Play:
-            return loaded->map.get();
-        case MapSwitch::Leave:
-            return nullptr;
-        case MapSwitch::Stay:
-            break;
-        }
-        return played();
-    }
 
     /// The name of the map asked for, while it is on its way; none else.
     [[nodiscard]] auto askedMap() const noexcept -> std::optional<std::string_view> {
@@ -129,38 +117,41 @@ public:
     }
 
     /// Loads the map asked for, once a frame told that it is loading, to be played from this frame's switch;
-    /// logged. One that cannot be loaded leaves the client where it was, and its commands no longer wait.
-    /// Errors: those of the loader.
+    /// logged, the commands that follow it held until then. One that cannot be loaded leaves the client where
+    /// it was, and its commands no longer wait. Errors: those of the loader.
     [[nodiscard]] auto loadAsked() -> nx::Result<void, nx::console::ConsoleError> {
         if (!asked || asked->stage != MapAskedStage::ToldLoading) {
             return {};
         }
-        // Its hold ends with this call: the commands that follow it run, on it or where the client was.
-        const AskedMap map = *std::exchange(asked, std::nullopt);
+        AskedMap map = *std::exchange(asked, std::nullopt);
         nx::log::info(kLog, "loading the map {}", map.name);
         auto made = load(map.name, map.kept);
         if (!made) {
-            return std::unexpected{std::move(made.error())};
+            return std::unexpected{std::move(made.error())}; // its hold ends: the commands run where it was
         }
-        loaded = PlayedMap{.name = map.name, .map = std::move(*made)};
-        due = MapSwitch::Play;
+        due = DueSwitch{
+            .kind = MapSwitch::Play,
+            .loaded = PlayedMap{.name = std::move(map.name), .map = std::move(*made)},
+            .hold = std::move(map.hold),
+        };
         return {};
     }
 
     /// What the frame's switch plays from now on.
-    [[nodiscard]] auto switchDue() const noexcept -> MapSwitch { return due; }
+    [[nodiscard]] auto switchDue() const noexcept -> MapSwitch { return due ? due->kind : MapSwitch::Stay; }
 
     /// Plays from now on what is due (switchDue), which is logged: the map loaded, or none. The map played
-    /// before goes. Expects a switch due.
+    /// before goes, and the commands held for the change run from the console's next run. Expects a switch
+    /// due.
     void switchMap() {
-        nx::expects(due != MapSwitch::Stay, "MapChange::switchMap: a switch is due");
-        if (due == MapSwitch::Play) {
-            nx::log::info(kLog, "playing the map {}", loaded->name);
+        nx::expects(due.has_value(), "MapChange::switchMap: a switch is due");
+        DueSwitch made = *std::exchange(due, std::nullopt);
+        if (made.kind == MapSwitch::Play) {
+            nx::log::info(kLog, "playing the map {}", made.loaded->name);
         } else if (playing) {
             nx::log::info(kLog, "left the map {}", playing->name);
         }
-        due = MapSwitch::Stay;
-        playing = std::exchange(loaded, std::nullopt);
+        playing = std::move(made.loaded);
     }
 
     /// The frame drawn told that the map asked for is loading, or none did while the window shows none: the
@@ -187,6 +178,14 @@ private:
         nx::console::CommandHold hold;
     };
 
+    /// The switch due at this frame's: what it plays from then on, the map loaded for it to play, and the
+    /// hold of the console's commands that follow the change, which ends once it is made.
+    struct DueSwitch {
+        MapSwitch kind = MapSwitch::Play;
+        std::optional<PlayedMap> loaded; ///< For Play.
+        nx::console::CommandHold hold;
+    };
+
     static constexpr nx::log::Category kLog{"client"};
 
     /// Asks for the map `name`, its agents' mesh read from the cache or not as `kept` says, in place of one
@@ -196,20 +195,18 @@ private:
         asked = AskedMap{.name = std::move(name), .kept = kept, .hold = console.hold()};
     }
 
-    /// Leaves the map the commands act on from this frame's switch, as the original leaves a game; nothing
-    /// without one.
-    void leave() noexcept {
-        if (actedOn() == nullptr) {
+    /// Leaves the map played from this frame's switch, as the original leaves a game, `console` holding the
+    /// commands that follow until then; nothing without one.
+    void leave(nx::console::Console& console) {
+        if (!playing) {
             return;
         }
-        loaded.reset();
-        due = MapSwitch::Leave;
+        due = DueSwitch{.kind = MapSwitch::Leave, .loaded = std::nullopt, .hold = console.hold()};
     }
 
     MapLoader<Played> load;
     std::optional<PlayedMap> playing; ///< None on the menu.
-    std::optional<PlayedMap> loaded;  ///< While `due` is Play.
-    MapSwitch due = MapSwitch::Stay;  ///< At this frame's switch.
+    std::optional<DueSwitch> due;     ///< None while what is played stays.
     std::optional<AskedMap> asked;    ///< While it is on its way.
 };
 

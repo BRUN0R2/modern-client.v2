@@ -330,7 +330,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     // The bots of the map loaded last, as the commands that follow `map` on a line act on it.
     bots.emplace(readBotRules(dataFolder), *m_jobs, settings->bots);
     if (auto registered =
-            bots->registerCommands(m_console, [this]() -> Session* { return mapChange.actedOn(); });
+            bots->registerCommands(m_console, [this] -> Session* { return mapChange.played(); });
         !registered) {
         return registered;
     }
@@ -348,7 +348,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return registered;
     }
     if (auto registered = registerZombieCommands(m_console, *m_content, dataFolder, *m_jobs,
-                                                 [this]() -> Session* { return mapChange.actedOn(); });
+                                                 [this] -> Session* { return mapChange.played(); });
         !registered) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }

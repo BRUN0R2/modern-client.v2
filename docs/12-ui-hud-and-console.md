@@ -497,9 +497,11 @@ the menu by what runs it (`app.client:options`, the client's cvars), so that the
 which plays the map again) only asks for the map: the next frame tells that it is loading, over the menu's
 background, the game's name where the menu writes it and `LOADING` and the map's name where its items stand; the
 frame after loads it, and the screen stays as told until the first frame of the map shows. The console's commands
-that follow on the same line run once the map is loaded, so that they act on it (`map de_dust2; bot_add`), as the
-original's run after its own loading: the console holds them until then (`nx::console::Console::hold`), whoever runs
-it, so the start too leaves those that follow a map `autoexec.cfg` or `+map` asks for to the frames. A map that
+that follow on the same line run once the map is played, from the frame after the one that loads it, so that they
+act on it (`map de_dust2; bot_add`, `map de_aztec; nav_generate`), as the original's run after its own loading;
+those that follow `disconnect` run once the map is left, on none. The console holds them until the change is made
+(`nx::console::Console::hold`), whoever runs it, so the start too leaves those that follow a map `autoexec.cfg` or
+`+map` asks for to the frames, and every command acts on the map shown, the one the client plays. A map that
 cannot be loaded is reported as its command would report it, on the console, and the client stays where it was: on
 its menu when it plays no map. The screen does not move while the map loads: a bar that follows the loading comes
 with loading off the main thread. The change of map has named states of its own (`app.client:mapChange`): a map
