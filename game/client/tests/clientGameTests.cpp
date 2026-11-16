@@ -185,6 +185,10 @@ TEST_F(ClientGameTest, WhatTheTicksMadeIsKeptUntilTheFrameTakesIt) {
     const cs::GameSound second{.files = {"second.wav"}};
     cs::PlayerSnapshot tick1 = snapshotAt(1, {});
     tick1.sounds = {cs::SoundMade{.sound = &first, .at = tick1.time}};
+    tick1.playerSounds = {
+        cs::PlayerSound{.player = cs::PlayerIndex{2},
+                        .made = {.sound = &second, .at = tick1.time, .volume = nx::Gain{0.5F}},
+                        .position = {.x = 64.0F}}};
     tick1.impacts = {cs::Impact{.position = {.x = 1.0F}}};
     tick1.turnedView = nx::EulerAngles{.yaw = nx::Degrees{90.0F}};
     tick1.killNotices = {cs::KillNotice{.victim = {.name = "First"}}};
@@ -200,6 +204,13 @@ TEST_F(ClientGameTest, WhatTheTicksMadeIsKeptUntilTheFrameTakesIt) {
     EXPECT_EQ(sounds[0].sound, &first);
     EXPECT_EQ(sounds[1].sound, &second);
     EXPECT_TRUE(client.takeSounds().empty());
+    const std::vector<cs::PlayerSound> heard = client.takePlayerSounds();
+    ASSERT_EQ(heard.size(), 1U);
+    EXPECT_EQ(heard[0].player, cs::PlayerIndex{2});
+    EXPECT_EQ(heard[0].made.sound, &second);
+    EXPECT_FLOAT_EQ(heard[0].made.volume.value(), 0.5F);
+    EXPECT_FLOAT_EQ(heard[0].position.x, 64.0F);
+    EXPECT_TRUE(client.takePlayerSounds().empty());
     const std::vector<cs::Impact> impacts = client.takeImpacts();
     ASSERT_EQ(impacts.size(), 2U);
     EXPECT_FLOAT_EQ(impacts[1].position.x, 2.0F);

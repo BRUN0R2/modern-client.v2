@@ -683,7 +683,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_camera.position = session->client.eye();
             session->client.updatePlayers(elapsed, settings->corpses.stayTime(), m_players);
             turnAsTheGameDid();
-            sounds->hear(*session, hearing);
+            sounds->hear(*session, hearing, kickedCamera());
             // r_decals as it is now, as the original reads it at each decal.
             m_scene->setDecalLimit(decalLimitOf(settings->client.video));
             stampMarks(*session, *m_scene, *m_content, m_bulletHoles);

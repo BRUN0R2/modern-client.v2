@@ -22,7 +22,7 @@ viewHand = "right"
 drawSequences = [3] # draw
 idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
 idlesWhenEmpty = true
-drawSound = { files = ["weapons/knife_deploy1.wav"], channel = "item", volume = 0.3 } # Deploy
+drawSound = { files = ["weapons/knife_deploy1.wav"], channel = "item", volume = 0.3, attenuation = 2.4 } # Deploy
 
 [melee.slash] # +attack (Swing): a miss and a hit play the same sequences, in turn
 reach = 48.0

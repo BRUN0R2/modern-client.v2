@@ -22,13 +22,13 @@ export namespace cs {
 
 /// How a player's model plays where the server's traces meet it, as its entity holds it: the model,
 /// none when it could not be read (its box alone then); its torso's sequence (pev->sequence) at its frame
-/// (pev->frame, of kFrameScale); its legs' gait sequence (pev->gaitsequence) and the way they face
+/// (pev->frame); its legs' gait sequence (pev->gaitsequence) and the way they face
 /// (m_flGaityaw, degrees); the aim's blends (m_flYaw, m_flPitch); and how its body is turned (pev->angles:
 /// the pitch a third of the view's, negated).
 struct PlayerPose {
     const PlayedModel* model = nullptr;
     nx::assets::SequenceIndex sequence{};
-    float frame = 0.0F;
+    EntityFrame frame{};
     nx::assets::SequenceIndex gaitSequence{};
     float gaitYaw = 0.0F;
     float yawBlend = 0.0F;

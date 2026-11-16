@@ -466,8 +466,11 @@ TEST(WeaponsTest, TheRepositorysWeaponsSoundAsTheOriginals) {
     EXPECT_EQ(knife.view.drawSound->files, Files{"weapons/knife_deploy1.wav"});
     EXPECT_EQ(knife.view.drawSound->channel, cs::SoundChannel::Item);
     EXPECT_FLOAT_EQ(knife.view.drawSound->volume.value(), 0.3F);
+    EXPECT_FLOAT_EQ(cs::attenuationOf(*knife.view.drawSound).value(), 2.4F)
+        << "Deploy's, heard 416 units away";
     for (const cs::MeleeAttack* const attack : {&knife.melee->slash, &knife.melee->stab}) {
         ASSERT_TRUE(attack->missSound.has_value());
+        EXPECT_EQ(cs::attenuationOf(*attack->missSound), cs::kNormalAttenuation) << "ATTN_NORM's";
         EXPECT_EQ(attack->missSound->files, (Files{"weapons/knife_slash1.wav", "weapons/knife_slash2.wav"}));
         EXPECT_EQ(attack->missSound->channel, cs::SoundChannel::Weapon);
         ASSERT_TRUE(attack->missSound->pitch.has_value());

@@ -67,8 +67,10 @@ precision at the WAV's own instants.
 
 The player's own sounds come from the game as data, `cs::GameSound` (`cs.shared:sounds`): its
 files, one at random, its channel of the player (`auto`, `weapon`, `voice`, `item`, `body`), its
-volume (`nx::Gain`, at most as recorded) and its pitch range, in hundredths of the recorded speed
-(`cs::SoundPitch`: the original's 100 normal, 255 at most), and the noise an agent that hears it takes it for (`noise`, `cs::NoiseKind`: a step, a hard
+volume (`nx::Gain`, at most as recorded), how fast it fades with distance (`attenuation`, `nx::Attenuation`,
+§3: without one, the original's `ATTN_NORM`, 0.8, as most of its sounds; the knife's draw has 2.4, as
+ReGameDLL_CS's `Deploy`), its pitch range, in hundredths of the recorded speed (`cs::SoundPitch`: the
+original's 100 normal, 255 at most), and the noise an agent that hears it takes it for (`noise`, `cs::NoiseKind`: a step, a hard
 landing, a shot, a quiet one, a dry fire; docs/10 §11), none for a sound agents do not heed. The game
 says which sound it makes; `cs::ClientAudio` chooses the file and the pitch with its
 own random numbers, as the original's client and engine choose them, so that hearing never changes
@@ -138,7 +140,18 @@ disappears and returns.
 
 **Today**, the channels: the sounds the client plays take their voices as the original's engine
 chooses a channel for each (§2): a sound on a channel of its maker replaces the one its maker plays
-there, but on `Auto`. The player is the only maker heard yet.
+there, but on `Auto`. Each player is a maker of its own, and another's sound never takes a voice that
+still plays one of the player's own, as the original keeps its view entity's sounds from the others'
+(`cs::voiceFor`); when every voice holds one, the other's is not played and is reported
+(`PlayError::NoVoice`).
+
+**Today**, the attenuations: a sound fades in a straight line from its volume where it is made to
+nothing at its reach, 1000 units (`nx::kNominalSoundReach`) over its attenuation (`nx::Attenuation`,
+§5). The original names four, as AMX Mod X's
+documentation of `emit_sound` lists them: `ATTN_NONE` 0, heard everywhere at its volume; `ATTN_NORM`
+0.8, 1250 units; `ATTN_STATIC` 1.25, 800 units; `ATTN_IDLE` 2, 500 units. The game's sounds are
+`ATTN_NORM`'s but the knife's draw (2.4, 416 units); a sound may be attenuated up to 4, as the
+original's server refuses more.
 
 **Today**, the footsteps: the movement says each step of the player's feet, where it is and where
 it stood ([07 §3.1](07-simulation-and-physics.md#31-purity-requirements)); the local game looks up
@@ -186,6 +199,29 @@ takes a channel; the pool's size, the priorities and the metric come with this p
 
 Geometry occlusion (`s_occlusion 1`) is **optional and off by default**, because it changes
 the competitive information relative to the original.
+
+**Today**, `legacy`, the only mode (`nx::audio::legacyGains`), as the original's stereo spatialization
+behaves (learned from the GPL engines that reimplement it, Quake's and Xash3D's, consulted and not
+copied: [20 §3](20-legal-and-licensing.md#3-clean-room)): a sound of volume *v* made *d* units from
+the listener, attenuated by *a*, is heard in each ear at *v* × (1 − *d* × *a* / 1000) × (1 ± *s*), each
+ear from 0 to 1, where *s* is the share of the way to the sound that goes to the listener's right: the
+ear it is on gets up to twice the rest, the other less, nothing at all from straight to one side. The
+listener is the view the frame draws, the weapon's kick included: its eye, and the way to its right
+(the original's client hears from its refdef). The player's own sounds are heard at their volume in
+both ears, as the original's view entity's are. The server tells each client the sounds the other
+players made in the tick (`cs::PlayerSnapshot::playerSounds`: whose, the sound with its moment and
+volume, and where its maker was, the middle of its box, as the original's server sends a sound with
+its entity), every one until interest management keeps those in its potentially audible set
+([08 §6.2](08-networking.md#62-interest-management)); the client plays each at the moment of its tick
+(§2) from where it was made, on its channel of its maker (§3), and not at all when neither ear would
+hear it as it starts, as the original drops one out of reach. Their reloads are the reloading player's
+alone, as in the original: its view model plays them (5004), and neither the players' models nor the
+weapons' player models (`p_*.mdl`) the others see have a sound event (none in the installation's).
+
+Not yet as the original: a sound follows neither its maker nor the listener as it plays
+([TODO](TODO.md)); a sound of no attenuation is not panned (Quake's engine pans one, Xash3D's does not:
+to be measured on the original, and no sound of the game is made so yet); and the guns' shots, which
+the original's client events play, fade as `ATTN_NORM`'s until how far they carry is measured on it.
 
 ## 6. Formats
 

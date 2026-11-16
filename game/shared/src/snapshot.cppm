@@ -17,6 +17,7 @@ import :buying;
 import :inventory;
 import :rounds;
 import :sounds;
+import :studio;
 import :hostages;
 import :weapons;
 import :characters;
@@ -107,6 +108,15 @@ struct BloodMark {
     [[nodiscard]] inline auto operator==(const BloodMark&) const noexcept -> bool = default;
 };
 
+/// A sound another player made in the tick, as the original's server sends a client a sound with its
+/// entity (svc_sound): whose it is, the sound with its moment and how loud it was made, and where its
+/// maker was as it made it, which it is heard from.
+struct PlayerSound {
+    PlayerIndex player{};
+    SoundMade made{};
+    nx::Vec3 position{};
+};
+
 /// A player as a kill notice names it: as it was at the kill.
 struct NoticedPlayer {
     std::string name{};
@@ -172,9 +182,9 @@ struct PlayerEntityState {
     nx::Vec3 origin{};
     nx::EulerAngles angles{};
     nx::assets::SequenceIndex sequence{};
-    float frame = 0.0F; ///< Of kFrameScale.
+    EntityFrame frame{};
     nx::GameTime advancedAt{};
-    float framerate = 1.0F;
+    nx::Scale framerate{kOwnSpeed};
     nx::assets::SequenceIndex gaitSequence{};
     bool isDead = false;
 
@@ -218,8 +228,8 @@ struct ShownCrowd {
 
 /// What the server tells a player's client after a tick: the moment of the game; the player, where it
 /// is and how it moves, what it has and its weapons, and what its HUD was told of the round's time;
-/// what the tick did to it and made it make; where the tick's shots and the blood they shed met what is
-/// solid, and the blood they sprayed; and the world
+/// what the tick did to it and made it make; the sounds the other players made; where the tick's shots
+/// and the blood they shed met what is solid, and the blood they sprayed; and the world
 /// it sees: the brush entities, the hostages, the other players and the light-style patterns.
 struct PlayerSnapshot {
     nx::GameTime time{}; ///< After the tick.
@@ -241,6 +251,9 @@ struct PlayerSnapshot {
     /// The sounds it made in the tick, which it hears, each with the moment it was made: its weapons',
     /// then its breath's, its feet's, its use's, its pain's and its death's.
     std::vector<SoundMade> sounds{};
+    /// The sounds the other players made in the tick, which it hears where they were made: all of them, by
+    /// player and each's as it made them, until interest management keeps those it may hear.
+    std::vector<PlayerSound> playerSounds{};
     std::vector<Impact> impacts{};              ///< Of the tick's shots, in their order.
     std::vector<BloodMark> bloodMarks{};        ///< Of the tick's hits, in their order.
     std::vector<BloodSpray> bloodSprays{};      ///< Of the tick's hits, in their order.

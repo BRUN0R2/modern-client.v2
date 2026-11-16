@@ -104,10 +104,10 @@ TEST_F(PlayerModelTest, ADuckedPlayerAimsCrouchedItsLegsCrouching) {
 TEST_F(PlayerModelTest, AShotPlaysFromItsStartAndTheTorsoKeepsItWhileItRuns) {
     cs::PlayerAnimation animation;
     play(animation, PlayerAction::Idle, standing());
-    animation.torso.frame = 100.0F;
+    animation.torso.frame = cs::EntityFrame{100.0F};
     play(animation, PlayerAction::Attack1, standing());
     EXPECT_EQ(animation.torso.sequence, sequence("ref_shoot_knife"));
-    EXPECT_EQ(animation.torso.frame, 0.0F);
+    EXPECT_EQ(animation.torso.frame, cs::EntityFrame{});
     EXPECT_EQ(animation.lastFired, standing().now);
     // Running within 4 seconds of it: the shot plays on, the legs run.
     play(animation, PlayerAction::Walk, standing(200.0F));
@@ -222,43 +222,59 @@ TEST_F(PlayerModelTest, InDeepWaterAStillPlayerHoversAndAMovingOneSwims) {
 TEST_F(PlayerModelTest, TheLegsFaceTheWayThePlayerMovesTheAimTurnedTowardsTheBody) {
     cs::Gait gait;
     cs::processGait(gait, model(), sequence("walk"), {.x = 10.0F}, {.yaw = nx::Degrees{90.0F}},
-                    nx::Seconds{0.01F}, 1.0F);
+                    nx::Seconds{0.01F}, cs::kOwnSpeed);
     EXPECT_NEAR(gait.yaw, 0.0F, kTolerance);
     EXPECT_NEAR(gait.movement, 10.0F, kTolerance);
     // The body 90 degrees to the left of the legs: the yaw's blend at its end (0), the pitch's middle.
     EXPECT_NEAR(gait.yawBlend, 0.0F, kTolerance);
     EXPECT_EQ(gait.pitchBlend, 127);
     // The gait goes as far as the player: 10 of the walk's 100 units over its 10 frames.
-    EXPECT_NEAR(gait.frame, 1.0F, kTolerance);
+    EXPECT_NEAR(gait.frame.value(), 1.0F, kTolerance);
 }
 
 TEST_F(PlayerModelTest, MovingAwayFromWhereItFacesTurnsTheLegsAroundAndBackwards) {
     cs::Gait gait;
     cs::processGait(gait, model(), sequence("walk"), {.x = 10.0F}, {.yaw = nx::Degrees{180.0F}},
-                    nx::Seconds{0.01F}, 1.0F);
+                    nx::Seconds{0.01F}, cs::kOwnSpeed);
     EXPECT_NEAR(gait.yaw, -180.0F, kTolerance);
     EXPECT_NEAR(gait.movement, -10.0F, kTolerance);
     EXPECT_NEAR(gait.yawBlend, 128.0F, kTolerance);
-    EXPECT_NEAR(gait.frame, 9.0F, kTolerance) << "backwards, wrapped into the sequence";
+    EXPECT_NEAR(gait.frame.value(), 9.0F, kTolerance) << "backwards, wrapped into the sequence";
 }
 
 TEST_F(PlayerModelTest, StillLegsTurnAfterTheBodySlowlyNearlyAheadFastFacingAway) {
     cs::Gait nearlyAhead;
     cs::processGait(nearlyAhead, model(), sequence("idle1"), {}, {.yaw = nx::Degrees{3.0F}},
-                    nx::Seconds{0.01F}, 1.0F);
+                    nx::Seconds{0.01F}, cs::kOwnSpeed);
     EXPECT_EQ(nearlyAhead.yaw, 0.0F) << "a turn under a whole degree is none";
     EXPECT_EQ(nearlyAhead.yawModifier, 0.05F);
     cs::Gait away;
     cs::processGait(away, model(), sequence("idle1"), {}, {.yaw = nx::Degrees{100.0F}}, nx::Seconds{0.01F},
-                    1.0F);
+                    cs::kOwnSpeed);
     EXPECT_NEAR(away.yaw, 3.5F, kTolerance) << "100 degrees times the frame times 3.5";
+}
+
+TEST_F(PlayerModelTest, AGaitSequenceThatDoesNotMovePlaysByTimeAtTheFramerate) {
+    const nx::assets::StudioSequence& idle = model().sequences()[sequence("idle1").value];
+    ASSERT_EQ(idle.linearMovement.x, 0.0F);
+    const auto frameAfter = [this](nx::Scale framerate) {
+        cs::Gait gait;
+        cs::processGait(gait, model(), sequence("idle1"), {}, {}, nx::Seconds{0.05F}, framerate);
+        return gait.frame.value();
+    };
+    EXPECT_NEAR(frameAfter(cs::kOwnSpeed), std::fmod(idle.fps * 0.05F, static_cast<float>(idle.frameCount)),
+                kTolerance)
+        << "its frames a second for the time";
+    EXPECT_NEAR(frameAfter(nx::Scale{2.0F}),
+                std::fmod(2.0F * idle.fps * 0.05F, static_cast<float>(idle.frameCount)), kTolerance)
+        << "twice as far at twice its own speed";
 }
 
 TEST_F(PlayerModelTest, ThePitchBlendRunsFrom45DegreesUpTo45Down) {
     const auto pitchBlendOf = [this](float viewPitch) {
         cs::Gait gait;
         cs::processGait(gait, model(), sequence("idle1"), {},
-                        cs::bodyAnglesOf({.pitch = nx::Degrees{viewPitch}}), nx::Seconds{}, 1.0F);
+                        cs::bodyAnglesOf({.pitch = nx::Degrees{viewPitch}}), nx::Seconds{}, cs::kOwnSpeed);
         return gait.pitchBlend;
     };
     EXPECT_EQ(pitchBlendOf(0.0F), 127);

@@ -244,6 +244,11 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
   it, the gain of everything heard); `nx::audio::Pitch`, how fast a voice plays its sound, and
   `cs::SoundPitch`, the game's pitch in the original's hundredths; `nx::audio::MixFrames`, the mix's
   clock and what lasts on it. The samples stay `float`, as the sound device takes them.
+- A model's sequences: `cs::SequenceFrame`, a place in a sequence counted in its own frames;
+  `cs::EntityFrame`, where an entity is in its sequence as the original keeps and sends it (`pev->frame`,
+  `cs::kFrameScale` from its first frame to its last), and `cs::EntityFramesPerSecond`, how fast that goes;
+  how fast an entity plays its sequence against the sequence's own speed (`pev->framerate`) is an
+  `nx::Scale`, `cs::kOwnSpeed` as recorded.
 
 ### 4.2 Enums
 
