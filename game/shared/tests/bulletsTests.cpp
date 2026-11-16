@@ -30,7 +30,7 @@ constexpr float kTolerance = 1e-3F;
                 .direction = Vec3{.x = 1.0F},
                 .reach = nx::HammerUnits{8192.0F},
                 .round = cs::ShotRound{.damage = nx::Damage{36.0F},
-                                       .rangeModifier = 0.98F,
+                                       .rangeModifier = nx::Scale{0.98F},
                                        .penetration = 2,
                                        .penetrationPower = 39,
                                        .penetrationDistance = nx::HammerUnits{5000.0F}}};
@@ -89,7 +89,7 @@ TEST(BulletsTest, RangeDecayKeepsTheFloatProductBeforeIntegerTruncation) {
     Shot shot = akShot();
     shot.reach = nx::HammerUnits{1000.0F};
     shot.round.damage = nx::Damage{30.0F};
-    shot.round.rangeModifier = 0.7F;
+    shot.round.rangeModifier = nx::Scale{0.7F};
     std::vector<Traced> traced;
     const std::vector<BulletHit> hits = cs::followRound(
         shot, tracerOf({wallAt(500.0F, 0.0F, 1000.0F)}, traced), madeOf(TextureMaterial::Dirt));

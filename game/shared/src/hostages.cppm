@@ -94,9 +94,9 @@ struct HostageState {
     nx::Vec3 origin{};
     nx::EulerAngles angles{};
     nx::assets::SequenceIndex sequence{};
-    float frame = 0.0F; ///< Of kFrameScale.
+    EntityFrame frame{};
     nx::GameTime advancedAt{};
-    float framerate = 1.0F;
+    nx::Scale framerate{kOwnSpeed};
     ControllerSettings controllers{};
 
     [[nodiscard]] inline auto operator==(const HostageState&) const noexcept -> bool = default;

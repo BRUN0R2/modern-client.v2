@@ -222,7 +222,7 @@ TEST(MuzzleFlashTest, ItsLightDimsToNothingOverItsTimeOutlastingItsFrames) {
     const std::optional<nx::render::StudioLight> full = flash.lightAt(nx::Seconds{2.0F}, muzzle);
     ASSERT_TRUE(full.has_value());
     EXPECT_EQ(full->position, muzzle);
-    EXPECT_FLOAT_EQ(full->reach, 128.0F);
+    EXPECT_EQ(full->reach, nx::HammerUnits{128.0F});
     EXPECT_FLOAT_EQ(full->color.x, 1000.0F);
     const std::optional<nx::render::StudioLight> half = flash.lightAt(nx::Seconds{2.05F}, muzzle);
     ASSERT_TRUE(half.has_value());
@@ -288,7 +288,7 @@ TEST(MuzzleFlashTest, TheLightsOfAMuzzlesFlashesAddUp) {
     ASSERT_EQ(lights.size(), 2U) << "one a muzzle, none from a muzzle nowhere";
     EXPECT_EQ(lights[0].position, muzzle);
     EXPECT_NEAR(lights[0].color.x, 1500.0F, 0.5F) << "the newer's whole and the older's half";
-    EXPECT_FLOAT_EQ(lights[0].reach, 128.0F);
+    EXPECT_EQ(lights[0].reach, nx::HammerUnits{128.0F});
     EXPECT_EQ(lights[1].position, otherMuzzle);
     EXPECT_FLOAT_EQ(lights[1].color.x, 1000.0F);
 }

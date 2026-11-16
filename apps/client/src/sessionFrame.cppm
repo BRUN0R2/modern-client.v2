@@ -18,8 +18,9 @@ namespace app {
 /// What the player hears of the frame `session` played on `audio`, when there is a sound output, as
 /// `hearing` says when: the sounds it made and its view model's sound events, and those the other players
 /// made, heard from the eye and the turn of `view`, the view the frame draws, each as long after the frame as
-/// it came after what the last frame showed; and the client events its view model passed, which the frame
-/// shows. A sound not played is reported when `soundFailures` allows.
+/// it came after what the last frame showed, those that still play followed to where their makers show; and
+/// the client events its view model passed, which the frame shows. A sound not played is reported when
+/// `soundFailures` allows.
 void hearSession(Session& session, cs::ClientAudio* audio, const cs::Hearing& hearing,
                  const nx::render::Camera& view, nx::log::RateLimit& soundFailures);
 
