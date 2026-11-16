@@ -114,7 +114,7 @@ struct Scene {
 
 /// A light of `ambient` alone, white.
 [[nodiscard]] auto ambientLight(float ambient) -> ModelLight {
-    return {.ambient = ambient, .shade = 0.0F};
+    return {.ambient = nx::render::LightLevel{ambient}, .shade = nx::render::LightLevel{}};
 }
 
 /// The model's texture lit by `ambient` alone, from 0 to 1: the original's light curve at four times
@@ -295,12 +295,12 @@ TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
     ASSERT_GT(pixelAt(expected, kMiddle, kMiddle)[3], 0) << "the model shows";
     ASSERT_NO_FATAL_FAILURE(loadCrowdOf(**device, *scene));
     // Half of a sequence's frames, in 256ths; its move ended where the second half of it started.
-    constexpr float kHalfOfTheFrames = 128.0F;
+    constexpr nx::render::EntityFrame kHalfOfTheFrames{128.0F};
     const nx::render::CrowdBody body{.previousOrigin = kOrigin,
                                      .origin = kOrigin,
                                      .frame = kHalfOfTheFrames,
                                      .framerate = nx::Scale{0.0F},
-                                     .ambient = 100.0F,
+                                     .ambient = nx::render::LightLevel{100.0F},
                                      .moveShare = 1.0F,
                                      .moveSharePerTick = 0.0F};
     ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, body, 1));
@@ -326,7 +326,7 @@ TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
     // a second is half a frame, where the body above shows.
     constexpr nx::Seconds kSixtyFourth{1.0F / 64.0F};
     nx::render::CrowdBody played = body;
-    played.frame = 0.0F;
+    played.frame = nx::render::EntityFrame{};
     played.advancedAgo = kSixtyFourth;
     played.framerate = nx::Scale{2.0F};
     ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, played, 3, 1, kSixtyFourth));
@@ -358,7 +358,7 @@ TEST(StudioRendererTest, ACrowdReadsTheBodiesOfThisFrameOnceOnlyTheirRoomGrew) {
     OffscreenTarget target{**device};
     const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
     ASSERT_NO_FATAL_FAILURE(loadCrowdOf(**device, *scene));
-    const nx::render::CrowdBody shown{.ambient = 100.0F, .moveShare = 1.0F};
+    const nx::render::CrowdBody shown{.ambient = nx::render::LightLevel{100.0F}, .moveShare = 1.0F};
     nx::render::CrowdBody behind = shown;
     const Vec3 away = nx::normalized(-kWoundSide) * (kViewDistance * 4.0F);
     behind.previousOrigin = away;
@@ -434,7 +434,7 @@ TEST(StudioRendererTest, ACrowdPlacesEachBoneInItsParentAsTheCpuDoes) {
     const nx::render::CrowdBody body{.previousOrigin = kOrigin,
                                      .yaw = kYaw,
                                      .origin = kOrigin,
-                                     .ambient = 100.0F,
+                                     .ambient = nx::render::LightLevel{100.0F},
                                      .moveShare = 1.0F,
                                      .moveSharePerTick = 0.0F};
     ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, body, 1));

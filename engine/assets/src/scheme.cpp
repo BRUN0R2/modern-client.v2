@@ -49,6 +49,15 @@ template <class Number>
     return numbers;
 }
 
+/// The `count` lengths `text` writes, whole numbers of pixels; none when it writes another count, or other
+/// words.
+[[nodiscard]] auto pixelsOf(std::string_view text, std::size_t count) -> std::optional<std::vector<Pixels>> {
+    return numbersOf<std::int32_t>(text, count).transform([](const std::vector<std::int32_t>& numbers) {
+        return numbers | std::views::transform([](std::int32_t number) { return Pixels{number}; }) |
+               std::ranges::to<std::vector>();
+    });
+}
+
 /// `word` as a hexadecimal number written "0x0000".
 [[nodiscard]] auto hexadecimalOf(std::string_view word) noexcept -> std::optional<std::uint32_t> {
     if (!word.starts_with("0x") && !word.starts_with("0X")) {
@@ -65,6 +74,9 @@ constexpr EnumArray<FontFlag, std::string_view> kFlagNames{EnumArray<FontFlag, s
 /// The names of a border's sides.
 constexpr EnumArray<BorderSide, std::string_view> kSideNames{
     EnumArray<BorderSide, std::string_view>::Storage{"Left", "Right", "Top", "Bottom"}};
+
+/// The sides a border's `inset` writes, in its order, as VGUI2 reads it.
+constexpr std::array kInsetSides{BorderSide::Left, BorderSide::Top, BorderSide::Right, BorderSide::Bottom};
 
 /// The entries of `settings` and of the blocks within it, named from `prefix`.
 void flattenSettings(const KeyValuesEntry& settings, std::string_view prefix,
@@ -97,11 +109,11 @@ void flattenSettings(const KeyValuesEntry& settings, std::string_view prefix,
         if (equalsIgnoringCase(field.key, "name")) {
             candidate.face = value;
         } else if (equalsIgnoringCase(field.key, "yres")) {
-            const auto heights = numbersOf<std::uint32_t>(value, 2);
-            if (!heights) {
+            const auto heights = pixelsOf(value, 2);
+            if (!heights || std::ranges::any_of(*heights, [](Pixels height) { return height < Pixels{}; })) {
                 return bad(std::format("yres {:?}", value));
             }
-            candidate.heights = SchemeRange<std::uint32_t>{.first = (*heights)[0], .last = (*heights)[1]};
+            candidate.heights = SchemeRange<Pixels>{.first = (*heights)[0], .last = (*heights)[1]};
         } else if (equalsIgnoringCase(field.key, "range")) {
             const std::vector<std::string_view> words = wordsOf(value);
             const std::optional<std::uint32_t> first =
@@ -114,26 +126,28 @@ void flattenSettings(const KeyValuesEntry& settings, std::string_view prefix,
             candidate.characters = SchemeRange<char32_t>{.first = static_cast<char32_t>(*first),
                                                          .last = static_cast<char32_t>(*last)};
         } else {
-            std::int32_t* number = equalsIgnoringCase(field.key, "tall")        ? &candidate.tall
-                                   : equalsIgnoringCase(field.key, "weight")    ? &candidate.weight
-                                   : equalsIgnoringCase(field.key, "blur")      ? &candidate.blur
-                                   : equalsIgnoringCase(field.key, "scanlines") ? &candidate.scanLines
-                                                                                : nullptr;
+            Pixels* length = equalsIgnoringCase(field.key, "tall")        ? &candidate.tall
+                             : equalsIgnoringCase(field.key, "blur")      ? &candidate.blur
+                             : equalsIgnoringCase(field.key, "scanlines") ? &candidate.scanLines
+                                                                          : nullptr;
+            const bool isWeight = equalsIgnoringCase(field.key, "weight");
             std::optional<FontFlag> flag;
             for (const FontFlag which : EnumArray<FontFlag, std::string_view>::keys()) {
                 if (equalsIgnoringCase(field.key, kFlagNames[which])) {
                     flag = which;
                 }
             }
-            if (number == nullptr && !flag) {
+            if (length == nullptr && !isWeight && !flag) {
                 continue; // a key VGUI2 does not know
             }
             const std::optional<std::int32_t> parsed = numberOf<std::int32_t>(value);
             if (!parsed) {
                 return bad(std::format("{} {:?}", field.key, value));
             }
-            if (number != nullptr) {
-                *number = *parsed;
+            if (length != nullptr) {
+                *length = Pixels{*parsed};
+            } else if (isWeight) {
+                candidate.weight = *parsed;
             } else if (*parsed != 0) {
                 candidate.flags.set(*flag);
             }
@@ -152,11 +166,13 @@ void flattenSettings(const KeyValuesEntry& settings, std::string_view prefix,
         return fail(SchemeError::BadBorder, std::format("border {:?}: {}", entry.key, what));
     };
     if (const std::optional<std::string_view> inset = entry.findWord("inset")) {
-        const auto numbers = numbersOf<std::int32_t>(*inset, border.inset.size());
-        if (!numbers) {
+        const auto lengths = pixelsOf(*inset, kInsetSides.size());
+        if (!lengths) {
             return bad(std::format("inset {:?}", *inset));
         }
-        std::ranges::copy(*numbers, border.inset.begin());
+        for (const auto [side, length] : std::views::zip(kInsetSides, *lengths)) {
+            border.inset[side] = length;
+        }
     }
     for (const BorderSide side : EnumArray<BorderSide, std::string_view>::keys()) {
         const KeyValuesEntry* lines = entry.find(kSideNames[side]);
@@ -170,12 +186,12 @@ void flattenSettings(const KeyValuesEntry& settings, std::string_view prefix,
             }
             BorderLine made{.color = std::string{*color}};
             if (const std::optional<std::string_view> offset = line.findWord("offset")) {
-                const auto numbers = numbersOf<std::int32_t>(*offset, 2);
-                if (!numbers) {
+                const auto lengths = pixelsOf(*offset, 2);
+                if (!lengths) {
                     return bad(std::format("{} line {:?}: offset {:?}", kSideNames[side], line.key, *offset));
                 }
-                made.startOffset = (*numbers)[0];
-                made.endOffset = (*numbers)[1];
+                made.startOffset = (*lengths)[0];
+                made.endOffset = (*lengths)[1];
             }
             border.sides[side].push_back(std::move(made));
         }

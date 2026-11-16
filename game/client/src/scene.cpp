@@ -42,7 +42,7 @@ constexpr std::string_view kFlashStream = "muzzleFlash";
 /// its shade on its ambient light, 255 at most, indexing the light curve four steps to a level, its top
 /// 1023.
 constexpr float kFlatShadeShare = 0.8F;
-constexpr float kMostModelLight = 255.0F;
+constexpr nx::render::LightLevel kMostModelLight{255.0F};
 constexpr float kLightCurveSteps =
     static_cast<float>(nx::render::kLightTableSize) / static_cast<float>(nx::render::kChannelValues);
 constexpr float kLightCurveTop = static_cast<float>(nx::render::kLightTableSize - 1);
@@ -443,8 +443,10 @@ auto Scene::bloodLightAt(const Level& level, nx::Vec3 position,
                          const nx::render::LightStyleValues& styles) const -> float {
     const nx::render::ModelLight light =
         m_light.modelLightAt({.origin = position, .sky = level.skyLight()}, styles);
-    const float summed = std::min(light.ambient + (light.shade * kFlatShadeShare), kMostModelLight);
-    const auto index = std::min(static_cast<std::size_t>(summed * kLightCurveSteps), lightCurve.size() - 1);
+    const nx::render::LightLevel summed =
+        std::min(light.ambient + (light.shade * kFlatShadeShare), kMostModelLight);
+    const auto index =
+        std::min(static_cast<std::size_t>(summed.value() * kLightCurveSteps), lightCurve.size() - 1);
     return static_cast<float>(lightCurve[index]) / kLightCurveTop;
 }
 

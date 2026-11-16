@@ -53,10 +53,14 @@ stopwatch    640 640hud7 144 72 24 24
     return made.value_or(cs::HudSheet{});
 }
 
+/// `picture`'s mark with its top left at `x`, `y`, but its first `cutTop` rows.
+[[nodiscard]] auto markAt(HudPicture picture, std::int32_t x, std::int32_t y, std::int32_t cutTop = 0)
+    -> HudMark {
+    return {.picture = picture, .x = nx::Pixels{x}, .y = nx::Pixels{y}, .cutTop = nx::Pixels{cutTop}};
+}
+
 [[nodiscard]] auto digit(char value, std::int32_t x, std::int32_t y) -> HudMark {
-    return {.picture = static_cast<HudPicture>(std::to_underlying(HudPicture::Number0) + (value - '0')),
-            .x = x,
-            .y = y};
+    return markAt(static_cast<HudPicture>(std::to_underlying(HudPicture::Number0) + (value - '0')), x, y);
 }
 
 /// The number the digits the HUD draws at `y`, from `x` on, spell, left to right.
@@ -64,7 +68,7 @@ stopwatch    640 640hud7 144 72 24 24
     -> std::string {
     std::vector<HudMark> digits;
     for (const HudMark& mark : marks) {
-        if (mark.y == y && mark.x >= x && mark.picture <= HudPicture::Number9) {
+        if (mark.y == nx::Pixels{y} && mark.x >= nx::Pixels{x} && mark.picture <= HudPicture::Number9) {
             digits.push_back(mark);
         }
     }
@@ -133,13 +137,13 @@ TEST(HudTest, ThePlayerAsItSpawnsIsWhereTheOriginalDrawsIt) {
     const std::vector<HudMark> marks =
         cs::layoutHud({.health = cs::kSpawnHealth, .armor = nx::ArmorPoints{}, .money = cs::kStartMoney},
                       sheet(), {.width = 1280, .height = 720});
-    const std::vector<HudMark> expected{{.picture = HudPicture::Cross, .x = 10, .y = 680},
+    const std::vector<HudMark> expected{markAt(HudPicture::Cross, 10, 680),
                                         digit('1', 36, 680),
                                         digit('0', 56, 680),
                                         digit('0', 76, 680),
-                                        {.picture = HudPicture::SuitEmpty, .x = 256, .y = 683},
+                                        markAt(HudPicture::SuitEmpty, 256, 683),
                                         digit('0', 320, 683),
-                                        {.picture = HudPicture::Dollar, .x = 1146, .y = 645},
+                                        markAt(HudPicture::Dollar, 1146, 645),
                                         digit('8', 1204, 645),
                                         digit('0', 1224, 645),
                                         digit('0', 1244, 645)};
@@ -155,13 +159,11 @@ TEST(HudTest, ArmorFillsTheSuitAsFarUpAsItReaches) {
     };
     // Measured with a vest: "100" fills the room after the suit, suit_full over suit_empty.
     const std::vector<HudMark> full = at(100.0F);
-    EXPECT_EQ(find(full, HudPicture::SuitFull),
-              (HudMark{.picture = HudPicture::SuitFull, .x = 256, .y = 683}));
+    EXPECT_EQ(find(full, HudPicture::SuitFull), (markAt(HudPicture::SuitFull, 256, 683)));
     EXPECT_EQ(numberAt(full, 683), "100");
     EXPECT_TRUE(std::ranges::contains(full, digit('1', 280, 683)));
 
-    EXPECT_EQ(find(at(50.0F), HudPicture::SuitFull),
-              (HudMark{.picture = HudPicture::SuitFull, .x = 256, .y = 683 + 12, .cutTop = 12}));
+    EXPECT_EQ(find(at(50.0F), HudPicture::SuitFull), (markAt(HudPicture::SuitFull, 256, 683 + 12, 12)));
     EXPECT_EQ(find(at(250.0F), HudPicture::SuitFull), find(full, HudPicture::SuitFull)) << "full is full";
     EXPECT_FALSE(find(at(0.5F), HudPicture::SuitFull).has_value()) << "less than a row";
 }
@@ -176,10 +178,8 @@ TEST(HudTest, AHelmetWornShowsItsPicturesInTheSuitsPlace) {
                              pictures, {.width = 1280, .height = 720});
     };
     const std::vector<HudMark> helmet = at(50.0F, cs::ArmorKind::KevlarAndHelmet);
-    EXPECT_EQ(find(helmet, HudPicture::HelmetEmpty),
-              (HudMark{.picture = HudPicture::HelmetEmpty, .x = 256, .y = 683}));
-    EXPECT_EQ(find(helmet, HudPicture::HelmetFull),
-              (HudMark{.picture = HudPicture::HelmetFull, .x = 256, .y = 683 + 12, .cutTop = 12}));
+    EXPECT_EQ(find(helmet, HudPicture::HelmetEmpty), (markAt(HudPicture::HelmetEmpty, 256, 683)));
+    EXPECT_EQ(find(helmet, HudPicture::HelmetFull), (markAt(HudPicture::HelmetFull, 256, 683 + 12, 12)));
     EXPECT_FALSE(find(helmet, HudPicture::SuitEmpty).has_value());
     EXPECT_FALSE(find(helmet, HudPicture::SuitFull).has_value());
     EXPECT_EQ(numberAt(helmet, 683), "50");
@@ -197,13 +197,11 @@ TEST(HudTest, AtEveryResolutionTheHudKeepsToTheEdges) {
         const std::vector<HudMark> marks = cs::layoutHud(
             spawned, pictures,
             {.width = static_cast<std::uint32_t>(width), .height = static_cast<std::uint32_t>(height)});
-        EXPECT_EQ(find(marks, HudPicture::Cross),
-                  (HudMark{.picture = HudPicture::Cross, .x = 10, .y = height - 40}));
+        EXPECT_EQ(find(marks, HudPicture::Cross), (markAt(HudPicture::Cross, 10, height - 40)));
         EXPECT_EQ(numberAt(marks, height - 40), "100");
         EXPECT_EQ(find(marks, HudPicture::SuitEmpty),
-                  (HudMark{.picture = HudPicture::SuitEmpty, .x = width / 5, .y = height - 37}));
-        EXPECT_EQ(find(marks, HudPicture::Dollar),
-                  (HudMark{.picture = HudPicture::Dollar, .x = width - 134, .y = height - 75}));
+                  (markAt(HudPicture::SuitEmpty, width / 5, height - 37)));
+        EXPECT_EQ(find(marks, HudPicture::Dollar), (markAt(HudPicture::Dollar, width - 134, height - 75)));
         EXPECT_EQ(numberAt(marks, height - 75), "800");
     }
 }
@@ -219,11 +217,11 @@ TEST(HudTest, LongerNumbersWidenTheirRoomAndPushWhatIsBeside) {
     const std::vector<HudMark> fiveThousand = at(5000.0F, 0.0F, 800, 640);
     EXPECT_EQ(numberAt(fiveThousand, 440), "5000");
     EXPECT_EQ(fiveThousand[1], digit('5', 36, 440));
-    EXPECT_EQ(find(fiveThousand, HudPicture::SuitEmpty)->x, 36 + 80 + 32);
+    EXPECT_EQ(find(fiveThousand, HudPicture::SuitEmpty), markAt(HudPicture::SuitEmpty, 36 + 80 + 32, 443));
 
     const std::vector<HudMark> highest = at(std::numeric_limits<float>::max(), 0.0F, 800, 640);
     EXPECT_EQ(numberAt(highest, 440), "340282346638528859811704183484516925440");
-    EXPECT_EQ(find(highest, HudPicture::SuitEmpty)->x, 36 + (39 * 20) + 32);
+    EXPECT_EQ(find(highest, HudPicture::SuitEmpty), markAt(HudPicture::SuitEmpty, 36 + (39 * 20) + 32, 443));
     EXPECT_EQ(numberAt(at(100000.0F, 0.0F, 800, 1280), 440), "100000");
 
     // Armor grows to the right of its room.
@@ -234,7 +232,7 @@ TEST(HudTest, LongerNumbersWidenTheirRoomAndPushWhatIsBeside) {
     // Money grows to the left of its room, the dollar before it.
     const std::vector<HudMark> rich = at(100.0F, 0.0F, std::numeric_limits<std::int32_t>::max(), 1280);
     EXPECT_EQ(numberAt(rich, 405), "2147483647");
-    EXPECT_EQ(find(rich, HudPicture::Dollar)->x, 1264 - 200 - 18);
+    EXPECT_EQ(find(rich, HudPicture::Dollar), markAt(HudPicture::Dollar, 1264 - 200 - 18, 405));
     EXPECT_TRUE(std::ranges::contains(rich, digit('7', 1244, 405))) << "ends where it did";
 }
 
@@ -281,8 +279,8 @@ TEST(AmmoHudTest, AGlocksAmmoIsWhereTheOriginalDrawsIt) {
     // 37 from the bottom; the bar, 2 by 25, at W - 114; "20" ending ten before it.
     const cs::AmmoLayout layout =
         cs::layoutAmmo({.clip = 20, .reserve = 40}, sheet(), {.width = 1280, .height = 720});
-    EXPECT_EQ(layout.pictureX, 1238);
-    EXPECT_EQ(layout.pictureY, 680);
+    EXPECT_EQ(layout.pictureX, nx::Pixels{1238});
+    EXPECT_EQ(layout.pictureY, nx::Pixels{680});
     const std::vector<HudMark> expected{digit('2', 1116, 683), digit('0', 1136, 683), digit('4', 1198, 683),
                                         digit('0', 1218, 683)};
     EXPECT_EQ(layout.digits, expected);
@@ -293,7 +291,7 @@ TEST(AmmoHudTest, AGlocksAmmoIsWhereTheOriginalDrawsIt) {
 
     const cs::AmmoLayout small =
         cs::layoutAmmo({.clip = 20, .reserve = 40}, sheet(), {.width = 640, .height = 480});
-    EXPECT_EQ(small.pictureX, 598);
+    EXPECT_EQ(small.pictureX, nx::Pixels{598});
     EXPECT_EQ(small.bar.x, 526.0F);
     EXPECT_EQ(numberAt(small.digits, 443), "2040");
 }
@@ -303,11 +301,11 @@ TEST(AmmoHudTest, MoreDigitsWidenTheirRoomToTheLeft) {
     // left; the picture stays at the right edge.
     const cs::AmmoLayout layout =
         cs::layoutAmmo({.clip = 1000, .reserve = 12345}, sheet(), {.width = 1280, .height = 720});
-    EXPECT_EQ(layout.pictureX, 1238);
+    EXPECT_EQ(layout.pictureX, nx::Pixels{1238});
     EXPECT_EQ(numberAt(layout.digits, 683, 1138), "12345");
     EXPECT_EQ(layout.bar.x, 1138.0F - 12.0F);
     EXPECT_EQ(numberAt(layout.digits, 683), "100012345");
-    EXPECT_EQ(layout.digits.front().x, 1126 - 10 - 80);
+    EXPECT_EQ(layout.digits.front().x, nx::Pixels{1126 - 10 - 80});
 }
 
 TEST(AmmoHudTest, TheAmmoShownIsTheHeldWeaponsWhenItFiresAny) {
@@ -352,10 +350,8 @@ TEST(TimerHudTest, TheRoundsTimeIsWhereTheOriginalDrawsIt) {
     // at W / 2 - 20, its seconds at W / 2 + 6 and W / 2 + 26; the colon at W / 2 + 2, H - 28 and H - 22.
     const cs::TimerLayout layout =
         cs::layoutTimer(cs::WholeSeconds{279}, sheet(), {.width = 1280, .height = 720});
-    const std::vector<HudMark> expected{{.picture = HudPicture::Stopwatch, .x = 576, .y = 683},
-                                        digit('4', 620, 683),
-                                        digit('3', 646, 683),
-                                        digit('9', 666, 683)};
+    const std::vector<HudMark> expected{markAt(HudPicture::Stopwatch, 576, 683), digit('4', 620, 683),
+                                        digit('3', 646, 683), digit('9', 666, 683)};
     EXPECT_EQ(layout.marks, expected);
     for (const auto& [square, top] : std::views::zip(layout.colon, std::array{692.0F, 698.0F})) {
         EXPECT_EQ(square.x, 642.0F);
@@ -367,19 +363,19 @@ TEST(TimerHudTest, TheRoundsTimeIsWhereTheOriginalDrawsIt) {
     const cs::TimerLayout freeze =
         cs::layoutTimer(cs::WholeSeconds{8}, sheet(), {.width = 640, .height = 480});
     EXPECT_EQ(numberAt(freeze.marks, 443), "008");
-    EXPECT_EQ(freeze.marks.front().x, 256);
+    EXPECT_EQ(freeze.marks.front().x, nx::Pixels{256});
 }
 
 TEST(TimerHudTest, MoreMinutesWidenTheirRoomPushingTheStopwatch) {
     const cs::TimerLayout ten =
         cs::layoutTimer(cs::WholeSeconds{600}, sheet(), {.width = 1280, .height = 720});
     EXPECT_EQ(numberAt(ten.marks, 683), "1000");
-    EXPECT_EQ(ten.marks.front().x, 576) << "two minutes' digits fit the room";
+    EXPECT_EQ(ten.marks.front().x, nx::Pixels{576}) << "two minutes' digits fit the room";
     const cs::TimerLayout hundred =
         cs::layoutTimer(cs::WholeSeconds{6000}, sheet(), {.width = 1280, .height = 720});
     EXPECT_EQ(numberAt(hundred.marks, 683), "10000");
-    EXPECT_EQ(hundred.marks[1].x, 580);
-    EXPECT_EQ(hundred.marks.front().x, 556);
+    EXPECT_EQ(hundred.marks[1].x, nx::Pixels{580});
+    EXPECT_EQ(hundred.marks.front().x, nx::Pixels{556});
 }
 
 TEST(CrosshairTest, TheLinesAreWhereTheOriginalDrawsThem) {

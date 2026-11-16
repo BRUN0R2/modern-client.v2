@@ -155,9 +155,9 @@ struct HudCvars {
 /// A picture the HUD draws: `picture`, but its first `cutTop` rows, with its top left at `x`, `y`.
 struct HudMark {
     HudPicture picture = HudPicture::Number0;
-    std::int32_t x = 0;
-    std::int32_t y = 0;
-    std::uint32_t cutTop = 0;
+    nx::Pixels x{};
+    nx::Pixels y{};
+    nx::Pixels cutTop{};
 
     [[nodiscard]] inline auto operator==(const HudMark&) const noexcept -> bool = default;
 };
@@ -178,8 +178,8 @@ struct HudMark {
 struct AmmoLayout {
     std::vector<HudMark> digits{}; ///< The clip's, then the reserve's.
     nx::render::ScreenRect bar{};  ///< Between them, of the HUD's color, added.
-    std::int32_t pictureX = 0;     ///< The top left corner of the picture of the ammo's kind.
-    std::int32_t pictureY = 0;
+    nx::Pixels pictureX{};         ///< The top left corner of the picture of the ammo's kind.
+    nx::Pixels pictureY{};
 };
 
 /// Where the HUD draws `ammo` on a screen of `size`, its digits those of `sheet`: the picture of its

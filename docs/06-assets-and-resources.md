@@ -198,6 +198,9 @@ Readers today:
   face, a height and a weight, flags such as `antialias` or `symbol`, the screen heights `yres` and
   the characters `range` it is for); the borders of `Borders`, another's name or an inset and the
   lines of each side (a color by name, and how far its ends stop short); and the `CustomFontFiles`.
+  What a scheme measures on the screen (a font's height, blur and scan lines, the screens' heights, a
+  border's inset and its lines' offsets) is `nx::Pixels`; an inset is kept by side
+  (`EnumArray<BorderSide, Pixels>`), which the file writes left, top, right and bottom.
   `Scheme::color` looks a color up as VGUI2 does (the setting, else the name; a color, or a named
   one), and `Scheme::border` follows names to the border with lines of its own; a name that leads
   nowhere, or round in a loop, is refused. Keys VGUI2 does not know are left out.
