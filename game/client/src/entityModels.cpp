@@ -219,7 +219,7 @@ void EntityModels::writeBodies(const EntityCatalog& catalog, const ShownCrowd& c
                 .origin = origin,
                 .model = type.model.value,
                 .sequence = state.animation.sequence.value,
-                .frame = state.animation.frame.value(),
+                .frame = nx::render::EntityFrame{state.animation.frame.value()},
                 .advancedAgo = crowd.lastTick.since(state.animation.advancedAt, crowd.rate),
                 .framerate = state.animation.framerate,
                 .lightDirection = lit.light.direction,
