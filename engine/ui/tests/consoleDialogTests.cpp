@@ -149,8 +149,9 @@ TEST_F(ConsoleDialogTest, LinesLoggedOnAnyThreadShowInTheirOrder) {
 }
 
 TEST_F(ConsoleDialogTest, PageKeysScrollTheOutputAndOtherKeysAreLeft) {
-    auto font = nx::ui::Font::open(
-        std::make_shared<const std::vector<std::byte>>(nx::test::SquareFont::build()), {.cellHeight = 20});
+    auto font =
+        nx::ui::Font::open(std::make_shared<const std::vector<std::byte>>(nx::test::SquareFont::build()),
+                           {.cellHeight = nx::Pixels{20}});
     ASSERT_TRUE(font.has_value());
     auto atlas = nx::ui::GlyphAtlas::build(*font, U"AB ");
     ASSERT_TRUE(atlas.has_value());

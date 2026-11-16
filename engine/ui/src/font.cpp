@@ -25,11 +25,29 @@ namespace {
 /// One in Windows' fixed point: the scale from a face's units to pixels is a whole number of these.
 constexpr std::int64_t kFixedOne = 65536;
 
-/// Whether a line `line` tall can be one of a face of an em `em` big: a face's line is at least half its
-/// em. A table that breaks it is broken, or made to size a face beyond any cell and so exhaust the
-/// memory and the time of whoever draws its glyphs.
-[[nodiscard]] constexpr auto isLineOfItsEm(std::int64_t line, std::int64_t em) noexcept -> bool {
-    return 2 * line >= em;
+/// How much wider bold simulated makes a glyph, and how much farther its pen moves: the pixel to the
+/// right it is struck again at.
+constexpr Pixels kStrikeOffset{1};
+
+/// The smallest em a face is sized to, a pixel, and the step from an em to the next.
+constexpr Pixels kSmallestEm{1};
+
+/// Whether a line `line` tall can be one of a face of an em `em` big, both in the face's units or both
+/// in pixels: a face's line is at least half its em. A table that breaks it is broken, or made to size
+/// a face beyond any cell and so exhaust the memory and the time of whoever draws its glyphs.
+template <class Length>
+[[nodiscard]] constexpr auto isLineOfItsEm(Length line, Length em) noexcept -> bool {
+    return line + line >= em;
+}
+
+/// The line of a face: its ascent and descent.
+[[nodiscard]] constexpr auto lineOf(const FontVerticalMetrics& vertical) noexcept -> FontUnits {
+    return vertical.ascent + vertical.descent;
+}
+
+/// The line of a device height: from its highest row to its lowest.
+[[nodiscard]] constexpr auto lineOf(const FontDeviceHeight& device) noexcept -> Pixels {
+    return device.top - device.bottom;
 }
 
 /// `numerator / denominator`, both positive, rounded to the nearest whole number, halves up.
@@ -40,10 +58,10 @@ constexpr std::int64_t kFixedOne = 65536;
 
 /// The height of a line of a face scaled to `pixelsPerEm`: its ascent and descent, scaled together and
 /// rounded.
-[[nodiscard]] auto scaledLineHeight(const FontVerticalMetrics& vertical, std::int32_t pixelsPerEm) noexcept
-    -> std::int64_t {
-    return roundedQuotient(std::int64_t{pixelsPerEm} * (vertical.ascent + vertical.descent),
-                           vertical.unitsPerEm);
+[[nodiscard]] auto scaledLineHeight(const FontVerticalMetrics& vertical, Pixels pixelsPerEm) noexcept
+    -> Pixels {
+    return Pixels{narrow<std::int32_t>(roundedQuotient(
+        std::int64_t{pixelsPerEm.value()} * lineOf(vertical).value(), vertical.unitsPerEm.value()))};
 }
 
 /// Whether a VDMX ratio record (x, y from `yStart` to `yEnd`) takes in a square pixel: x:x is in its
@@ -67,7 +85,7 @@ constexpr std::uint16_t kGaspDoGray = 0x0002;
 
 /// How a face's gasp table asks for its glyphs to be drawn at `pixelsPerEm`: the flags of the first
 /// range that reaches that size; fitted and smoothed when it has no table, or none that reaches it.
-[[nodiscard]] auto gaspFlagsAt(std::span<const std::byte> table, std::int32_t pixelsPerEm) noexcept
+[[nodiscard]] auto gaspFlagsAt(std::span<const std::byte> table, Pixels pixelsPerEm) noexcept
     -> std::uint16_t {
     constexpr std::size_t kHeaderSize = 4; // version, numRanges
     constexpr std::size_t kRangeSize = 4;  // rangeMaxPPEM, rangeGaspBehavior
@@ -82,7 +100,7 @@ constexpr std::uint16_t kGaspDoGray = 0x0002;
     for (std::size_t index = 0; index < count; ++index) {
         const std::span<const std::byte> range =
             table.subspan(kHeaderSize + (index * kRangeSize), kRangeSize);
-        if (pixelsPerEm <= loadBigEndian<std::uint16_t>(range)) {
+        if (pixelsPerEm <= Pixels{loadBigEndian<std::uint16_t>(range)}) {
             return loadBigEndian<std::uint16_t>(range.subspan(kBehaviorAt));
         }
     }
@@ -105,13 +123,14 @@ constexpr FT_Pos kSubpixels = 64;
 /// pixel as covered as the more covered of itself and the one left of it.
 [[nodiscard]] auto struckTwice(const Glyph& glyph) -> Glyph {
     Glyph wider = glyph;
-    if (glyph.width == 0) {
+    if (glyph.width == Pixels{}) {
         return wider;
     }
-    const auto width = narrow<std::size_t>(glyph.width);
-    wider.width = glyph.width + 1;
-    wider.coverage.assign((width + 1) * narrow<std::size_t>(glyph.height), 0);
-    for (std::size_t row = 0; row < narrow<std::size_t>(glyph.height); ++row) {
+    const auto width = narrow<std::size_t>(glyph.width.value());
+    const auto height = narrow<std::size_t>(glyph.height.value());
+    wider.width = glyph.width + kStrikeOffset;
+    wider.coverage.assign((width + 1) * height, 0);
+    for (std::size_t row = 0; row < height; ++row) {
         for (std::size_t column = 0; column <= width; ++column) {
             const std::uint8_t self =
                 column < width ? glyph.coverage[(row * width) + column] : std::uint8_t{0};
@@ -183,10 +202,11 @@ auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDevi
         heights.reserve(count);
         for (std::size_t index = 0; index < count; ++index) {
             const std::span<const std::byte> entry = records.subspan(index * kRecordSize, kRecordSize);
-            const FontDeviceHeight height{.pixelsPerEm = loadBigEndian<std::uint16_t>(entry),
-                                          .top = loadBigEndian<std::int16_t>(entry.subspan(kTopAt)),
-                                          .bottom = loadBigEndian<std::int16_t>(entry.subspan(kBottomAt))};
-            if (isLineOfItsEm(height.top - height.bottom, height.pixelsPerEm)) {
+            const FontDeviceHeight height{.pixelsPerEm = Pixels{loadBigEndian<std::uint16_t>(entry)},
+                                          .top = Pixels{loadBigEndian<std::int16_t>(entry.subspan(kTopAt))},
+                                          .bottom =
+                                              Pixels{loadBigEndian<std::int16_t>(entry.subspan(kBottomAt))}};
+            if (isLineOfItsEm(lineOf(height), height.pixelsPerEm)) {
                 heights.push_back(height); // else no height of the face
             }
         }
@@ -198,16 +218,14 @@ auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDevi
 }
 
 auto fontMetricsFor(const FontVerticalMetrics& vertical, std::span<const FontDeviceHeight> deviceHeights,
-                    std::int32_t cellHeight) -> FontMetrics {
-    expects(cellHeight >= 1 && cellHeight <= kMaxCellHeight, "fontMetricsFor: a cell height in [1, 1024]");
-    expects(vertical.unitsPerEm > 0 && isLineOfItsEm(vertical.ascent + vertical.descent, vertical.unitsPerEm),
+                    Pixels cellHeight) -> FontMetrics {
+    expects(cellHeight >= kMinCellHeight && cellHeight <= kMaxCellHeight,
+            "fontMetricsFor: a cell height in [1, 1024]");
+    expects(vertical.unitsPerEm > FontUnits{} && isLineOfItsEm(lineOf(vertical), vertical.unitsPerEm),
             "fontMetricsFor: a face whose line is at least half its em");
     expects(std::ranges::is_sorted(deviceHeights, {}, &FontDeviceHeight::pixelsPerEm),
             "fontMetricsFor: device heights in the order of their ems");
-    const auto lineOf = [](const FontDeviceHeight& device) {
-        return device.top - device.bottom;
-    };
-    const auto deviceAt = [&](std::int32_t pixelsPerEm) -> const FontDeviceHeight* {
+    const auto deviceAt = [&](Pixels pixelsPerEm) -> const FontDeviceHeight* {
         const auto found =
             std::ranges::lower_bound(deviceHeights, pixelsPerEm, {}, &FontDeviceHeight::pixelsPerEm);
         return found != deviceHeights.end() && found->pixelsPerEm == pixelsPerEm ? &*found : nullptr;
@@ -215,9 +233,9 @@ auto fontMetricsFor(const FontVerticalMetrics& vertical, std::span<const FontDev
 
     // The em to take among `pixelsPerEm` and those weighed before: the first whose line is exactly
     // the cell, else the largest whose line fits.
-    std::int32_t chosen = 0;
+    Pixels chosen{};
     bool isExact = false;
-    const auto weigh = [&](std::int32_t pixelsPerEm, std::int64_t line) {
+    const auto weigh = [&](Pixels pixelsPerEm, Pixels line) {
         if (line == cellHeight && (!isExact || pixelsPerEm < chosen)) {
             chosen = pixelsPerEm;
             isExact = true;
@@ -235,39 +253,41 @@ auto fontMetricsFor(const FontVerticalMetrics& vertical, std::span<const FontDev
     }
     // Else every em, by its device height where it has one, else by its scaled line: those up to the
     // largest whose scaled line fits, and those of the device heights.
-    if (chosen == 0) {
-        std::int32_t scaledFit =
-            std::max(1, narrow<std::int32_t>(std::int64_t{cellHeight} * vertical.unitsPerEm /
-                                             (vertical.ascent + vertical.descent)));
-        while (scaledFit > 1 && scaledLineHeight(vertical, scaledFit) > cellHeight) {
-            --scaledFit;
+    if (chosen == Pixels{}) {
+        // The em whose scaled line is about the cell, then the largest whose scaled line fits.
+        Pixels scaledFit =
+            std::max(kSmallestEm,
+                     Pixels{narrow<std::int32_t>(std::int64_t{cellHeight.value()} *
+                                                 vertical.unitsPerEm.value() / lineOf(vertical).value())});
+        while (scaledFit > kSmallestEm && scaledLineHeight(vertical, scaledFit) > cellHeight) {
+            scaledFit -= kSmallestEm;
         }
-        while (scaledLineHeight(vertical, scaledFit + 1) <= cellHeight) {
-            ++scaledFit;
+        while (scaledLineHeight(vertical, scaledFit + kSmallestEm) <= cellHeight) {
+            scaledFit += kSmallestEm;
         }
-        const auto lineAt = [&](std::int32_t pixelsPerEm) {
+        const auto lineAt = [&](Pixels pixelsPerEm) {
             const FontDeviceHeight* device = deviceAt(pixelsPerEm);
-            return device != nullptr ? std::int64_t{lineOf(*device)}
-                                     : scaledLineHeight(vertical, pixelsPerEm);
+            return device != nullptr ? lineOf(*device) : scaledLineHeight(vertical, pixelsPerEm);
         };
-        for (std::int32_t pixelsPerEm = 1; pixelsPerEm <= scaledFit; ++pixelsPerEm) {
+        for (Pixels pixelsPerEm = kSmallestEm; pixelsPerEm <= scaledFit; pixelsPerEm += kSmallestEm) {
             weigh(pixelsPerEm, lineAt(pixelsPerEm));
         }
         for (const FontDeviceHeight& device : deviceHeights) {
             weigh(device.pixelsPerEm, lineOf(device));
         }
     }
-    chosen = std::max(chosen, 1); // even one pixel per em is taller than the cell: the smallest em
+    chosen = std::max(chosen, kSmallestEm); // even one pixel per em is taller than the cell: the smallest em
 
     if (const FontDeviceHeight* device = deviceAt(chosen); device != nullptr) {
         return {.pixelsPerEm = chosen, .ascent = device->top, .descent = -device->bottom};
     }
     // A scaled line is split as the cell asked for is: the face's ascent and descent at the scale of
     // the cell, a whole number of Windows' fixed-point steps.
-    const std::int64_t scale = std::int64_t{cellHeight} * kFixedOne / (vertical.ascent + vertical.descent);
-    return {.pixelsPerEm = chosen,
-            .ascent = narrow<std::int32_t>(roundedQuotient(vertical.ascent * scale, kFixedOne)),
-            .descent = narrow<std::int32_t>(roundedQuotient(vertical.descent * scale, kFixedOne))};
+    const std::int64_t scale = std::int64_t{cellHeight.value()} * kFixedOne / lineOf(vertical).value();
+    const auto scaled = [scale](FontUnits length) {
+        return Pixels{narrow<std::int32_t>(roundedQuotient(length.value() * scale, kFixedOne))};
+    };
+    return {.pixelsPerEm = chosen, .ascent = scaled(vertical.ascent), .descent = scaled(vertical.descent)};
 }
 
 struct Font::Face {
@@ -308,8 +328,8 @@ struct Font::Face {
 auto Font::open(std::shared_ptr<const std::vector<std::byte>> file, const FontRequest& request)
     -> Result<Font, FontError> {
     expects(file != nullptr, "Font::open: a font file");
-    if (request.cellHeight < 1 || request.cellHeight > kMaxCellHeight) {
-        return fail(FontError::BadHeight, std::format("{} pixels", request.cellHeight));
+    if (request.cellHeight < kMinCellHeight || request.cellHeight > kMaxCellHeight) {
+        return fail(FontError::BadHeight, std::format("{} pixels", request.cellHeight.value()));
     }
     auto face = std::make_unique<Face>();
     face->file = std::move(file);
@@ -336,29 +356,29 @@ auto Font::open(std::shared_ptr<const std::vector<std::byte>> file, const FontRe
                                                                    : std::string_view{}));
     }
 
-    FontVerticalMetrics vertical{.unitsPerEm = face->face->units_per_EM,
-                                 .ascent = face->face->ascender,
-                                 .descent = -face->face->descender};
+    FontVerticalMetrics vertical{.unitsPerEm = FontUnits{face->face->units_per_EM},
+                                 .ascent = FontUnits{face->face->ascender},
+                                 .descent = FontUnits{-face->face->descender}};
     // FreeType's version of an OS/2 table a font lacks (an Apple font's).
     constexpr FT_UShort kMissingTableVersion = 0xFFFF;
     const auto* windows = static_cast<const TT_OS2*>(FT_Get_Sfnt_Table(face->face, FT_SFNT_OS2));
     if (windows != nullptr && windows->version != kMissingTableVersion &&
         windows->usWinAscent + windows->usWinDescent > 0) {
-        vertical.ascent = windows->usWinAscent;
-        vertical.descent = windows->usWinDescent;
+        vertical.ascent = FontUnits{windows->usWinAscent};
+        vertical.descent = FontUnits{windows->usWinDescent};
     }
-    if (vertical.unitsPerEm <= 0 || !isLineOfItsEm(vertical.ascent + vertical.descent, vertical.unitsPerEm)) {
-        return fail(FontError::NotAFont,
-                    std::format("a line of {} units for an em of {}", vertical.ascent + vertical.descent,
-                                vertical.unitsPerEm));
+    if (vertical.unitsPerEm <= FontUnits{} || !isLineOfItsEm(lineOf(vertical), vertical.unitsPerEm)) {
+        return fail(FontError::NotAFont, std::format("a line of {} units for an em of {}",
+                                                     lineOf(vertical).value(), vertical.unitsPerEm.value()));
     }
     const std::vector<FT_Byte> deviceHeights = face->table(TTAG_VDMX);
     const FontMetrics metrics = fontMetricsFor(
         vertical, readDeviceHeights(std::as_bytes(std::span{deviceHeights})), request.cellHeight);
-    if (const FT_Error error = FT_Set_Pixel_Sizes(face->face, 0, narrow<FT_UInt>(metrics.pixelsPerEm));
+    if (const FT_Error error =
+            FT_Set_Pixel_Sizes(face->face, 0, narrow<FT_UInt>(metrics.pixelsPerEm.value()));
         error != 0) {
         return fail(FontError::NotAFont,
-                    freeTypeError(std::format("{} pixels per em", metrics.pixelsPerEm), error));
+                    freeTypeError(std::format("{} pixels per em", metrics.pixelsPerEm.value()), error));
     }
     // Asked to smooth its glyphs, Windows does as the face's gasp table says at its size: Tahoma has
     // them neither smoothed nor unfitted from 9 to 16 pixels per em. Without smoothing, it fits them.
@@ -407,20 +427,20 @@ auto Font::glyph(char32_t character) const -> Result<Glyph, FontError> {
     }
     const FT_GlyphSlot slot = m_face->face->glyph;
     // Hinted, the advance is a whole number of pixels; a pixel more struck twice.
-    const auto advance = narrow<std::int32_t>((slot->advance.x + (kSubpixels / 2)) / kSubpixels) +
-                         (m_face->isEmboldened ? 1 : 0);
+    const Pixels advance = Pixels{narrow<std::int32_t>((slot->advance.x + (kSubpixels / 2)) / kSubpixels)} +
+                           (m_face->isEmboldened ? kStrikeOffset : Pixels{});
     if (slot->format == FT_GLYPH_FORMAT_OUTLINE && slot->outline.n_points == 0) {
         return Glyph{.advance = advance}; // nothing to draw: a space
     }
     if (slot->format == FT_GLYPH_FORMAT_OUTLINE) {
         FT_BBox box{};
         FT_Outline_Get_CBox(&slot->outline, &box);
-        const FT_Pos largest = FT_Pos{kMaxGlyphEms} * m_metrics.pixelsPerEm * kSubpixels;
+        const FT_Pos largest = FT_Pos{kMaxGlyphEms} * m_metrics.pixelsPerEm.value() * kSubpixels;
         if (box.xMax - box.xMin > largest || box.yMax - box.yMin > largest) {
             return fail(FontError::BadGlyph,
                         std::format("U+{:04X}: {} by {} pixels at {} pixels per em", std::uint32_t{character},
                                     (box.xMax - box.xMin) / kSubpixels, (box.yMax - box.yMin) / kSubpixels,
-                                    m_metrics.pixelsPerEm));
+                                    m_metrics.pixelsPerEm.value()));
         }
     }
     if (const FT_Error error = FT_Render_Glyph(slot, isSmooth ? FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_MONO);
@@ -430,10 +450,10 @@ auto Font::glyph(char32_t character) const -> Result<Glyph, FontError> {
     }
 
     const FT_Bitmap& bitmap = slot->bitmap;
-    Glyph glyph{.left = slot->bitmap_left,
-                .top = slot->bitmap_top,
-                .width = narrow<std::int32_t>(bitmap.width),
-                .height = narrow<std::int32_t>(bitmap.rows),
+    Glyph glyph{.left = Pixels{slot->bitmap_left},
+                .top = Pixels{slot->bitmap_top},
+                .width = Pixels{narrow<std::int32_t>(bitmap.width)},
+                .height = Pixels{narrow<std::int32_t>(bitmap.rows)},
                 .advance = advance,
                 .coverage = std::vector<std::uint8_t>(std::size_t{bitmap.width} * bitmap.rows)};
     const bool isMono = bitmap.pixel_mode == FT_PIXEL_MODE_MONO;

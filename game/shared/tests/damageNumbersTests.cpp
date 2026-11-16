@@ -28,8 +28,8 @@ TEST(DamageNumberLookTest, TheRepositorysNumbersAreWhiteARedHeadsInAHeavyItalicF
     EXPECT_EQ(look->color.green, 255U);
     EXPECT_EQ(look->headColor.red, 255U);
     EXPECT_LT(look->headColor.green, 100U) << "a head's red";
-    EXPECT_LT(look->startScale, 1.0F) << "it starts small";
-    EXPECT_GT(look->peakScale, 1.0F) << "and pops up past its size";
+    EXPECT_LT(look->startScale, cs::kWholeSize) << "it starts small";
+    EXPECT_GT(look->peakScale, cs::kWholeSize) << "and pops up past its size";
     EXPECT_GT(look->rise, 0.0F);
     EXPECT_GT(look->gap, 0.0F) << "its digits a little over the head";
     EXPECT_LT(look->gap, look->height) << "never far over it";
