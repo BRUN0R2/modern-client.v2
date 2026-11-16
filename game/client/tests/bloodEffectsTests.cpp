@@ -84,7 +84,7 @@ protected:
     look.body.rise = nx::UnitsPerSecond{};
     look.body.mists = 0;
     look.gravity = nx::Scale{1.0F};
-    look.drag = 0.8F;
+    look.drag = nx::PerSecond{0.8F};
     look.dropletLife = nx::Seconds{2.0F};
     look.dropletFade = {};
     look.splatShare = 1.0F;
@@ -152,7 +152,7 @@ TEST_F(BloodEffectsTest, TheAirSlowsADropletAsMuchOverAFrameOfAnyLength) {
     }
     other.update(nx::Seconds{0.02F}, nx::Seconds{0.02F}, *hulls, kGravity, weightless);
     ASSERT_EQ(blood.droplets().size(), other.droplets().size()) << "none reached a wall";
-    const float kept = std::exp(-weightless.drag * 0.02F);
+    const float kept = std::exp(-weightless.drag.value() * 0.02F);
     for (std::size_t index = 0; index < blood.droplets().size(); ++index) {
         const nx::Vec3 many = blood.droplets()[index].velocity;
         const nx::Vec3 one = other.droplets()[index].velocity;
@@ -245,7 +245,7 @@ TEST_F(BloodEffectsTest, AMistSplashesOutSlowingOpensOutAndFadesOutAsItGoes) {
     const nx::render::BloodInstance made = shownMist({});
     EXPECT_FLOAT_EQ(made.radius.value(), mist.radius.value() * look.body.mistStartScale) << "small at first";
     EXPECT_FLOAT_EQ(made.opacity, look.body.mistOpacity) << "as opaque as it is made";
-    EXPECT_FLOAT_EQ(made.light, kShade.light * look.mistLight) << "lit more than the droplets";
+    EXPECT_FLOAT_EQ(made.light, kShade.light * look.mistLight.value()) << "lit more than the droplets";
     EXPECT_EQ(made.seed, mist.seed) << "its smoke the same each frame";
     const nx::Seconds halfway = look.body.mistLife / 2.0F;
     const nx::render::BloodInstance grown = shownMist(halfway);
@@ -261,7 +261,7 @@ TEST_F(BloodEffectsTest, AMistSplashesOutSlowingOpensOutAndFadesOutAsItGoes) {
     blood.update(kFrame, kFrame, *hulls, kGravity, look);
     const cs::BloodMist moved = blood.mists().front();
     EXPECT_NEAR(moved.position.x, mist.position.x + (mist.velocity.x * kFrame.count()), 1e-4F);
-    EXPECT_NEAR(moved.velocity.x, mist.velocity.x * std::exp(-look.drag * kFrame.count()), 1e-3F);
+    EXPECT_NEAR(moved.velocity.x, mist.velocity.x * std::exp(-look.drag.value() * kFrame.count()), 1e-3F);
     blood.update(look.body.mistLife, {}, *hulls, kGravity, look);
     EXPECT_TRUE(blood.mists().empty()) << "gone";
 }
@@ -273,7 +273,7 @@ TEST_F(BloodEffectsTest, AHitInTheDarkIsLitAtLeastTheLooksLeastLight) {
     EXPECT_EQ(blood.droplets().front().shade.light, look.leastLight);
     EXPECT_EQ(blood.mists().front().shade.light, look.leastLight);
     const std::span<const nx::render::BloodInstance> shown = blood.shown({}, look);
-    EXPECT_FLOAT_EQ(shown.back().light, look.leastLight * look.mistLight) << "a mist, lit more";
+    EXPECT_FLOAT_EQ(shown.back().light, look.leastLight * look.mistLight.value()) << "a mist, lit more";
 }
 
 TEST_F(BloodEffectsTest, NoMistIsMadePastItsRoom) {

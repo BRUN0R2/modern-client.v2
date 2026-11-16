@@ -134,10 +134,10 @@ TEST(BloodTest, TheEnhancedLooksBloodBurstsMoreFromAHeadThanFromAnywhereElse) {
     EXPECT_EQ(look.mostDroplets, 2048U);
     EXPECT_EQ(look.mostMists, 256U);
     EXPECT_LT(look.leastLight, 1.0F) << "a hit reads in the dark";
-    EXPECT_GT(look.mistLight, 1.0F) << "fine blood scatters the light";
+    EXPECT_GT(look.mistLight, nx::Scale{1.0F}) << "fine blood scatters the light";
     EXPECT_EQ(look.mostSplats, 192U);
     EXPECT_GT(look.dropletLife, look.dropletFade) << "fading out in the air";
-    EXPECT_GT(look.drag, 1.0F) << "the air stops the spray a short way off";
+    EXPECT_GT(look.drag, nx::PerSecond{1.0F}) << "the air stops the spray a short way off";
     EXPECT_GT(look.splatLife, look.splatFade);
     EXPECT_GT(look.head.dropletsPerSize, look.body.dropletsPerSize) << "more droplets";
     EXPECT_GT(look.head.mists, look.body.mists) << "more mist";
