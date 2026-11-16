@@ -303,7 +303,8 @@ TEST(SpriteRendererTest, ASpriteIsSeenThroughTheFogButOneAddedIsNot) {
     constexpr float kAhead = 20.0F;
     const nx::render::Fog blue{.color = {.blue = 1.0F},
                                .curve = nx::render::FogCurve::ExponentialSquared,
-                               .density = std::sqrt(std::numbers::ln2_v<float>) / kAhead};
+                               .density =
+                                   nx::render::FogDensity{std::sqrt(std::numbers::ln2_v<float>) / kAhead}};
     const nx::render::SpriteModel solidModel = scene.load(spriteFile(kParallel, kNormal, images));
     const std::array solid{
         SpriteInstance{
@@ -433,10 +434,10 @@ TEST(SpriteRendererTest, AGlowShowsOverWhatIsInFrontUnlessTheGameHidesIt) {
     const auto gamma = nx::render::textureGammaTable({});
     // The wall, 10 units ahead and scaled to fill the view; the glow 200 units behind it, 25 times its
     // size, which the original dims to 19000 / 200^2 and scales by 200 / 200.
-    const SpriteInstance wallInstance{.model = wall, .origin = {.x = 10.0F}, .scale = 4.0F};
+    const SpriteInstance wallInstance{.model = wall, .origin = {.x = 10.0F}, .scale = nx::Scale{4.0F}};
     const SpriteInstance glowInstance{.model = glow,
                                       .origin = {.x = 200.0F},
-                                      .scale = 25.0F,
+                                      .scale = nx::Scale{25.0F},
                                       .mode = RenderMode::Glow,
                                       .amount = 255,
                                       .color = {.red = 0, .green = 0, .blue = 255}};
@@ -475,7 +476,7 @@ TEST(SpriteRendererTest, ASpriteInTheViewModelsDepthsIsNotHiddenByAWallNearerTha
     const nx::render::SpriteModel flash = scene.loadInView(spriteFile(kParallel, kAdditive, images));
     const auto gamma = nx::render::textureGammaTable({});
     // A wall 16 units ahead, filling the view; a flash 30 units ahead, behind it, added in blue.
-    const std::array walls{SpriteInstance{.model = wall, .origin = {.x = 16.0F}, .scale = 6.0F}};
+    const std::array walls{SpriteInstance{.model = wall, .origin = {.x = 16.0F}, .scale = nx::Scale{6.0F}}};
     const std::array flashes{SpriteInstance{.model = flash,
                                             .origin = {.x = 30.0F},
                                             .mode = RenderMode::TransAdd,

@@ -82,13 +82,13 @@ ammo = { files = ["a.wav"], channel = "item", volume = 1.0 }
 }
 
 TEST(BuyTimeTest, ItsMinutesAreCutToWholeSecondsAndHeldToTheLeast) {
-    EXPECT_EQ(cs::readBuyTime(1.5F).length, nx::Seconds{90.0F});
-    EXPECT_EQ(cs::readBuyTime(1.5F).setToMinutes, std::nullopt);
-    EXPECT_EQ(cs::readBuyTime(0.51F).length, nx::Seconds{30.0F}) << "30.6 seconds, cut";
-    EXPECT_EQ(cs::readBuyTime(0.25F).length, cs::kLeastBuyTime);
-    EXPECT_EQ(cs::readBuyTime(0.25F).setToMinutes, std::nullopt) << "at the least, it is not held";
-    EXPECT_EQ(cs::readBuyTime(0.0F).length, cs::kLeastBuyTime);
-    EXPECT_EQ(cs::readBuyTime(0.0F).setToMinutes, 0.25F);
+    EXPECT_EQ(cs::readBuyTime(nx::Minutes{1.5F}).length, nx::Seconds{90.0F});
+    EXPECT_EQ(cs::readBuyTime(nx::Minutes{1.5F}).setTo, std::nullopt);
+    EXPECT_EQ(cs::readBuyTime(nx::Minutes{0.51F}).length, nx::Seconds{30.0F}) << "30.6 seconds, cut";
+    EXPECT_EQ(cs::readBuyTime(nx::Minutes{0.25F}).length, cs::kLeastBuyTime);
+    EXPECT_EQ(cs::readBuyTime(nx::Minutes{0.25F}).setTo, std::nullopt) << "at the least, it is not held";
+    EXPECT_EQ(cs::readBuyTime(nx::Minutes{0.0F}).length, cs::kLeastBuyTime);
+    EXPECT_EQ(cs::readBuyTime(nx::Minutes{0.0F}).setTo, std::optional{nx::Minutes{0.25F}}) << "15 seconds";
 }
 
 TEST(MayBuyTest, ALivingPlayerWhereItsTeamBuysInTheTimeOfItsRoundMayBuy) {

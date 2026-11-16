@@ -19,15 +19,26 @@ export namespace nx::ui {
 enum class FontError : std::uint8_t {
     NotAFont,   ///< The bytes are no font FreeType reads, or have no such face; the detail says why.
     NotOutline, ///< The face is made of bitmaps (a .fon), which this reader does not size yet.
-    BadHeight,  ///< The cell height is not a whole number of pixels from 1 to kMaxCellHeight.
+    BadHeight,  ///< The cell height is not from kMinCellHeight to kMaxCellHeight.
     NoGlyph,    ///< The face has no glyph for the character.
     BadGlyph,   ///< The face's glyph cannot be loaded or drawn; the detail says why.
     Unreadable, ///< The font file cannot be read (cause: the file system's).
     NoFace,     ///< No face can be had for what a scheme asks for; the detail names what it asked.
 };
 
-/// The tallest cell a font is sized to, in pixels: past it, a glyph's bitmap outgrows any atlas.
-inline constexpr std::int32_t kMaxCellHeight = 1024;
+/// The unit of FontUnits.
+struct FontUnitsTag {
+    static constexpr std::string_view kSuffix = " units";
+};
+
+/// Lengths in a face's own units, the grid its outlines are drawn on (its em is unitsPerEm of them):
+/// what its tables write, before a size scales them to pixels.
+using FontUnits = Quantity<std::int32_t, FontUnitsTag>;
+
+/// The shortest cell a font is sized to: a pixel.
+inline constexpr Pixels kMinCellHeight{1};
+/// The tallest cell a font is sized to: past it, a glyph's bitmap outgrows any atlas.
+inline constexpr Pixels kMaxCellHeight{1024};
 /// How many ems a glyph may stretch across, each way: more is no letter, but a font made to exhaust
 /// the memory or the time of whoever draws it.
 inline constexpr std::int32_t kMaxGlyphEms = 8;
@@ -39,31 +50,31 @@ enum class FontSmoothing : std::uint8_t {
     Count,
 };
 
-/// The heights Windows sizes a face by, in the face's units (its OS/2 table, else its hhea).
+/// The heights Windows sizes a face by, from its OS/2 table, else its hhea.
 struct FontVerticalMetrics {
-    std::int32_t unitsPerEm = 0;
-    std::int32_t ascent = 0;  ///< Above the baseline: usWinAscent.
-    std::int32_t descent = 0; ///< Below the baseline, as a distance: usWinDescent.
+    FontUnits unitsPerEm{};
+    FontUnits ascent{};  ///< Above the baseline: usWinAscent.
+    FontUnits descent{}; ///< Below the baseline, as a distance: usWinDescent.
 };
 
 /// The highest and lowest pixel of a face's glyphs at a size, as its VDMX table records them.
 struct FontDeviceHeight {
-    std::int32_t pixelsPerEm = 0;
-    std::int32_t top = 0;    ///< The highest row above the baseline (yMax).
-    std::int32_t bottom = 0; ///< The lowest row, negative below the baseline (yMin).
+    Pixels pixelsPerEm{};
+    Pixels top{};    ///< The highest row above the baseline (yMax).
+    Pixels bottom{}; ///< The lowest row, negative below the baseline (yMin).
 
     [[nodiscard]] inline auto operator==(const FontDeviceHeight&) const noexcept -> bool = default;
 };
 
-/// A face at a size, in pixels: the em it is scaled to and its line, as Windows reports them
-/// (TEXTMETRIC's tmAscent and tmDescent; their sum is tmHeight).
+/// A face at a size: the em it is scaled to and its line, as Windows reports them (TEXTMETRIC's
+/// tmAscent and tmDescent; their sum is tmHeight).
 struct FontMetrics {
-    std::int32_t pixelsPerEm = 0;
-    std::int32_t ascent = 0;  ///< From the top of the line to the baseline.
-    std::int32_t descent = 0; ///< From the baseline to the bottom of the line.
+    Pixels pixelsPerEm{};
+    Pixels ascent{};  ///< From the top of the line to the baseline.
+    Pixels descent{}; ///< From the baseline to the bottom of the line.
 
     /// The height of a line: at most the cell height asked for, sometimes less.
-    [[nodiscard]] inline auto height() const noexcept -> std::int32_t { return ascent + descent; }
+    [[nodiscard]] inline auto height() const noexcept -> Pixels { return ascent + descent; }
     [[nodiscard]] inline auto operator==(const FontMetrics&) const noexcept -> bool = default;
 };
 
@@ -77,28 +88,27 @@ struct FontMetrics {
 
 /// The size Windows gives a face with `vertical` metrics (its line at least half its em) and
 /// `deviceHeights` (in the order of their ems) when a font is asked for by its cell height
-/// `cellHeight` (from 1 to kMaxCellHeight). Of the device heights, when they reach past the cell:
-/// the em of the first whose line is exactly the cell, else the largest em whose line fits. Without
-/// one that fits, the same of every em, each by its device height where it has one, else by its
-/// line scaled and rounded; a scaled line is split by the face's ascent and descent at the scale of
-/// the cell.
+/// `cellHeight` (from kMinCellHeight to kMaxCellHeight). Of the device heights, when they reach past the
+/// cell: the em of the first whose line is exactly the cell, else the largest em whose line fits. Without one
+/// that fits, the same of every em, each by its device height where it has one, else by its line scaled and
+/// rounded; a scaled line is split by the face's ascent and descent at the scale of the cell.
 [[nodiscard]] auto fontMetricsFor(const FontVerticalMetrics& vertical,
-                                  std::span<const FontDeviceHeight> deviceHeights, std::int32_t cellHeight)
+                                  std::span<const FontDeviceHeight> deviceHeights, Pixels cellHeight)
     -> FontMetrics;
 
 /// A glyph drawn at a size: a bitmap of how much of each pixel it covers, placed from the pen.
 struct Glyph {
-    std::int32_t left = 0;                ///< From the pen to the bitmap's left edge, in pixels.
-    std::int32_t top = 0;                 ///< From the baseline up to the bitmap's top edge.
-    std::int32_t width = 0;               ///< Columns of the bitmap.
-    std::int32_t height = 0;              ///< Rows of the bitmap.
-    std::int32_t advance = 0;             ///< How far the pen moves past the glyph.
+    Pixels left{};                        ///< From the pen to the bitmap's left edge.
+    Pixels top{};                         ///< From the baseline up to the bitmap's top edge.
+    Pixels width{};                       ///< Columns of the bitmap.
+    Pixels height{};                      ///< Rows of the bitmap.
+    Pixels advance{};                     ///< How far the pen moves past the glyph.
     std::vector<std::uint8_t> coverage{}; ///< Row by row from the top: 0 for none, 255 for all of a pixel.
 };
 
 /// What a font is asked to be, as a scheme asks for it.
 struct FontRequest {
-    std::int32_t cellHeight = 0; ///< VGUI2's `tall`: the height of a line, in pixels.
+    Pixels cellHeight{}; ///< VGUI2's `tall`: the height of a line.
     FontSmoothing smoothing = FontSmoothing::None;
     std::uint32_t faceIndex = 0; ///< The face of a collection (.ttc); 0 for a single face.
     /// Bold simulated, as Windows simulates it: each glyph struck twice, the second a pixel to the

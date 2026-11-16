@@ -17,11 +17,11 @@ auto readDamageNumberLook(std::string_view text, std::string_view sourceName)
     const auto positive = [](float value) {
         return std::isfinite(value) && value > 0.0F;
     };
-    const bool isValidLook = !look->font.family.empty() && positive(look->height) &&
-                             positive(look->life.count()) && look->fadeIn + look->fadeOut <= look->life &&
-                             look->growTime + look->settleTime <= look->life && positive(look->startScale) &&
-                             positive(look->peakScale) && positive(look->endScale) &&
-                             look->startScale <= look->peakScale && look->mostNumbers > 0;
+    const bool isValidLook =
+        !look->font.family.empty() && positive(look->height) && positive(look->life.count()) &&
+        look->fadeIn + look->fadeOut <= look->life && look->growTime + look->settleTime <= look->life &&
+        positive(look->startScale.value()) && positive(look->peakScale.value()) &&
+        positive(look->endScale.value()) && look->startScale <= look->peakScale && look->mostNumbers > 0;
     if (!isValidLook) {
         return nx::fail(DamageNumberError::DataInvalid,
                         std::format("{}: a font of a family, a line more than none, a life more than none "

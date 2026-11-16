@@ -153,7 +153,7 @@ TEST(FogControlTest, ChangedInputsAreAppliedAndDisabledChangesAreReadWhenEnabled
     setCvar(fog, "fog_density", "0.5");
     control.update(fog.cvars, nx::Seconds{});
     ASSERT_TRUE(control.shown().has_value());
-    EXPECT_EQ(control.shown()->density, 0.5F);
+    EXPECT_EQ(control.shown()->density, nx::render::FogDensity{0.5F});
     setCvar(fog, "fog_start", "100");
     control.update(fog.cvars, nx::Seconds{});
     ASSERT_TRUE(control.shown().has_value());

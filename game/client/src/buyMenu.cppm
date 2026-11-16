@@ -184,7 +184,7 @@ struct BuyMenuTab {
 struct BuyMenuFrame {
     Team team{};
     nx::Money money{};
-    std::uint32_t secondsLeft = 0;
+    WholeSeconds timeLeft{};
     std::vector<BuyMenuTab> tabs{};
     BuyTab tab{};
     bool isArmed = false;

@@ -30,8 +30,8 @@ enum class BuyMenuFont : std::uint8_t {
 
 /// `money` as the menu writes it: "$2,500".
 [[nodiscard]] auto dollarsText(nx::Money money) -> std::string;
-/// `seconds` as the menu writes them: "1:05".
-[[nodiscard]] auto clockText(std::uint32_t seconds) -> std::string;
+/// `time` as the menu writes it: "1:05".
+[[nodiscard]] auto clockText(WholeSeconds time) -> std::string;
 /// The share of a hit `share` lets through as the menu writes it: "77.5%".
 [[nodiscard]] auto shareText(float share) -> std::string;
 

@@ -13,8 +13,8 @@ namespace nx::render {
 namespace {
 
 /// A decal's scale, held to these (MIN_DECAL_SCALE, MAX_DECAL_SCALE).
-constexpr float kLeastScale = 0.01F;
-constexpr float kMostScale = 16.0F;
+constexpr Scale kLeastScale{0.01F};
+constexpr Scale kMostScale{16.0F};
 /// A node's faces are tried when the decal's center is closer than this to its plane
 /// (DECAL_DISTANCE).
 constexpr float kNodeReach = 4.0F;
@@ -262,8 +262,8 @@ auto DecalPool::stamp(assets::FaceIndex face, const Walk& walked) -> bool {
     if (about.extent) {
         // The original's quick test, in the face's texels: whether the decal's box can reach the
         // face's luxels; its sizes in units cut to whole units.
-        const auto unitsWide = static_cast<float>(static_cast<int>(width / shot.scale));
-        const auto unitsHigh = static_cast<float>(static_cast<int>(height / shot.scale));
+        const auto unitsWide = static_cast<float>(static_cast<int>(width / shot.scale.value()));
+        const auto unitsHigh = static_cast<float>(static_cast<int>(height / shot.scale.value()));
         const Vec3 s = withoutOffset(info.s);
         const Vec3 t = withoutOffset(info.t);
         const float boxWidth = std::abs(unitsWide * dot(s, sAxis)) + std::abs(unitsHigh * dot(s, tAxis));
@@ -284,8 +284,8 @@ auto DecalPool::stamp(assets::FaceIndex face, const Walk& walked) -> bool {
     empty(slot);
     m_slots[slot].life = shot.life;
     // The face's corners on the decal: a texel a unit at scale 1, its middle at the decal's center.
-    const float acrossScale = shot.scale / width;
-    const float downScale = shot.scale / height;
+    const float acrossScale = shot.scale.value() / width;
+    const float downScale = shot.scale.value() / height;
     std::vector<CutCorner> outline;
     for (std::uint32_t edge = 0; edge < bspFace.edgeCount; ++edge) {
         const Vec3 corner = assets::cornerOf(*m_map, bspFace, edge);
@@ -328,8 +328,8 @@ auto DecalPool::stamp(assets::FaceIndex face, const Walk& walked) -> bool {
 auto DecalPool::slotFor(assets::FaceIndex face, const DecalShot& shot, Vec3 sAxis, Vec3 tAxis)
     -> std::size_t {
     // How much of each decal of the face the new one covers, in that decal's own square.
-    const double halfWide = static_cast<double>(shot.size.width) / double{shot.scale} / 2.0;
-    const double halfHigh = static_cast<double>(shot.size.height) / double{shot.scale} / 2.0;
+    const double halfWide = static_cast<double>(shot.size.width) / double{shot.scale.value()} / 2.0;
+    const double halfHigh = static_cast<double>(shot.size.height) / double{shot.scale.value()} / 2.0;
     std::size_t covered = 0;
     std::optional<std::size_t> leastCovered;
     double least = std::numeric_limits<double>::max();
@@ -338,8 +338,8 @@ auto DecalPool::slotFor(assets::FaceIndex face, const DecalShot& shot, Vec3 sAxi
         if (under.life == DecalLife::Permanent) {
             continue; // never replaced
         }
-        const double across = double{under.scale} / static_cast<double>(under.size.width);
-        const double down = double{under.scale} / static_cast<double>(under.size.height);
+        const double across = double{under.scale.value()} / static_cast<double>(under.size.width);
+        const double down = double{under.scale.value()} / static_cast<double>(under.size.height);
         const double alongS = double{dot(shot.center - under.center, sAxis)};
         const double alongT = double{dot(shot.center - under.center, tAxis)};
         const double wide = shareWithin((across * (alongS - halfWide)) + double{kMiddle},

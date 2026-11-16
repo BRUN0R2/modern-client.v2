@@ -134,7 +134,7 @@ void Particles::streamBlood(const BloodStream& stream, const BloodStreamLook& lo
         const std::uint8_t color = colorOf();
         const float share = random.between(0.0F, 1.0F);
         const auto splashSpeed = static_cast<float>(nx::truncateAsX86(speed * share));
-        const float scale = share * look.splashSpread * splashSpeed;
+        const float scale = share * look.splashSpread.value() * splashSpeed;
         if (!add(Particle{.origin = stream.position,
                           .velocity = (way - nx::Vec3{.z = dip}) * scale,
                           .gravity = look.splashGravity,

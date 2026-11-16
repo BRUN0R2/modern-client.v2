@@ -370,9 +370,9 @@ struct alignas(16) CrowdBody {
     Seconds advancedAgo{}; ///< How long before the last tick its server left it there.
     Scale framerate{1.0F}; ///< Times its sequence's own speed (pev->framerate).
     Vec3 lightDirection{.z = -1.0F};
-    float ambient = 0.0F;
+    LightLevel ambient{}; ///< As its ModelLight's.
     Vec3 lightColor{.x = 1.0F, .y = 1.0F, .z = 1.0F};
-    float shade = 0.0F;
+    LightLevel shade{};
     float moveShare = 0.0F;        ///< How far from where it started it shows at the last tick, 0 to 1.
     float moveSharePerTick = 1.0F; ///< How much farther it shows a tick later.
 };
