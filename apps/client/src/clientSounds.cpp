@@ -54,7 +54,7 @@ auto ClientSounds::registerCommands(nx::console::Console& console) -> nx::Result
                   if (line.arguments().size() != 1) {
                       return nx::fail(ConsoleError::InvalidArguments, "usage: play <sound>");
                   }
-                  return play(on, line.arguments().front(), kFullVolume);
+                  return play(on, line.arguments().front(), nx::kFullGain);
               }),
           add({.name = "playvol",
                .description =
@@ -72,7 +72,7 @@ auto ClientSounds::registerCommands(nx::console::Console& console) -> nx::Result
                       error != std::errc{} || end != text.data() + text.size()) {
                       return nx::fail(ConsoleError::InvalidArguments, std::string{kUsage});
                   }
-                  return play(on, line.arguments().front(), volume);
+                  return play(on, line.arguments().front(), nx::Gain{volume});
               }),
           add({.name = "s_devices", .description = "Lists the sound outputs s_device can name."},
               [](Console& on, const CommandLine&) -> nx::Result<void, ConsoleError> {
@@ -156,7 +156,7 @@ void ClientSounds::readPlayer(const cs::GameContent& content) {
     }
 }
 
-auto ClientSounds::play(nx::console::Console& console, std::string_view name, float volume)
+auto ClientSounds::play(nx::console::Console& console, std::string_view name, nx::Gain volume)
     -> nx::Result<void, ConsoleError> {
     if (output == nullptr) {
         console.print("Can't play a sound, no sound output");

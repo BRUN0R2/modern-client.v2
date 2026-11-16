@@ -14,9 +14,6 @@ import :session;
 
 namespace app {
 
-/// The volume `play` plays a sound at, and the view model's sound events: as it is.
-inline constexpr float kFullVolume = 1.0F;
-
 /// What the player hears of the frame `session` played on `audio`, when there is a sound output, as
 /// `hearing` says when: the sounds its weapons made and its view model's sound events, each as long after the
 /// frame as it came after what the last frame showed; and the client events its view model passed, which the

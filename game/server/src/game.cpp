@@ -358,13 +358,13 @@ auto Game::noises() const -> std::vector<GameNoise> {
             if (sound.sound == nullptr || !sound.sound->noise) {
                 continue;
             }
-            const float own = sound.sound->volume;
+            const nx::Gain own = sound.sound->volume;
             made.push_back({.entity = player.body,
                             .team = player.team,
                             .feet = feetOf(player.movement),
                             .eye = eyeOf(player.movement),
                             .kind = *sound.sound->noise,
-                            .loudness = own > 0.0F ? std::min(sound.volume / own, 1.0F) : 0.0F});
+                            .loudness = own > nx::Gain{} ? std::min(sound.volume / own, 1.0F) : 0.0F});
         }
     }
     return made;

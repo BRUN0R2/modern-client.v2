@@ -89,7 +89,7 @@ constexpr float kMinSwimSpeed = 0.1F;
 /// (PM_UpdateStepSound); a jump as fast sounds the ground at kJumpStepVolume (PM_Jump).
 constexpr float kStepSpeed = 150.0F;
 constexpr nx::Milliseconds kQuietStepTime{400.0F};
-constexpr float kJumpStepVolume = 1.0F;
+constexpr nx::Gain kJumpStepVolume = nx::kFullGain;
 /// The time from a step to the next: on the ground or sloshing, on a ladder, and wading; ducked or
 /// on a ladder, this much more, and standing up takes as much off.
 constexpr nx::Milliseconds kStepTime{300.0F};
@@ -109,9 +109,9 @@ constexpr double kFeetShare = 0.5;
 constexpr float kFallPunchSpeed = 250.0F;
 constexpr float kMostSafeFallSpeed = 580.0F;
 constexpr float kLeastBounceSpeed = 350.0F;
-constexpr float kSoftLandingVolume = 0.5F;
-constexpr float kFirmLandingVolume = 0.85F;
-constexpr float kHardLandingVolume = 1.0F;
+constexpr nx::Gain kSoftLandingVolume{0.5F};
+constexpr nx::Gain kFirmLandingVolume{0.85F};
+constexpr nx::Gain kHardLandingVolume = nx::kFullGain;
 /// The view rolls this many degrees for each unit a second of the fall, and its pitch is held to this.
 constexpr double kLandingRollPerSpeed = 0.013;
 constexpr nx::Degrees kMostLandingPitch{8.0F};
@@ -383,7 +383,7 @@ private:
     /// A step of the other foot (PM_PlayStepSound) at `place`, standing on `ground`, `share` of its
     /// place's volume or `volume` of its own.
     void step(StepPlace place, std::optional<StepGround> ground, float share,
-              std::optional<float> volume = std::nullopt) {
+              std::optional<nx::Gain> volume = std::nullopt) {
         m_player.isLeftStep = !m_player.isLeftStep;
         m_sounds.emplace_back(Footstep{.place = place,
                                        .isLeftFoot = m_player.isLeftStep,
@@ -446,17 +446,17 @@ private:
     void checkFalling() {
         const float fall = m_player.fallSpeed.value();
         if (m_player.isOnGround && fall >= kFallPunchSpeed) {
-            float volume = kSoftLandingVolume;
+            nx::Gain volume = kSoftLandingVolume;
             if (m_player.waterLevel == WaterLevel::Dry) {
                 if (fall > kMostSafeFallSpeed) {
                     volume = kHardLandingVolume;
                 } else if (fall > kMostSafeFallSpeed / 2.0F) {
                     volume = kFirmLandingVolume;
                 } else if (fall < kLeastBounceSpeed) {
-                    volume = 0.0F;
+                    volume = nx::Gain{};
                 }
             }
-            if (volume > 0.0F) {
+            if (volume > nx::Gain{}) {
                 step(StepPlace::Ground, groundNow(), 1.0F, volume);
                 m_player.stepTime = kStepTime;
                 m_player.punch.roll = nx::Degrees{static_cast<float>(double{fall} * kLandingRollPerSpeed)};

@@ -55,7 +55,7 @@ public:
 private:
     /// Plays the sound `name` names at `volume`, heard everywhere, as `play` and `playvol` do; without an
     /// output, `console` says so. Errors: CommandFailed.
-    [[nodiscard]] auto play(nx::console::Console& console, std::string_view name, float volume)
+    [[nodiscard]] auto play(nx::console::Console& console, std::string_view name, nx::Gain volume)
         -> nx::Result<void, nx::console::ConsoleError>;
 
     const nx::assets::Vfs* vfs;

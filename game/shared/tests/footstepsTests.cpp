@@ -119,11 +119,11 @@ TEST(FootstepRulesTest, TheRepositorysStepsAreTheOriginals) {
               (std::vector<std::string>{"player/pl_step1.wav", "player/pl_step3.wav"}));
     EXPECT_EQ(concrete.leftFoot.files,
               (std::vector<std::string>{"player/pl_step2.wav", "player/pl_step4.wav"}));
-    EXPECT_EQ(concrete.rightFoot.volume, 0.5F);
-    EXPECT_EQ(rules.soundsOf(StepKind::Dirt)->rightFoot.volume, 0.55F);
-    EXPECT_EQ(rules.soundsOf(StepKind::Vent)->rightFoot.volume, 0.7F);
-    EXPECT_EQ(rules.soundsOf(StepKind::Wade)->rightFoot.volume, 0.65F);
-    EXPECT_EQ(rules.soundsOf(StepKind::Ladder)->rightFoot.volume, 0.35F);
+    EXPECT_EQ(concrete.rightFoot.volume, nx::Gain{0.5F});
+    EXPECT_EQ(rules.soundsOf(StepKind::Dirt)->rightFoot.volume, nx::Gain{0.55F});
+    EXPECT_EQ(rules.soundsOf(StepKind::Vent)->rightFoot.volume, nx::Gain{0.7F});
+    EXPECT_EQ(rules.soundsOf(StepKind::Wade)->rightFoot.volume, nx::Gain{0.65F});
+    EXPECT_EQ(rules.soundsOf(StepKind::Ladder)->rightFoot.volume, nx::Gain{0.35F});
     EXPECT_EQ(rules.soundsOf(StepKind::Tile)->rare->oneIn, 5U);
     EXPECT_EQ(rules.soundsOf(StepKind::Wade)->silentEvery, 4U);
     EXPECT_EQ(rules.splash.files.size(), 4U);
@@ -155,14 +155,15 @@ TEST(StepVoiceTest, EachFootPlaysItsSoundAtTheStepsVolume) {
     ASSERT_TRUE(left.has_value());
     EXPECT_EQ(left->sound, &rules.soundsOf(StepKind::Vent)->leftFoot);
     EXPECT_EQ(left->at, at);
-    EXPECT_FLOAT_EQ(left->volume, 0.7F);
+    EXPECT_FLOAT_EQ(left->volume.value(), 0.7F);
     const auto quiet = voice.soundOf(Footstep{.share = 0.35F}, TextureMaterial::Concrete, at, random);
     ASSERT_TRUE(quiet.has_value());
     EXPECT_EQ(quiet->sound, &rules.soundsOf(StepKind::Concrete)->rightFoot);
-    EXPECT_FLOAT_EQ(quiet->volume, 0.5F * 0.35F);
-    const auto landing = voice.soundOf(Footstep{.volume = 0.85F}, TextureMaterial::Dirt, at, random);
+    EXPECT_FLOAT_EQ(quiet->volume.value(), 0.5F * 0.35F);
+    const auto landing =
+        voice.soundOf(Footstep{.volume = nx::Gain{0.85F}}, TextureMaterial::Dirt, at, random);
     ASSERT_TRUE(landing.has_value());
-    EXPECT_FLOAT_EQ(landing->volume, 0.85F);
+    EXPECT_FLOAT_EQ(landing->volume.value(), 0.85F);
 }
 
 TEST(StepVoiceTest, OneWadingStepInFourIsSilentAndOneTileStepInFiveRare) {

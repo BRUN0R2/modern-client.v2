@@ -143,9 +143,8 @@ struct Footstep {
     /// The share of the place's volume it has (a ground's by what it is made of): 1, less while the
     /// player ducks (PM_UpdateStepSound).
     float share = 1.0F;
-    /// A volume of its own instead, from 0 to 1, as the player jumps or lands (PM_Jump,
-    /// PM_CheckFalling).
-    std::optional<float> volume{};
+    /// A volume of its own instead, as the player jumps or lands (PM_Jump, PM_CheckFalling).
+    std::optional<nx::Gain> volume{};
     /// What it stood on; none in the air, where no texture is under it.
     std::optional<StepGround> ground{};
 };

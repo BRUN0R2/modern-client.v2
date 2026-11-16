@@ -465,19 +465,19 @@ TEST(WeaponsTest, TheRepositorysWeaponsSoundAsTheOriginals) {
     ASSERT_TRUE(knife.view.drawSound.has_value());
     EXPECT_EQ(knife.view.drawSound->files, Files{"weapons/knife_deploy1.wav"});
     EXPECT_EQ(knife.view.drawSound->channel, cs::SoundChannel::Item);
-    EXPECT_FLOAT_EQ(knife.view.drawSound->volume, 0.3F);
+    EXPECT_FLOAT_EQ(knife.view.drawSound->volume.value(), 0.3F);
     for (const cs::MeleeAttack* const attack : {&knife.melee->slash, &knife.melee->stab}) {
         ASSERT_TRUE(attack->missSound.has_value());
         EXPECT_EQ(attack->missSound->files, (Files{"weapons/knife_slash1.wav", "weapons/knife_slash2.wav"}));
         EXPECT_EQ(attack->missSound->channel, cs::SoundChannel::Weapon);
         ASSERT_TRUE(attack->missSound->pitch.has_value());
-        EXPECT_EQ(attack->missSound->pitch->least, 94U);
-        EXPECT_EQ(attack->missSound->pitch->most, 94U);
+        EXPECT_EQ(attack->missSound->pitch->least, cs::SoundPitch{94});
+        EXPECT_EQ(attack->missSound->pitch->most, cs::SoundPitch{94});
         ASSERT_TRUE(attack->hitSound.has_value());
         EXPECT_EQ(attack->hitSound->files, Files{"weapons/knife_hitwall1.wav"});
         EXPECT_EQ(attack->hitSound->channel, cs::SoundChannel::Item);
-        EXPECT_EQ(attack->hitSound->pitch->least, 98U);
-        EXPECT_EQ(attack->hitSound->pitch->most, 101U);
+        EXPECT_EQ(attack->hitSound->pitch->least, cs::SoundPitch{98});
+        EXPECT_EQ(attack->hitSound->pitch->most, cs::SoundPitch{101});
     }
     // PlayEmptySound: a pistol's click or a rifle's, at 0.8.
     for (const auto& [id, click] :
@@ -486,7 +486,7 @@ TEST(WeaponsTest, TheRepositorysWeaponsSoundAsTheOriginals) {
         const Weapon& gun = *catalog->findWeapon(id);
         ASSERT_TRUE(gun.firing->emptySound.has_value()) << id;
         EXPECT_EQ(gun.firing->emptySound->files, Files{click}) << id;
-        EXPECT_FLOAT_EQ(gun.firing->emptySound->volume, 0.8F) << id;
+        EXPECT_FLOAT_EQ(gun.firing->emptySound->volume.value(), 0.8F) << id;
         ASSERT_TRUE(gun.firing->sound.has_value()) << id;
         EXPECT_EQ(gun.firing->sound->channel, cs::SoundChannel::Weapon) << id;
     }

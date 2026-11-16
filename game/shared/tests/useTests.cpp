@@ -21,10 +21,10 @@ TEST(UseRulesTest, TheRepositorysUseSoundsAreTheOriginals) {
     ASSERT_TRUE(rules.has_value()) << (rules ? "" : nx::describe(rules.error()));
     EXPECT_EQ(rules->found.files, (std::vector<std::string>{"common/wpn_select.wav"}));
     EXPECT_EQ(rules->found.channel, cs::SoundChannel::Item);
-    EXPECT_EQ(rules->found.volume, 0.4F);
+    EXPECT_EQ(rules->found.volume, nx::Gain{0.4F});
     EXPECT_EQ(rules->nothing.files, (std::vector<std::string>{"common/wpn_denyselect.wav"}));
     EXPECT_EQ(rules->nothing.channel, cs::SoundChannel::Item);
-    EXPECT_EQ(rules->nothing.volume, 0.4F);
+    EXPECT_EQ(rules->nothing.volume, nx::Gain{0.4F});
     EXPECT_EQ(rules->soundFiles().size(), 2U);
 }
 

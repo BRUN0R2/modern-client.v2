@@ -8,6 +8,7 @@
 export module cs.client:voices;
 
 import std;
+import nx.audio;
 import cs.shared;
 
 export namespace cs {
@@ -16,7 +17,7 @@ export namespace cs {
 /// the mix by which its sound is done (nx::audio::Mixer::framesMixed), none for one never given any.
 struct VoiceUse {
     SoundChannel channel = SoundChannel::Auto;
-    std::uint64_t doneAt = 0;
+    nx::audio::MixFrames doneAt{};
 };
 
 /// The voice of `voices`, which holds one at least, that a sound on `channel` takes, as the original's
