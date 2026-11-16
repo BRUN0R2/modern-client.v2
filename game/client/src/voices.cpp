@@ -5,6 +5,7 @@ module cs.client;
 
 import std;
 import nx.core;
+import nx.audio;
 import cs.shared;
 
 namespace cs {

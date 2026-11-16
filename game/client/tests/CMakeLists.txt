@@ -43,6 +43,7 @@ nxAddTest(csClientTests
         nx::render
         nx::ui
         nx::platform
+        nx::audio
         nx::jobs
         nx::navigation
         nx::agents

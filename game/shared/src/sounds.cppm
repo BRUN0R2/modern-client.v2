@@ -25,15 +25,22 @@ enum class SoundChannel : std::uint8_t {
     Count,
 };
 
-/// A sound's pitch as recorded, in hundredths of its speed (the original's PITCH_NORM).
-inline constexpr std::uint32_t kNormalPitch = 100;
-/// The highest pitch: the original's is a byte.
-inline constexpr std::uint32_t kMostPitch = 255;
+/// The unit of SoundPitch: none.
+struct SoundPitchTag {};
 
-/// A pitch from `least` to `most`, at random, in hundredths of the recorded speed.
+/// How fast a sound plays against its recording, in hundredths of its speed, as the original's game
+/// gives a sound's pitch: kNormalPitch as recorded, twice that an octave higher in half the time.
+using SoundPitch = nx::Quantity<std::uint32_t, SoundPitchTag>;
+
+/// A sound's pitch as recorded (the original's PITCH_NORM).
+inline constexpr SoundPitch kNormalPitch{100};
+/// The highest pitch: the original's is a byte.
+inline constexpr SoundPitch kMostPitch{255};
+
+/// A pitch from `least` to `most`, at random.
 struct PitchRange {
-    std::uint32_t least{kNormalPitch};
-    std::uint32_t most{kNormalPitch};
+    SoundPitch least{kNormalPitch};
+    SoundPitch most{kNormalPitch};
 };
 
 /// What an agent that hears a sound takes it for, which tells how far it carries (the game events
@@ -49,12 +56,12 @@ enum class NoiseKind : std::uint8_t {
 };
 
 /// A sound the game makes: one of its files at random (paths under `sound/`), on a channel of the
-/// entity that makes it, at `volume`, from 0 to 1, a pitch of its range, as recorded without one, and
-/// the noise an agent that hears it takes it for, none for a sound agents do not heed.
+/// entity that makes it, at `volume`, at most nx::kFullGain, a pitch of its range, as recorded without
+/// one, and the noise an agent that hears it takes it for, none for a sound agents do not heed.
 struct GameSound {
     std::vector<std::string> files{};
     SoundChannel channel{};
-    float volume{1.0F};
+    nx::Gain volume{nx::kFullGain};
     std::optional<PitchRange> pitch{};
     std::optional<NoiseKind> noise{};
 };
@@ -64,7 +71,7 @@ struct GameSound {
 struct SoundMade {
     const GameSound* sound{};
     nx::GameTime at{};
-    float volume{1.0F}; ///< From 0 to 1: the sound's own, or less, as a ducked player's steps.
+    nx::Gain volume{nx::kFullGain}; ///< The sound's own, or less, as a ducked player's steps.
 };
 
 /// What is wrong with `sound`, when anything is: no file, or a pitch range whose least is above its
@@ -78,9 +85,9 @@ struct nx::meta::Description<cs::PitchRange> {
     static constexpr std::string_view kName = "cs::PitchRange";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::PitchRange::least>(
-            "least", nx::data::Range{.minimum = 1.0, .maximum = double{cs::kMostPitch}}),
+            "least", nx::data::Range{.minimum = 1.0, .maximum = double{cs::kMostPitch.value()}}),
         nx::meta::field<&cs::PitchRange::most>(
-            "most", nx::data::Range{.minimum = 1.0, .maximum = double{cs::kMostPitch}}),
+            "most", nx::data::Range{.minimum = 1.0, .maximum = double{cs::kMostPitch.value()}}),
     };
 };
 
@@ -90,7 +97,8 @@ struct nx::meta::Description<cs::GameSound> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::GameSound::files>("files"),
         nx::meta::field<&cs::GameSound::channel>("channel"),
-        nx::meta::field<&cs::GameSound::volume>("volume", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::GameSound::volume>(
+            "volume", nx::data::Range{.minimum = 0.0, .maximum = double{nx::kFullGain.value()}}),
         nx::meta::field<&cs::GameSound::pitch>("pitch"),
         nx::meta::field<&cs::GameSound::noise>("noise"),
     };

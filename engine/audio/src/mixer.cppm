@@ -29,6 +29,24 @@ enum class MixerError : std::uint8_t {
     QueueFull,
 };
 
+/// The unit of MixFrames.
+struct MixFramesTag {
+    static constexpr std::string_view kSuffix = " frames";
+};
+/// The unit of Pitch: none.
+struct PitchTag {};
+
+/// Frames of a mix, one sample of each of its channels: how many it mixed, the mix's own clock
+/// (Mixer::framesMixed), and how long something lasts on it.
+using MixFrames = Quantity<std::uint64_t, MixFramesTag>;
+
+/// How fast a voice plays its sound against its recording: kRecordedPitch as recorded, twice that an
+/// octave higher in half the time.
+using Pitch = Quantity<float, PitchTag>;
+
+/// A sound played at the speed it was recorded at.
+inline constexpr Pitch kRecordedPitch{1.0F};
+
 /// A voice of a mixer, from 0 to Mixer::voices(): what a command plays, stops or changes.
 struct VoiceId {
     std::uint32_t value = 0;
@@ -36,10 +54,10 @@ struct VoiceId {
     [[nodiscard]] inline auto operator==(const VoiceId&) const noexcept -> bool = default;
 };
 
-/// How loud a voice is in each ear, 1 the sound as it is.
+/// How loud a voice is in each ear, kFullGain the sound as it is.
 struct VoiceGains {
-    float left = 1.0F;
-    float right = 1.0F;
+    Gain left{kFullGain};
+    Gain right{kFullGain};
 };
 
 /// Plays `sound`, which must outlive the play (until a StopVoice or another PlayVoice of the voice has
@@ -48,7 +66,7 @@ struct PlayVoice {
     VoiceId voice{};
     const Sound* sound = nullptr;
     VoiceGains gains{};
-    float pitch = 1.0F; ///< Its speed: 2 plays it an octave higher, in half the time.
+    Pitch pitch{kRecordedPitch};
     bool loops = false; ///< From its loop start to its end, again and again.
 };
 
@@ -65,7 +83,7 @@ struct SetVoiceGains {
 
 /// Changes the gain of everything mixed (`volume`).
 struct SetMasterGain {
-    float gain = 1.0F;
+    Gain gain{kFullGain};
 };
 
 using MixerCommand = std::variant<PlayVoice, StopVoice, SetVoiceGains, SetMasterGain>;
@@ -108,13 +126,13 @@ namespace nx::audio {
 /// ends (its member initializers are read there).
 struct SentCommand {
     MixerCommand command;
-    std::uint64_t delay = 0;
+    MixFrames delay{};
 };
 
 /// A command the mixer took, and the frame of the mix it is due at.
 struct ScheduledCommand {
     MixerCommand command;
-    std::uint64_t frame = 0;
+    MixFrames frame{};
 };
 
 } // namespace nx::audio
@@ -154,12 +172,12 @@ public:
 
     /// The frames mixed so far, the mix's own clock, as the audio thread last left it: a command sent
     /// now is done at the start of the next block, its delay later; from any thread.
-    [[nodiscard]] auto framesMixed() const noexcept -> std::uint64_t;
+    [[nodiscard]] auto framesMixed() const noexcept -> MixFrames;
     /// The frames of the mix `delay` lasts, to the nearest, as send waits them.
-    [[nodiscard]] auto framesIn(Seconds delay) const noexcept -> std::uint64_t;
+    [[nodiscard]] auto framesIn(Seconds delay) const noexcept -> MixFrames;
     /// The frames of the mix a voice plays `sound` for at `pitch` (PlayVoice::pitch) before it ends,
     /// unless it loops: none for one it cannot play.
-    [[nodiscard]] auto framesOf(const Sound& sound, float pitch) const noexcept -> std::uint64_t;
+    [[nodiscard]] auto framesOf(const Sound& sound, Pitch pitch) const noexcept -> MixFrames;
 
     [[nodiscard]] inline auto voices() const noexcept -> std::uint32_t {
         return static_cast<std::uint32_t>(m_voices.size());
@@ -178,11 +196,11 @@ private:
     };
 
     /// Frames of `sound` a frame of the mix at `pitch`: none for one it cannot play.
-    [[nodiscard]] auto stepOf(const Sound* sound, float pitch) const noexcept -> double;
+    [[nodiscard]] auto stepOf(const Sound* sound, Pitch pitch) const noexcept -> double;
     /// Keeps `sent`, taken as the block that starts at mixedFrames is mixed, until it is due.
     void schedule(SentCommand sent) noexcept;
     /// Does the commands due by `frame`, in their order.
-    void doDue(std::uint64_t frame) noexcept;
+    void doDue(MixFrames frame) noexcept;
     void apply(const MixerCommand& command) noexcept;
     /// Adds every voice playing to `out`, then puts it through the master gain and the limiter.
     void mixFrames(std::span<float> out) noexcept;
@@ -203,8 +221,8 @@ private:
     std::atomic<std::size_t> m_unfinished{0};
     /// Frames mixed so far: the audio thread alone writes it, after each block.
     std::atomic<std::uint64_t> mixedFrames{0};
-    float m_masterGain = 1.0F;
-    float m_limiterGain = 1.0F;
+    Gain masterGain{kFullGain};
+    Gain limiterGain{kFullGain};
     float m_limiterRelease; ///< The share of the way back to a gain of 1 the limiter goes a frame.
 };
 

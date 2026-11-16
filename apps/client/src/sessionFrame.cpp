@@ -43,7 +43,7 @@ void hearSession(Session& session, cs::ClientAudio* audio, const cs::Hearing& he
     for (const cs::PassedEvent& passed : session.clientEvents) {
         if (passed.event->event == cs::kSoundEvent) {
             const nx::GameTime at = session.viewPose->start.after(passed.intoPlay, hearing.rate);
-            reportSound(audio->playLocal(passed.event->options, kFullVolume, hearing.delayOf(at)),
+            reportSound(audio->playLocal(passed.event->options, nx::kFullGain, hearing.delayOf(at)),
                         soundFailures);
         }
     }

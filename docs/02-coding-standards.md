@@ -237,6 +237,10 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
 - The interface's places and sizes: `nx::Pixels`, whole pixels, grouped as `nx::ui::PixelPoint`,
   `PixelSize` and `PixelRect`, so that no `x` is passed for a `wide`. What the GPU takes (`nx::rhi`'s
   rectangles, a screen quad's fractions of a pixel) stays its own data, converted where it is handed over.
+- Sound: `nx::Gain`, how loud a sound is against its recording (a sound's volume, what an ear hears of
+  it, the gain of everything heard); `nx::audio::Pitch`, how fast a voice plays its sound, and
+  `cs::SoundPitch`, the game's pitch in the original's hundredths; `nx::audio::MixFrames`, the mix's
+  clock and what lasts on it. The samples stay `float`, as the sound device takes them.
 
 ### 4.2 Enums
 

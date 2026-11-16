@@ -77,6 +77,8 @@ struct HertzTag {
 struct PixelsTag {
     static constexpr std::string_view kSuffix = "px";
 };
+/// The unit of Gain: a bare factor, printed as a number alone.
+struct GainTag {};
 
 /// Map distance. One hammer unit is the GoldSrc world unit (about one inch).
 using HammerUnits = Quantity<float, HammerUnitsTag>;
@@ -123,6 +125,10 @@ using Radians = Quantity<float, RadiansTag>;
 /// Sample frames a second: what a sound is made at and what a sound device plays at.
 using SampleRate = Quantity<std::uint32_t, HertzTag>;
 
+/// How loud a sound is against its recording, the factor its samples are played at: kFullGain as
+/// recorded, none silent. A sound's volume, what each ear hears of it, and the gain of everything heard.
+using Gain = Quantity<float, GainTag>;
+
 /// Whole pixels of the screen: where the interface places things, from a top left (negative to its
 /// left or above it), how large it makes them, and how far apart.
 using Pixels = Quantity<std::int32_t, PixelsTag>;
@@ -137,6 +143,9 @@ inline constexpr Radians kHalfTurnRadians{std::numbers::pi_v<float>};
 /// A quarter turn, straight up or down from level, and a whole turn, all around.
 inline constexpr Degrees kQuarterTurnDegrees = kHalfTurnDegrees / 2.0F;
 inline constexpr Degrees kFullTurnDegrees = kHalfTurnDegrees * 2.0F;
+
+/// A sound as recorded: the most a sound's own volume is, as the original bounds it.
+inline constexpr Gain kFullGain{1.0F};
 
 // Arithmetic across units: only the combinations with a physical meaning compile.
 

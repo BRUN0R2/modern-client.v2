@@ -94,26 +94,28 @@ auto Mixer::isPlaying(VoiceId voice) const noexcept -> bool {
     return voice.value < m_voices.size() && m_playing[voice.value].load(std::memory_order_acquire);
 }
 
-auto Mixer::framesMixed() const noexcept -> std::uint64_t {
-    return mixedFrames.load(std::memory_order_acquire);
+auto Mixer::framesMixed() const noexcept -> MixFrames {
+    return MixFrames{mixedFrames.load(std::memory_order_acquire)};
 }
 
-auto Mixer::framesIn(Seconds delay) const noexcept -> std::uint64_t {
-    return static_cast<std::uint64_t>(std::llround(static_cast<double>(std::max(delay.count(), 0.0F)) *
-                                                   static_cast<double>(m_rate.value())));
+auto Mixer::framesIn(Seconds delay) const noexcept -> MixFrames {
+    return MixFrames{static_cast<std::uint64_t>(std::llround(
+        static_cast<double>(std::max(delay.count(), 0.0F)) * static_cast<double>(m_rate.value())))};
 }
 
-auto Mixer::framesOf(const Sound& sound, float pitch) const noexcept -> std::uint64_t {
+auto Mixer::framesOf(const Sound& sound, Pitch pitch) const noexcept -> MixFrames {
     const double step = stepOf(&sound, pitch);
     // A voice ends at the first frame its place in the sound reaches the sound's end.
-    return step > 0.0 ? static_cast<std::uint64_t>(std::ceil(static_cast<double>(sound.frames()) / step)) : 0;
+    return step > 0.0
+               ? MixFrames{static_cast<std::uint64_t>(std::ceil(static_cast<double>(sound.frames()) / step))}
+               : MixFrames{};
 }
 
-auto Mixer::stepOf(const Sound* sound, float pitch) const noexcept -> double {
+auto Mixer::stepOf(const Sound* sound, Pitch pitch) const noexcept -> double {
     const bool isPlayable =
-        sound != nullptr && sound->frames() > 0 && sound->rate().value() > 0 && pitch > 0.0F;
+        sound != nullptr && sound->frames() > 0 && sound->rate().value() > 0 && pitch > Pitch{};
     return isPlayable ? static_cast<double>(sound->rate().value()) / static_cast<double>(m_rate.value()) *
-                            static_cast<double>(pitch)
+                            static_cast<double>(pitch.value())
                       : 0.0;
 }
 
@@ -127,9 +129,9 @@ void Mixer::render(std::span<float> out) noexcept {
     const std::uint64_t mixed = mixedFrames.load(std::memory_order_relaxed);
     std::uint64_t done = 0;
     while (done < frames) {
-        doDue(mixed + done);
+        doDue(MixFrames{mixed + done});
         const std::uint64_t until =
-            m_scheduled.empty() ? frames : std::min(frames, m_scheduled.back().frame - mixed);
+            m_scheduled.empty() ? frames : std::min(frames, m_scheduled.back().frame.value() - mixed);
         mixFrames(out.subspan(done * kStereo, (until - done) * kStereo));
         done = until;
     }
@@ -138,14 +140,14 @@ void Mixer::render(std::span<float> out) noexcept {
 
 void Mixer::schedule(SentCommand sent) noexcept {
     ScheduledCommand scheduled{.command = std::move(sent.command),
-                               .frame = mixedFrames.load(std::memory_order_relaxed) + sent.delay};
+                               .frame = MixFrames{mixedFrames.load(std::memory_order_relaxed)} + sent.delay};
     // Before those due at the same frame, which were sent first: the next due is the last.
     const auto at = std::ranges::lower_bound(m_scheduled, scheduled.frame, std::ranges::greater{},
                                              &ScheduledCommand::frame);
     m_scheduled.insert(at, std::move(scheduled));
 }
 
-void Mixer::doDue(std::uint64_t frame) noexcept {
+void Mixer::doDue(MixFrames frame) noexcept {
     while (!m_scheduled.empty() && m_scheduled.back().frame <= frame) {
         apply(m_scheduled.back().command);
         m_scheduled.pop_back();
@@ -162,13 +164,13 @@ void Mixer::mixFrames(std::span<float> out) noexcept {
     // The master gain, then the limiter: its gain drops at once to what the louder ear needs, and goes
     // back up to 1 over its release.
     for (std::size_t frame = 0; frame + 1 < out.size(); frame += kStereo) {
-        const float left = out[frame] * m_masterGain;
-        const float right = out[frame + 1] * m_masterGain;
+        const float left = out[frame] * masterGain.value();
+        const float right = out[frame + 1] * masterGain.value();
         const float peak = std::max(std::abs(left), std::abs(right));
-        const float needed = peak > kCeiling ? kCeiling / peak : 1.0F;
-        m_limiterGain = std::min(m_limiterGain + ((1.0F - m_limiterGain) * m_limiterRelease), needed);
-        out[frame] = left * m_limiterGain;
-        out[frame + 1] = right * m_limiterGain;
+        const Gain needed = peak > kCeiling ? Gain{kCeiling / peak} : kFullGain;
+        limiterGain = std::min(limiterGain + ((kFullGain - limiterGain) * m_limiterRelease), needed);
+        out[frame] = left * limiterGain.value();
+        out[frame + 1] = right * limiterGain.value();
     }
 }
 
@@ -200,7 +202,7 @@ void Mixer::apply(const MixerCommand& command) noexcept {
             voice->gains = gains->gains;
         }
     } else if (const auto* master = std::get_if<SetMasterGain>(&command)) {
-        m_masterGain = master->gain;
+        masterGain = master->gain;
     }
 }
 
@@ -239,8 +241,8 @@ void Mixer::mixVoice(std::size_t index, std::span<float> out) noexcept {
             left += sampleOf(voice, tap, 0) * weight;
             right += sampleOf(voice, tap, 1) * weight;
         }
-        out[frame] += left * voice.gains.left;
-        out[frame + 1] += right * voice.gains.right;
+        out[frame] += left * voice.gains.left.value();
+        out[frame + 1] += right * voice.gains.right.value();
         voice.position += voice.step;
         if (voice.position >= frames) {
             if (!voice.loops) {

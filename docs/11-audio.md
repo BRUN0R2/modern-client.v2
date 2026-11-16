@@ -42,7 +42,9 @@ another rate comes out over 90 dB clean, and one sped up past the mix's band ove
 Voices sum in float; a master gain and a stereo-linked limiter (instant attack, 100 ms release)
 keep every sample under 0.98 of full scale. The frames it mixed are its own clock (`framesMixed`),
 by which the game tells when a voice it gave a sound is done (`framesOf`: the frames of the mix a
-sound lasts at its pitch). A voice pool with priorities and stealing, spatialization, the room's DSP and
+sound lasts at its pitch). Its values have their own types ([02 §4.1](02-coding-standards.md#41-strong-types-and-units)):
+the gains `nx::Gain` (`nx::kFullGain` as recorded), a voice's pitch `nx::audio::Pitch`, the frames
+`nx::audio::MixFrames`. A voice pool with priorities and stealing, spatialization, the room's DSP and
 streaming come with what plays sounds.
 
 `nx.platform:audio` opens the system's default output with SDL3 at its own rate, in two channels
@@ -65,8 +67,8 @@ precision at the WAV's own instants.
 
 The player's own sounds come from the game as data, `cs::GameSound` (`cs.shared:sounds`): its
 files, one at random, its channel of the player (`auto`, `weapon`, `voice`, `item`, `body`), its
-volume and its pitch range, in hundredths of the recorded speed (the original's 100 normal, 255 at
-most), and the noise an agent that hears it takes it for (`noise`, `cs::NoiseKind`: a step, a hard
+volume (`nx::Gain`, at most as recorded) and its pitch range, in hundredths of the recorded speed
+(`cs::SoundPitch`: the original's 100 normal, 255 at most), and the noise an agent that hears it takes it for (`noise`, `cs::NoiseKind`: a step, a hard
 landing, a shot, a quiet one, a dry fire; docs/10 §11), none for a sound agents do not heed. The game
 says which sound it makes; `cs::ClientAudio` chooses the file and the pitch with its
 own random numbers, as the original's client and engine choose them, so that hearing never changes

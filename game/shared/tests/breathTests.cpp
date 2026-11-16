@@ -115,13 +115,13 @@ TEST(BreathRulesTest, TheRepositorysBreathIsTheOriginals) {
     const BreathRules rules = repositoryRules();
     EXPECT_EQ(rules.shortGasp.files, (std::vector<std::string>{"player/pl_wade2.wav"}));
     EXPECT_EQ(rules.shortGasp.channel, cs::SoundChannel::Voice);
-    EXPECT_EQ(rules.shortGasp.volume, 1.0F);
+    EXPECT_EQ(rules.shortGasp.volume, nx::Gain{1.0F});
     EXPECT_EQ(rules.longGasp.files, (std::vector<std::string>{"player/pl_wade1.wav"}));
     EXPECT_EQ(rules.longGasp.channel, cs::SoundChannel::Voice);
     EXPECT_EQ(rules.bubbles.files, (std::vector<std::string>{"player/pl_swim1.wav", "player/pl_swim2.wav",
                                                              "player/pl_swim3.wav", "player/pl_swim4.wav"}));
     EXPECT_EQ(rules.bubbles.channel, cs::SoundChannel::Body);
-    EXPECT_EQ(rules.bubbles.volume, 0.8F);
+    EXPECT_EQ(rules.bubbles.volume, nx::Gain{0.8F});
     EXPECT_EQ(rules.soundFiles().size(), 6U);
 }
 
@@ -145,7 +145,7 @@ TEST(BreathTest, ComingUpAfterAWhileUnderWaterGasps) {
     const std::optional<SoundMade> gasp = breatheAt(breath, 3.5F, WaterLevel::Waist);
     EXPECT_EQ(soundOf(gasp), &rules.shortGasp);
     ASSERT_TRUE(gasp.has_value());
-    EXPECT_EQ(gasp->volume, 1.0F);
+    EXPECT_EQ(gasp->volume, nx::kFullGain);
     EXPECT_EQ(gasp->at, at(3.5F).now);
     EXPECT_EQ(soundOf(breatheAt(breath, 3.51F, WaterLevel::Waist)), nullptr) << "its air is whole again";
 }
@@ -209,7 +209,7 @@ TEST(BreathTest, UnderWaterItBubblesTheLikelierTheLessAirIsLeft) {
     }
     ASSERT_TRUE(bubble.has_value());
     EXPECT_EQ(bubble->sound, &rules.bubbles);
-    EXPECT_EQ(bubble->volume, 0.8F);
+    EXPECT_EQ(bubble->volume, nx::Gain{0.8F});
     EXPECT_EQ(bubble->at, at(12.5F).now);
 }
 

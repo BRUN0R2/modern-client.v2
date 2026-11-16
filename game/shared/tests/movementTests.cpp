@@ -849,7 +849,7 @@ TEST(FootstepTest, AHardLandingSoundsLoudAndRollsTheView) {
     ASSERT_TRUE(landed.state.isOnGround);
     const std::vector<cs::Footstep> steps = footstepsOf(landed.sounds);
     ASSERT_EQ(steps.size(), 1U);
-    EXPECT_EQ(steps.front().volume, 1.0F) << "faster than the safest fall, 580";
+    EXPECT_EQ(steps.front().volume, nx::Gain{1.0F}) << "faster than the safest fall, 580";
     EXPECT_NEAR(landed.state.punch.roll.value(), 600.0F * 0.013F, kTolerance);
     EXPECT_EQ(landed.state.fallSpeed, nx::UnitsPerSecond{}) << "on the ground, the fall is over";
     EXPECT_EQ(landed.state.stepTime, nx::Milliseconds{300.0F});
@@ -857,7 +857,8 @@ TEST(FootstepTest, AHardLandingSoundsLoudAndRollsTheView) {
     falling.velocity.z = -300.0F;
     const cs::MovementResult firm = cs::simulateMovement(falling, command(), MovementSettings{}, floor, {});
     ASSERT_EQ(footstepsOf(firm.sounds).size(), 1U);
-    EXPECT_EQ(footstepsOf(firm.sounds).front().volume, 0.85F) << "faster than half the safest fall, 290";
+    EXPECT_EQ(footstepsOf(firm.sounds).front().volume, nx::Gain{0.85F})
+        << "faster than half the safest fall, 290";
     falling.velocity.z = -270.0F;
     const cs::MovementResult soft = cs::simulateMovement(falling, command(), MovementSettings{}, floor, {});
     EXPECT_TRUE(footstepsOf(soft.sounds).empty()) << "no faster than 290 and slower than 350: silent";
