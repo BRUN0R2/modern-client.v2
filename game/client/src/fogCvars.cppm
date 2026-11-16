@@ -69,9 +69,9 @@ private:
         bool isEnabled;
         std::string color;
         std::string curve;
-        float density;
-        float start;
-        float end;
+        nx::render::FogDensity density;
+        nx::HammerUnits start;
+        nx::HammerUnits end;
         float opacity;
     };
 

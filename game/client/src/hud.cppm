@@ -83,7 +83,7 @@ struct HudView {
     /// none without a crosshair.
     std::optional<std::uint32_t> crosshairDistance{};
     /// The whole seconds the round's timer shows (cs::RoundTimer); none without a round.
-    std::optional<std::uint32_t> roundTime{};
+    std::optional<WholeSeconds> roundTime{};
 
     [[nodiscard]] inline auto operator==(const HudView&) const noexcept -> bool = default;
 };
@@ -203,13 +203,13 @@ struct TimerLayout {
 /// 0) where the digits add (100, 62, 0) at most.
 inline constexpr std::uint8_t kTimerColonAlpha = 81;
 
-/// Where the HUD draws `seconds` of the round's time on a screen of size `size`, its pictures those of
+/// Where the HUD draws `time`, the round's, on a screen of size `size`, its pictures those of
 /// `sheet`, 37 pixels from the bottom (docs/12 section 3.2): its whole minutes aligned to the right
 /// of room for two that ends in the middle, the stopwatch right before that room; the colon, two
 /// squares two pixels wide, 2 right of the middle, 28 and 22 from the bottom; the seconds past the
 /// whole minutes in two digits, 6 right of the middle. More minutes widen their room to the left,
 /// pushing the stopwatch.
-[[nodiscard]] auto layoutTimer(std::uint32_t seconds, const HudSheet& sheet, nx::rhi::Extent2d size)
+[[nodiscard]] auto layoutTimer(WholeSeconds time, const HudSheet& sheet, nx::rhi::Extent2d size)
     -> TimerLayout;
 
 /// The HUD's pictures on the GPU.

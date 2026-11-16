@@ -249,7 +249,8 @@ TEST(BloodRendererTest, ADropIsSeenThroughTheFog) {
     // A GL_EXP2 fog hiding half of what is 5 units ahead along the view: (density 5)^2 = ln 2.
     const nx::render::Fog blue{.color = {.blue = 1.0F},
                                .curve = nx::render::FogCurve::ExponentialSquared,
-                               .density = std::sqrt(std::numbers::ln2_v<float>) / kAhead.x};
+                               .density =
+                                   nx::render::FogDensity{std::sqrt(std::numbers::ln2_v<float>) / kAhead.x}};
     const std::array drops{BloodInstance{.position = kAhead, .radius = nx::HammerUnits{1.0F}, .color = kRed}};
     const Pixel seen = pixelAt(drawn(target, *renderer, drops), kMiddle, kMiddle);
     const Pixel fogged = pixelAt(drawn(target, *renderer, drops, blue), kMiddle, kMiddle);
