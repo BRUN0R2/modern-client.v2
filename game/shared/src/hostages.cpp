@@ -122,7 +122,7 @@ void setActivity(Hostage& hostage, Animation& animation, const PlayedModel& mode
         return;
     }
     if (animation.sequence != *sequence) {
-        animation.frame = 0.0F;
+        animation.frame = EntityFrame{};
         animation.sequence = *sequence;
     }
     hostage.activity = activity;
