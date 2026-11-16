@@ -41,8 +41,8 @@ auto isValidMotion(const BodyMotion& motion) noexcept -> bool {
 auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerUnits shortOfStart) noexcept
     -> UnitsPerSecond {
     expects(fliesAsGiven(profile), "leastLeapSpeedOf: a gravity and jump heights finite and more than none");
-    const float gap = detail::gapAcross(link.start, link.end, profile.radius);
-    if (link.kind == AreaKind::Ladder || link.kind == AreaKind::Door || gap <= 0.0F) {
+    const HammerUnits gap = detail::gapAcross(link.start, link.end, profile.radius);
+    if (link.kind == AreaKind::Ladder || link.kind == AreaKind::Door || gap <= HammerUnits{}) {
         return UnitsPerSecond{};
     }
     if (!fliesAsGiven(profile)) {
@@ -59,7 +59,7 @@ auto leastLeapSpeedOf(const MeshLink& link, const AgentProfile& profile, HammerU
     if (!inTheAir) {
         return UnitsPerSecond{std::numeric_limits<float>::infinity()};
     }
-    return UnitsPerSecond{(gap + shortOfStart.value()) / inTheAir->count()};
+    return UnitsPerSecond{(gap + shortOfStart).value() / inTheAir->count()};
 }
 
 auto fastestTakeoffOf(const MeshLink& link, const AgentProfile& profile, const BodyMotion& motion) noexcept

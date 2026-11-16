@@ -605,7 +605,8 @@ TEST(BuyMenuDataTest, ItsFontsAreTheProjectsOwnAndWriteAllItSays) {
         ASSERT_TRUE(choice.has_value()) << family;
         EXPECT_EQ(choice->face->weight, weight) << family;
         EXPECT_FALSE(choice->isEmboldened) << "no bold simulated on " << family;
-        auto font = fonts.open(*choice, {.cellHeight = 21, .smoothing = nx::ui::FontSmoothing::Antialiased});
+        auto font = fonts.open(
+            *choice, {.cellHeight = nx::Pixels{21}, .smoothing = nx::ui::FontSmoothing::Antialiased});
         ASSERT_TRUE(font.has_value()) << (font ? "" : nx::describe(font.error()));
         auto atlas = nx::ui::GlyphAtlas::build(*font, cs::consoleCharacters());
         ASSERT_TRUE(atlas.has_value()) << (atlas ? "" : nx::describe(atlas.error()));

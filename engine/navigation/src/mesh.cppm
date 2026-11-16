@@ -147,8 +147,8 @@ struct Gate {
 /// Whether `first` and `second`, what a link or a gate has for the middle of a door, are of one door: a link
 /// keeps it to whole units across.
 [[nodiscard]] inline auto isSameDoor(Vec3 first, Vec3 second) noexcept -> bool {
-    constexpr float kSameDoor = 1.5F;
-    return std::hypot(first.x - second.x, first.y - second.y) <= kSameDoor;
+    constexpr HammerUnits kSameDoor{1.5F};
+    return HammerUnits{std::hypot(first.x - second.x, first.y - second.y)} <= kSameDoor;
 }
 
 /// What a mesh is made of, to be drawn: each polygon's corners in the game's space, in order around it,
@@ -271,13 +271,13 @@ namespace nx::navigation::detail {
 inline constexpr int borderPadCells = 3;
 
 /// How far inside its tile a link leaving from the tile's side starts: Detour keeps a link in one tile alone.
-inline constexpr float kLinkInsetFromTileSide = 1.0F;
+inline constexpr HammerUnits kLinkInsetFromTileSide{1.0F};
 
 /// How far across a body of radius `radius` flies over nothing from `start` to `end`: what its two sides do
 /// not span, none or less for ends its box spans at once. A link over a gap goes one way
 /// (TileLinks::addFlight), and takes a leap's speed across (leastLeapSpeedOf).
-[[nodiscard]] inline auto gapAcross(Vec3 start, Vec3 end, HammerUnits radius) noexcept -> float {
-    return std::hypot(end.x - start.x, end.y - start.y) - (2.0F * radius.value());
+[[nodiscard]] inline auto gapAcross(Vec3 start, Vec3 end, HammerUnits radius) noexcept -> HammerUnits {
+    return HammerUnits{std::hypot(end.x - start.x, end.y - start.y)} - (radius + radius);
 }
 
 /// A point of the game's space (z up) in Recast's and Detour's (y up), turned about x: the same
@@ -316,10 +316,10 @@ inline constexpr std::uint32_t kThroughIdCoordinateMask = (std::uint32_t{1} << k
 }
 
 /// The middle across of what the link of `id` goes through (throughIdOf), at height `height`.
-[[nodiscard]] inline auto throughOfId(std::uint32_t id, float height) noexcept -> Vec3 {
+[[nodiscard]] inline auto throughOfId(std::uint32_t id, HammerUnits height) noexcept -> Vec3 {
     return Vec3{.x = static_cast<float>(static_cast<std::int16_t>(id >> kThroughIdCoordinateBits)),
                 .y = static_cast<float>(static_cast<std::int16_t>(id & kThroughIdCoordinateMask)),
-                .z = height};
+                .z = height.value()};
 }
 
 /// What the id of a link over a gap keeps of the ground a body leaves its start from (Takeoff), the floor
@@ -371,7 +371,7 @@ struct BuiltTile {
 /// A geometry's tiles that hold floor: the grid they are in, and its first corner, in Detour's space.
 struct BuiltTiles {
     std::array<float, 3> origin{};
-    float tileSide = 0.0F; ///< In units.
+    HammerUnits tileSide{};
     std::int32_t tilesAcross = 0;
     std::int32_t tilesDown = 0;
     std::vector<BuiltTile> tiles{}; ///< Row by row.

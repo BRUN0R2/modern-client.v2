@@ -183,7 +183,7 @@ auto MuzzleFlash::lightAt(nx::Seconds time, nx::Vec3 origin) const noexcept
     }
     return nx::render::StudioLight{
         .position = origin,
-        .reach = light->reach.value(),
+        .reach = light->reach,
         .color = nx::Vec3{.x = light->color[0], .y = light->color[1], .z = light->color[2]} * *left};
 }
 

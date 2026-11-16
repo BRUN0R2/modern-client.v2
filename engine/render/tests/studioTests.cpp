@@ -226,9 +226,10 @@ TEST(StudioRendererTest, ModelsDrawnAlikeTakeOneCallEachWithItsOwnLight) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
-/// A crowd of `scene`'s model that plays one sequence of two frames, its bones moved `kPoseMove` along x by
-/// the second, on `scene`'s renderer.
+/// A crowd of `scene`'s model that plays one sequence of two frames, `kCrowdFps` of them a second, its bones
+/// moved `kPoseMove` along x by the second, on `scene`'s renderer.
 constexpr float kPoseMove = 0.5F;
+constexpr nx::PerSecond kCrowdFps{8.0F};
 
 void loadCrowdOf(nx::rhi::Device& device, Scene& scene) {
     const std::size_t bones = scene.model.boneCount();
@@ -237,8 +238,12 @@ void loadCrowdOf(nx::rhi::Device& device, Scene& scene) {
         poses[bone].position.x = kPoseMove;
     }
     const std::vector<std::int32_t> parents(bones, -1);
-    const std::array sequences{nx::render::CrowdSequence{
-        .poses = poses, .frameCount = 2, .reach = 64.0F, .lowest = -64.0F, .highest = 64.0F}};
+    const std::array sequences{nx::render::CrowdSequence{.poses = poses,
+                                                         .frameCount = 2,
+                                                         .fps = kCrowdFps,
+                                                         .reach = nx::HammerUnits{64.0F},
+                                                         .lowest = nx::HammerUnits{-64.0F},
+                                                         .highest = nx::HammerUnits{64.0F}}};
     const auto loaded = nx::test::inFrameOfItsOwn(device, [&](nx::rhi::CommandList& commands) {
         return scene.renderer.loadCrowdModel(
             commands, {.model = scene.model, .parents = parents, .sequences = sequences});
@@ -246,10 +251,12 @@ void loadCrowdOf(nx::rhi::Device& device, Scene& scene) {
     ASSERT_TRUE(loaded.has_value()) << (loaded ? "" : nx::describe(loaded.error()));
 }
 
-/// Works `body` out on the GPU, the only one of the crowd to show, as `camera` sees it, with room for `room`
-/// bodies: a frame's room counts the dead too, whom the GPU does not show.
+/// Works `body` out on the GPU, the only one of the crowd to show, as `camera` sees it `sinceLastTick` past
+/// the last tick, with room for `room` bodies: a frame's room counts the dead too, whom the GPU does not
+/// show.
 void recordCrowdOf(nx::rhi::Device& device, Scene& scene, const nx::render::Camera& camera,
-                   const nx::render::CrowdBody& body, std::uint64_t tick, std::size_t bodiesRoom = 1) {
+                   const nx::render::CrowdBody& body, std::uint64_t tick, std::size_t bodiesRoom = 1,
+                   nx::Seconds sinceLastTick = {}) {
     const std::array frustum = nx::render::frustumPlanes(camera, 1.0F);
     const auto recorded = nx::test::inFrameOfItsOwn(
         device, [&](nx::rhi::CommandList& commands) -> nx::Result<void, nx::render::StudioError> {
@@ -259,7 +266,7 @@ void recordCrowdOf(nx::rhi::Device& device, Scene& scene, const nx::render::Came
             }
             room->bodies[0] = body;
             room->bodiesOfModel[0] = 1;
-            return scene.renderer.recordCrowd(commands, {.frustum = frustum});
+            return scene.renderer.recordCrowd(commands, {.frustum = frustum, .sinceLastTick = sinceLastTick});
         });
     ASSERT_TRUE(recorded.has_value()) << (recorded ? "" : nx::describe(recorded.error()));
 }
@@ -292,7 +299,7 @@ TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
     const nx::render::CrowdBody body{.previousOrigin = kOrigin,
                                      .origin = kOrigin,
                                      .frame = kHalfOfTheFrames,
-                                     .framerate = 0.0F,
+                                     .framerate = nx::Scale{0.0F},
                                      .ambient = 100.0F,
                                      .moveShare = 1.0F,
                                      .moveSharePerTick = 0.0F};
@@ -314,12 +321,23 @@ TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
     ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, moving, 2));
     EXPECT_EQ(drawStudio(target, *scene, camera, {}), expected) << "along its move";
 
+    // Played on from where its server left it: from its first frame, a 64th of a second before the last tick,
+    // at twice its sequence's speed, shown a 64th of a second past that tick: a 32nd of a second at 16 frames
+    // a second is half a frame, where the body above shows.
+    constexpr nx::Seconds kSixtyFourth{1.0F / 64.0F};
+    nx::render::CrowdBody played = body;
+    played.frame = 0.0F;
+    played.advancedAgo = kSixtyFourth;
+    played.framerate = nx::Scale{2.0F};
+    ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, played, 3, 1, kSixtyFourth));
+    EXPECT_EQ(drawStudio(target, *scene, camera, {}), expected) << "played on from where its server left it";
+
     // Behind the view, none of it: its draws draw no instance.
     nx::render::CrowdBody behind = body;
     const Vec3 away = nx::normalized(-kWoundSide) * (kViewDistance * 4.0F);
     behind.previousOrigin = away;
     behind.origin = away;
-    ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, behind, 3));
+    ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, behind, 4));
     const std::vector<std::byte> hidden = drawStudio(target, *scene, camera, {});
     EXPECT_EQ(pixelAt(hidden, kMiddle, kMiddle)[3], 0) << "hidden by the view's planes";
     EXPECT_EQ((*device)->validationErrors(), 0U);
@@ -376,7 +394,7 @@ TEST(StudioRendererTest, ACrowdPlacesEachBoneInItsParentAsTheCpuDoes) {
     const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
     // A body turned a little about its height, its root turned a little more and moved, its child moved from
     // it.
-    constexpr float kYaw = 0.1F;
+    constexpr nx::Radians kYaw{0.1F};
     constexpr float kRootTurn = 0.1F;
     constexpr Vec3 kOrigin{.x = 0.1F};
     constexpr Vec3 kRootMoved{.y = 0.1F};
@@ -388,7 +406,7 @@ TEST(StudioRendererTest, ACrowdPlacesEachBoneInItsParentAsTheCpuDoes) {
                                nx::Vec4{.x = sine, .y = cosine, .w = moved.y},
                                nx::Vec4{.z = 1.0F, .w = moved.z}}};
     };
-    const Mat3x4 placement = turnedAboutHeight(std::cos(kYaw), std::sin(kYaw), kOrigin);
+    const Mat3x4 placement = turnedAboutHeight(std::cos(kYaw.value()), std::sin(kYaw.value()), kOrigin);
     const Mat3x4 root = placement * turnedAboutHeight(1.0F - (2.0F * halfSine * halfSine),
                                                       2.0F * halfCosine * halfSine, kRootMoved);
     const Mat3x4 child = root * turnedAboutHeight(1.0F, 0.0F, kChildMoved);
@@ -403,8 +421,11 @@ TEST(StudioRendererTest, ACrowdPlacesEachBoneInItsParentAsTheCpuDoes) {
                                   .rotation = {.z = halfSine, .w = halfCosine}},
         nx::render::CrowdBonePose{.position = nx::extend(kChildMoved, 0.0F), .rotation = {.w = 1.0F}}};
     const std::array<std::int32_t, 2> parents{-1, 0};
-    const std::array sequences{nx::render::CrowdSequence{
-        .poses = poses, .frameCount = 1, .reach = 64.0F, .lowest = -64.0F, .highest = 64.0F}};
+    const std::array sequences{nx::render::CrowdSequence{.poses = poses,
+                                                         .frameCount = 1,
+                                                         .reach = nx::HammerUnits{64.0F},
+                                                         .lowest = nx::HammerUnits{-64.0F},
+                                                         .highest = nx::HammerUnits{64.0F}}};
     const auto loaded = nx::test::inFrameOfItsOwn(**device, [&](nx::rhi::CommandList& commands) {
         return scene->renderer.loadCrowdModel(
             commands, {.model = scene->model, .parents = parents, .sequences = sequences});

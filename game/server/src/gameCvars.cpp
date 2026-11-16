@@ -14,9 +14,9 @@ namespace {
 
 // The original's values: a server's cvars, told to its players.
 constexpr nx::console::CvarFlags kServerCvar{nx::console::CvarFlag::Notify};
-constexpr float kDefaultFreezeSeconds = 6.0F;
-constexpr float kDefaultRoundMinutes = 5.0F;
-constexpr float kDefaultBuyMinutes = 1.5F;
+constexpr nx::Seconds kDefaultFreezeTime{6.0F};
+constexpr nx::Minutes kDefaultRoundTime{5.0F};
+constexpr nx::Minutes kDefaultBuyTime{1.5F};
 
 } // namespace
 
@@ -26,9 +26,9 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
         return console.registerCvar(CvarDesc<float>{
             .name = name, .defaultValue = defaultValue, .description = description, .flags = kServerCvar});
     };
-    auto freezeTime = server("mp_freezetime", kDefaultFreezeSeconds,
+    auto freezeTime = server("mp_freezetime", kDefaultFreezeTime.count(),
                              "The seconds each round starts frozen for, its players still: 0 to 60.");
-    auto roundTime = server("mp_roundtime", kDefaultRoundMinutes,
+    auto roundTime = server("mp_roundtime", kDefaultRoundTime.count(),
                             "The minutes a round runs for after its freeze: 1 to 9.");
     auto startMoney = server("mp_startmoney", static_cast<float>(kStartMoney.value()),
                              "The money each player starts the game with: 800 to 16000.");
@@ -38,7 +38,7 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
     auto footsteps = server("mp_footsteps", 1.0F, "Whether the players' steps sound: any value but 0.");
     auto friendlyFire =
         server("mp_friendlyfire", 0.0F, "Whether a player's attacks hurt its teammates: any value but 0.");
-    auto buyTime = server("mp_buytime", kDefaultBuyMinutes,
+    auto buyTime = server("mp_buytime", kDefaultBuyTime.count(),
                           "The minutes each round's players buy for after its freeze: at least 0.25.");
     for (auto* const registered : {&freezeTime, &roundTime, &startMoney, &restartRound, &restart, &footsteps,
                                    &friendlyFire, &buyTime}) {
@@ -56,15 +56,16 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                      .buyTime = *buyTime};
 }
 
-// The values set back are finite, and the cvars have no range: each set holds.
+// The values set back are finite, and the cvars have no range: each set holds. The cvars hold numbers:
+// the seconds, the minutes and the money they give.
 
 auto GameCvars::roundLengths() const -> RoundLengths {
-    const RoundCvars read = readRoundCvars(freezeTime.value(), roundTime.value());
-    if (read.freezeSeconds) {
-        freezeTime.setAccepted(*read.freezeSeconds);
+    const RoundCvars read = readRoundCvars(nx::Seconds{freezeTime.value()}, nx::Minutes{roundTime.value()});
+    if (read.freezeTime) {
+        freezeTime.setAccepted(read.freezeTime->count());
     }
-    if (read.roundMinutes) {
-        roundTime.setAccepted(*read.roundMinutes);
+    if (read.roundTime) {
+        roundTime.setAccepted(read.roundTime->count());
     }
     return read.lengths;
 }
@@ -72,21 +73,22 @@ auto GameCvars::roundLengths() const -> RoundLengths {
 auto GameCvars::startingMoney() const -> nx::Money {
     const StartMoney read = readStartMoney(startMoney.value());
     if (read.setTo) {
-        startMoney.setAccepted(*read.setTo);
+        startMoney.setAccepted(static_cast<float>(read.setTo->value()));
     }
     return read.money;
 }
 
 auto GameCvars::buyingTime() const -> nx::Seconds {
-    const BuyTime read = readBuyTime(buyTime.value());
-    if (read.setToMinutes) {
-        buyTime.setAccepted(*read.setToMinutes);
+    const BuyTime read = readBuyTime(nx::Minutes{buyTime.value()});
+    if (read.setTo) {
+        buyTime.setAccepted(read.setTo->count());
     }
     return read.length;
 }
 
 auto GameCvars::takeRestart() const -> std::optional<nx::Seconds> {
-    const std::optional<nx::Seconds> delay = restartDelayOf(restartRound.value(), restart.value());
+    const std::optional<nx::Seconds> delay =
+        restartDelayOf(nx::Seconds{restartRound.value()}, nx::Seconds{restart.value()});
     if (delay) {
         for (const nx::console::Cvar<float>& asked : {restartRound, restart}) {
             asked.setAccepted(0.0F);

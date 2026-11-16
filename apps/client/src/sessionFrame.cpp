@@ -42,9 +42,12 @@ void hearSession(Session& session, cs::ClientAudio* audio, const cs::Hearing& he
     for (const cs::SoundMade& made : sounds) {
         reportSound(audio->play(*made.sound, made.volume, hearing.delayOf(made.at)), soundFailures);
     }
-    // The original's client hears from the view it draws: its origin and its right (S_Update).
+    // The original's client hears from the view it draws, its origin and its right (S_Update), and places
+    // every sound that plays again each frame.
     const nx::audio::Listener listener{.position = view.position,
                                        .right = nx::angleVectors(view.angles).right};
+    session.client.writePlayerOrigins(session.playerOrigins);
+    audio->follow(listener, session.playerOrigins);
     for (const cs::PlayerSound& sound : heard) {
         reportSound(audio->playAt(sound, listener, hearing.delayOf(sound.made.at)), soundFailures);
     }
