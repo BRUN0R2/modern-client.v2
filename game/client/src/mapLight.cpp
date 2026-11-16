@@ -80,8 +80,8 @@ auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render
     constexpr std::array<float, kLightNumbers> kDefaultLight{255.0F, 255.0F, 255.0F, 300.0F};
     constexpr float kChannelTop = 255.0F;
     constexpr float kDisplayGamma = 2.2F;
-    // How far a light of a brightness reaches, in units a brightness; and how bright its highlight is.
-    constexpr float kReachPerBrightness = 2.0F;
+    // How far a light of a brightness reaches for each of its brightness; and how bright its highlight is.
+    constexpr nx::HammerUnits kReachPerBrightness{2.0F};
     constexpr float kHighlightPerBrightness = 8.0F;
     std::vector<nx::render::StudioLight> lights;
     for (const nx::assets::BspEntity& entity : map.entities()) {
@@ -114,7 +114,7 @@ auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render
         };
         lights.push_back(
             nx::render::StudioLight{.position = *origin,
-                                    .reach = brightness * kReachPerBrightness,
+                                    .reach = kReachPerBrightness * brightness,
                                     .color = {.x = linear(red), .y = linear(green), .z = linear(blue)}});
     }
     return lights;
@@ -191,7 +191,8 @@ auto nearestLights(std::span<const nx::render::StudioLight> lights, nx::Vec3 poi
     }
     std::vector<nx::render::StudioLight> nearest(std::min(count, lights.size()));
     auto reaching = lights | std::views::filter([point](const nx::render::StudioLight& light) {
-                        return nx::lengthSquared(light.position - point) < light.reach * light.reach;
+                        const float reach = light.reach.value();
+                        return nx::lengthSquared(light.position - point) < reach * reach;
                     });
     const auto distance = [point](const nx::render::StudioLight& light) {
         return nx::lengthSquared(light.position - point);
