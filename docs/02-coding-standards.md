@@ -235,8 +235,11 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
 - IDs and handles: dedicated types (`Entity`, `AssetHandle<Model>`, `ClientSlot`),
   **never** raw indices.
 - The interface's places and sizes: `nx::Pixels`, whole pixels, grouped as `nx::ui::PixelPoint`,
-  `PixelSize` and `PixelRect`, so that no `x` is passed for a `wide`. What the GPU takes (`nx::rhi`'s
-  rectangles, a screen quad's fractions of a pixel) stays its own data, converted where it is handed over.
+  `PixelSize` and `PixelRect`, so that no `x` is passed for a `wide`. A font's sizes are pixels too (the
+  cell it is asked for, its em and line, a glyph's bitmap and advance); what a face's tables write before
+  a size scales it is `nx::ui::FontUnits`, the face's own grid. What the GPU takes (`nx::rhi`'s
+  rectangles, a screen quad's fractions of a pixel) and what FreeType hands back stay their own data,
+  converted where they are handed over.
 - Sound: `nx::Gain`, how loud a sound is against its recording (a sound's volume, what an ear hears of
   it, the gain of everything heard); `nx::audio::Pitch`, how fast a voice plays its sound, and
   `cs::SoundPitch`, the game's pitch in the original's hundredths; `nx::audio::MixFrames`, the mix's
