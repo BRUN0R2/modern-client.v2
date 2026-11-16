@@ -72,7 +72,8 @@ auto WindowFonts::font(std::string_view name, std::uint32_t screenHeight) const
     if (font == nullptr) {
         return nx::fail(WindowFontError::NoSuchFont, std::format("{} has no font {:?}", kWindowScheme, name));
     }
-    auto opened = nx::ui::SchemeFontSet::open(*font, screenHeight, *m_catalog);
+    auto opened =
+        nx::ui::SchemeFontSet::open(*font, nx::Pixels{nx::narrow<std::int32_t>(screenHeight)}, *m_catalog);
     if (!opened) {
         return nx::fail(WindowFontError::Unusable, std::move(opened.error()));
     }

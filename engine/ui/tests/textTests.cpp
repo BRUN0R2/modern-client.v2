@@ -182,8 +182,8 @@ TEST(TextDrawTest, ADropShadowFallsAPixelRightAndDownUnderTheLine) {
     const nx::assets::SchemeFont font{
         .name = "EngineFont",
         .candidates = {nx::assets::FontCandidate{
-            .face = "Square", .tall = 20, .flags = {nx::assets::FontFlag::DropShadow}}}};
-    const auto set = nx::ui::SchemeFontSet::open(font, 768, catalog);
+            .face = "Square", .tall = nx::Pixels{20}, .flags = {nx::assets::FontFlag::DropShadow}}}};
+    const auto set = nx::ui::SchemeFontSet::open(font, nx::Pixels{768}, catalog);
     ASSERT_TRUE(set.has_value()) << nx::describe(set.error());
     const auto atlas = GlyphAtlas::build(*set, U"AB");
     ASSERT_TRUE(atlas.has_value()) << atlas.error().detail;

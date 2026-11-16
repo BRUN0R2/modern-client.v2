@@ -133,15 +133,16 @@ TEST(SchemeTest, FontsKeepTheirCandidatesInOrder) {
     ASSERT_EQ(font->candidates.size(), 2U);
     const nx::assets::FontCandidate& small = font->candidates[0];
     EXPECT_EQ(small.face, "Tahoma");
-    EXPECT_EQ(small.tall, 16);
+    EXPECT_EQ(small.tall, nx::Pixels{16});
     EXPECT_EQ(small.weight, 0);
     EXPECT_TRUE(small.flags.test(FontFlag::Antialias));
     EXPECT_FALSE(small.flags.test(FontFlag::Underline));
     ASSERT_TRUE(small.heights.has_value());
-    EXPECT_TRUE(small.heights->contains(480U));
-    EXPECT_TRUE(small.heights->contains(599U));
-    EXPECT_FALSE(small.heights->contains(600U));
+    EXPECT_TRUE(small.heights->contains(nx::Pixels{480}));
+    EXPECT_TRUE(small.heights->contains(nx::Pixels{599}));
+    EXPECT_FALSE(small.heights->contains(nx::Pixels{600}));
     const nx::assets::FontCandidate& large = font->candidates[1];
+    EXPECT_EQ(large.tall, nx::Pixels{20});
     EXPECT_EQ(large.weight, 500);
     EXPECT_TRUE(large.flags.test(FontFlag::Underline));
     EXPECT_FALSE(large.flags.test(FontFlag::DropShadow)) << "\"0\" leaves a flag off";
@@ -160,16 +161,30 @@ TEST(SchemeTest, BordersFollowTheNamesTheyAreGiven) {
     const nx::assets::SchemeBorder* button = scheme->border("ButtonBorder");
     ASSERT_NE(button, nullptr);
     EXPECT_EQ(button->name, "InsetBorder") << "ButtonBorder is BaseBorder, which is InsetBorder";
-    EXPECT_EQ(button->inset, (std::array<std::int32_t, 4>{0, 0, 1, 1}));
+    EXPECT_EQ(button->inset[BorderSide::Left], nx::Pixels{0});
+    EXPECT_EQ(button->inset[BorderSide::Top], nx::Pixels{0});
+    EXPECT_EQ(button->inset[BorderSide::Right], nx::Pixels{1});
+    EXPECT_EQ(button->inset[BorderSide::Bottom], nx::Pixels{1});
     ASSERT_EQ(button->sides[BorderSide::Left].size(), 1U);
     EXPECT_EQ(button->sides[BorderSide::Left][0].color, "BorderDark");
-    EXPECT_EQ(button->sides[BorderSide::Left][0].startOffset, 0);
-    EXPECT_EQ(button->sides[BorderSide::Left][0].endOffset, 1);
+    EXPECT_EQ(button->sides[BorderSide::Left][0].startOffset, nx::Pixels{0});
+    EXPECT_EQ(button->sides[BorderSide::Left][0].endOffset, nx::Pixels{1});
     ASSERT_EQ(button->sides[BorderSide::Top].size(), 2U);
     EXPECT_EQ(button->sides[BorderSide::Top][1].color, "BgColor");
-    EXPECT_EQ(button->sides[BorderSide::Top][1].endOffset, 0) << "no offset is none";
+    EXPECT_EQ(button->sides[BorderSide::Top][1].endOffset, nx::Pixels{}) << "no offset is none";
     EXPECT_TRUE(button->sides[BorderSide::Right].empty());
     EXPECT_EQ(scheme->border("None"), nullptr);
+}
+
+TEST(SchemeTest, AnInsetIsWrittenLeftTopRightAndBottom) {
+    const auto scheme = schemeOf(R"(Scheme { Borders { b { "inset" "1 2 3 4" } } })");
+    ASSERT_TRUE(scheme.has_value()) << nx::describe(scheme.error());
+    const nx::assets::SchemeBorder* border = scheme->border("b");
+    ASSERT_NE(border, nullptr);
+    EXPECT_EQ(border->inset[BorderSide::Left], nx::Pixels{1});
+    EXPECT_EQ(border->inset[BorderSide::Top], nx::Pixels{2});
+    EXPECT_EQ(border->inset[BorderSide::Right], nx::Pixels{3});
+    EXPECT_EQ(border->inset[BorderSide::Bottom], nx::Pixels{4});
 }
 
 TEST(SchemeTest, RefusesWhatCannotBeDrawn) {
@@ -177,6 +192,8 @@ TEST(SchemeTest, RefusesWhatCannotBeDrawn) {
     EXPECT_EQ(errorOf(R"(Scheme { Colors { "a" "1 2 x" } })"), SchemeError::BadColor);
     EXPECT_EQ(errorOf(R"(Scheme { Fonts { "f" { "1" { "tall" "big" } } } })"), SchemeError::BadFont);
     EXPECT_EQ(errorOf(R"(Scheme { Fonts { "f" { "1" { "yres" "480" } } } })"), SchemeError::BadFont);
+    EXPECT_EQ(errorOf(R"(Scheme { Fonts { "f" { "1" { "yres" "-1 480" } } } })"), SchemeError::BadFont)
+        << "no screen is less than none tall";
     EXPECT_EQ(errorOf(R"(Scheme { Fonts { "f" { "1" { "range" "0 127" } } } })"), SchemeError::BadFont);
     EXPECT_EQ(errorOf(R"(Scheme { Borders { b { "inset" "1 2 3" } } })"), SchemeError::BadBorder);
     EXPECT_EQ(errorOf(R"(Scheme { Borders { b { Left { "1" { "offset" "0 0" } } } } })"),
