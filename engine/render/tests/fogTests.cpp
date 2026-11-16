@@ -26,7 +26,7 @@ constexpr float kDensity = 0.002F;
 [[nodiscard]] auto mapFog() -> Fog {
     return Fog{.color = {.red = 0.25F, .green = 0.5F, .blue = 0.75F},
                .curve = FogCurve::ExponentialSquared,
-               .density = kDensity};
+               .density = nx::render::FogDensity{kDensity}};
 }
 
 TEST(FogTest, WithItsStartAt0AndNoEndAFogIsTheOriginalsCurve) {
@@ -69,8 +69,9 @@ TEST(FogTest, ARendererTakesOnlyAFogWithinItsLimits) {
         return nx::render::isValid(fog);
     };
     EXPECT_FALSE(withEach([](Fog& fog) { fog.color.red = 1.5F; }));
-    EXPECT_FALSE(withEach([](Fog& fog) { fog.density = -1.0F; }));
-    EXPECT_FALSE(withEach([](Fog& fog) { fog.density = std::numeric_limits<float>::quiet_NaN(); }));
+    EXPECT_FALSE(withEach([](Fog& fog) { fog.density = nx::render::FogDensity{-1.0F}; }));
+    EXPECT_FALSE(withEach(
+        [](Fog& fog) { fog.density = nx::render::FogDensity{std::numeric_limits<float>::quiet_NaN()}; }));
     EXPECT_FALSE(withEach([](Fog& fog) { fog.start = HammerUnits{-1.0F}; }));
     EXPECT_FALSE(withEach([](Fog& fog) {
         fog.start = HammerUnits{300.0F};
@@ -92,7 +93,7 @@ TEST(FogTest, AFogReachesWhereItIsNearlyAsThickAsItGetsOrItsEndTheNearer) {
     ended.end = HammerUnits{300.0F};
     EXPECT_EQ(nx::render::fogReachOf(ended), HammerUnits{300.0F});
     Fog still = mapFog();
-    still.density = 0.0F;
+    still.density = nx::render::FogDensity{};
     still.start = HammerUnits{50.0F};
     EXPECT_EQ(nx::render::fogReachOf(still), HammerUnits{50.0F}) << "a fog that never thickens";
 }

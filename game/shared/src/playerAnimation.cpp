@@ -24,8 +24,8 @@ constexpr double kLeastGaitSpeed = 5.0;
 /// from them (m_flYawModifier), and below which a turn is none.
 constexpr double kNearlyAhead = 5.0;
 constexpr double kFacingAway = double{nx::kQuarterTurnDegrees.value()};
-constexpr float kNearlyAheadModifier = 0.05F;
-constexpr float kFacingAwayModifier = 3.5F;
+constexpr nx::PerSecond kNearlyAheadModifier{0.05F};
+constexpr nx::PerSecond kFacingAwayModifier{3.5F};
 constexpr double kShortGaitFrame = 0.25;
 constexpr double kLeastTurn = 0.1;
 /// Beyond this angle between its body and the way it moves, a player moves backwards (CalculateYawBlend).
@@ -241,8 +241,8 @@ void playTorso(PlayerAnimation& animation, nx::assets::SequenceIndex sequence,
 void spawnAnimation(PlayerAnimation& animation) noexcept {
     animation.gaitSequence = nx::assets::SequenceIndex{};
     animation.gait.frame = SequenceFrame{};
-    animation.gait.yaw = 0.0F;
-    animation.gait.movement = 0.0F;
+    animation.gait.yaw = nx::Degrees{};
+    animation.gait.movement = nx::HammerUnits{};
     animation.gait.previousOrigin = nx::Vec3{};
     animation.lastFired.reset();
 }
@@ -368,18 +368,18 @@ void processGait(Gait& gait, const nx::assets::MdlView& model, nx::assets::Seque
     const double frame = std::clamp(static_cast<double>(frameTime.count()), 0.0, kLongestGaitFrame);
     // StudioEstimateGait.
     if (frame == 0.0) {
-        gait.movement = 0.0F;
+        gait.movement = nx::HammerUnits{};
     } else {
         nx::Vec3 moved = origin - gait.previousOrigin;
         gait.previousOrigin = origin;
-        gait.movement = static_cast<float>(nx::length(moved));
-        if (static_cast<double>(gait.movement) / frame < kLeastGaitSpeed) {
-            gait.movement = 0.0F;
+        gait.movement = nx::HammerUnits{nx::length(moved)};
+        if (static_cast<double>(gait.movement.value()) / frame < kLeastGaitSpeed) {
+            gait.movement = nx::HammerUnits{};
             moved.x = 0.0F;
             moved.y = 0.0F;
         }
         if (moved.x == 0.0F && moved.y == 0.0F) {
-            double turn = static_cast<double>(angles.yaw.value()) - static_cast<double>(gait.yaw);
+            double turn = static_cast<double>(angles.yaw.value()) - static_cast<double>(gait.yaw.value());
             const double facing = withinHalfTurn(std::fmod(turn, kDegreesPerTurn));
             turn = withinHalfTurn(turn - (std::trunc(turn / kDegreesPerTurn) * kDegreesPerTurn));
             if (facing > -kNearlyAhead && facing < kNearlyAhead) {
@@ -388,33 +388,33 @@ void processGait(Gait& gait, const nx::assets::MdlView& model, nx::assets::Seque
             if (facing < -kFacingAway || facing > kFacingAway) {
                 gait.yawModifier = kFacingAwayModifier;
             }
-            turn *= frame < kShortGaitFrame ? frame * static_cast<double>(gait.yawModifier) : frame;
+            turn *= frame < kShortGaitFrame ? frame * static_cast<double>(gait.yawModifier.value()) : frame;
             // Parity: the original weighs the turn cut to a whole number of degrees.
             if (std::abs(std::trunc(turn)) < kLeastTurn) {
                 turn = 0.0;
             }
-            gait.yaw = static_cast<float>(static_cast<double>(gait.yaw) + turn);
-            // In float, as m_flGaityaw is.
+            gait.yaw = nx::Degrees{static_cast<float>(static_cast<double>(gait.yaw.value()) + turn)};
+            // In float, as m_flGaityaw is: its whole turns taken off, counted in whole degrees.
             constexpr std::int64_t kTurn = 360;
-            gait.yaw -=
-                static_cast<float>(static_cast<std::int64_t>(gait.yaw / static_cast<float>(kTurn)) * kTurn);
-            gait.movement = 0.0F;
+            gait.yaw -= nx::Degrees{static_cast<float>(
+                static_cast<std::int64_t>(gait.yaw.value() / static_cast<float>(kTurn)) * kTurn)};
+            gait.movement = nx::HammerUnits{};
         } else {
             const double yaw = std::atan2(static_cast<double>(moved.y), static_cast<double>(moved.x)) *
                                kHalfTurn / std::numbers::pi;
-            gait.yaw = static_cast<float>(std::clamp(yaw, -kHalfTurn, kHalfTurn));
+            gait.yaw = nx::Degrees{static_cast<float>(std::clamp(yaw, -kHalfTurn, kHalfTurn))};
         }
     }
     // CalculateYawBlend.
-    double between = withinHalfTurn(
-        std::fmod(static_cast<double>(angles.yaw.value()) - static_cast<double>(gait.yaw), kDegreesPerTurn));
-    if (gait.movement != 0.0F) {
+    double between = withinHalfTurn(std::fmod(
+        static_cast<double>(angles.yaw.value()) - static_cast<double>(gait.yaw.value()), kDegreesPerTurn));
+    if (gait.movement != nx::HammerUnits{}) {
         if (between > kBackwardsAngle) {
-            gait.yaw = static_cast<float>(static_cast<double>(gait.yaw) - kHalfTurn);
+            gait.yaw = nx::Degrees{static_cast<float>(static_cast<double>(gait.yaw.value()) - kHalfTurn)};
             gait.movement = -gait.movement;
             between -= kHalfTurn;
         } else if (between < -kBackwardsAngle) {
-            gait.yaw = static_cast<float>(static_cast<double>(gait.yaw) + kHalfTurn);
+            gait.yaw = nx::Degrees{static_cast<float>(static_cast<double>(gait.yaw.value()) + kHalfTurn)};
             gait.movement = -gait.movement;
             between += kHalfTurn;
         }
@@ -440,7 +440,7 @@ void processGait(Gait& gait, const nx::assets::MdlView& model, nx::assets::Seque
     const nx::assets::StudioSequence& sequence = sequences[gaitSequence.value];
     const SequenceFrame frames{static_cast<float>(sequence.frameCount)};
     if (sequence.linearMovement.x > 0.0F) {
-        gait.frame += frames * (gait.movement / sequence.linearMovement.x);
+        gait.frame += frames * (gait.movement / nx::HammerUnits{sequence.linearMovement.x});
     } else {
         gait.frame = SequenceFrame{
             static_cast<float>(static_cast<double>(gait.frame.value()) +

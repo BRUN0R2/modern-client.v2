@@ -38,9 +38,9 @@ constexpr float kTolerance = 1e-5F;
             .growTime = nx::Seconds{0.2F},
             .settleTime = nx::Seconds{0.2F},
             .fadeOut = nx::Seconds{0.4F},
-            .startScale = 0.25F,
-            .peakScale = 1.5F,
-            .endScale = 0.5F,
+            .startScale = nx::Scale{0.25F},
+            .peakScale = nx::Scale{1.5F},
+            .endScale = nx::Scale{0.5F},
             .rise = 0.1F,
             .spread = 0.02F,
             .mostNumbers = 2};
@@ -55,18 +55,18 @@ constexpr float kTolerance = 1e-5F;
 
 TEST(DamageNumberTest, ANumberStartsSmallAndClearThenPopsUpPastItsSizeAndSettles) {
     const cs::DamageNumberPose born = poseAt(0.0F);
-    EXPECT_NEAR(born.scale, 0.25F, kTolerance);
+    EXPECT_NEAR(born.scale.value(), 0.25F, kTolerance);
     EXPECT_NEAR(born.opacity, 0.0F, kTolerance);
     EXPECT_NEAR(born.rise, 0.0F, kTolerance);
     EXPECT_LT(poseAt(0.05F).scale, poseAt(0.1F).scale) << "growing";
     EXPECT_LT(poseAt(0.1F).scale, poseAt(0.15F).scale);
     EXPECT_GT(poseAt(0.05F).opacity, 0.0F) << "fading in";
     const cs::DamageNumberPose peak = poseAt(0.2F);
-    EXPECT_NEAR(peak.scale, 1.5F, kTolerance);
+    EXPECT_NEAR(peak.scale.value(), 1.5F, kTolerance);
     EXPECT_NEAR(peak.opacity, 1.0F, kTolerance);
-    EXPECT_GT(poseAt(0.3F).scale, 1.0F) << "settling";
-    EXPECT_NEAR(poseAt(0.4F).scale, 1.0F, kTolerance);
-    EXPECT_NEAR(poseAt(0.6F).scale, 1.0F, kTolerance) << "whole until it fades out";
+    EXPECT_GT(poseAt(0.3F).scale, cs::kWholeSize) << "settling";
+    EXPECT_NEAR(poseAt(0.4F).scale.value(), 1.0F, kTolerance);
+    EXPECT_NEAR(poseAt(0.6F).scale.value(), 1.0F, kTolerance) << "whole until it fades out";
     EXPECT_NEAR(poseAt(0.6F).opacity, 1.0F, kTolerance);
 }
 
@@ -77,7 +77,7 @@ TEST(DamageNumberTest, ANumberRisesEasingOutAndFadesOutShrinkingUntilItsLifeIsOv
         << "faster at first";
     const cs::DamageNumberPose fading = poseAt(0.8F);
     EXPECT_NEAR(fading.opacity, 0.5F, kTolerance) << "halfway through its fade";
-    EXPECT_NEAR(fading.scale, 0.75F, kTolerance) << "halfway to half its size";
+    EXPECT_NEAR(fading.scale.value(), 0.75F, kTolerance) << "halfway to half its size";
     EXPECT_LT(poseAt(0.95F).opacity, fading.opacity);
     EXPECT_FALSE(cs::damageNumberPoseAt(roundLook(), nx::Seconds{1.0F}).has_value());
 }

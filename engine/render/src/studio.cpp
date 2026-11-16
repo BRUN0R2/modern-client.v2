@@ -269,7 +269,7 @@ struct CrowdFrameUniform {
 };
 
 /// The bytes shaders/crowd.slang's Body takes in its buffer, which the client writes as a CrowdBody: its
-/// typed members (a duration, a scale, an angle) are a float each, as the shader reads them.
+/// typed members (a duration, a scale, an angle, light levels) are a float each, as the shader reads them.
 constexpr std::size_t kCrowdBodyBytes = 96;
 static_assert(sizeof(CrowdBody) == kCrowdBodyBytes && std::is_trivially_copyable_v<CrowdBody>,
               "a crowd body as shaders/crowd.slang reads it");
@@ -566,8 +566,8 @@ struct MaterialImages {
     -> InstanceUniform {
     InstanceUniform uniform{.lightDirection = extend(instance.light.direction, 0.0F),
                             .lightColor = extend(instance.light.color, 0.0F),
-                            .ambient = instance.light.ambient,
-                            .shade = instance.light.shade,
+                            .ambient = instance.light.ambient.value(),
+                            .shade = instance.light.shade.value(),
                             .firstBone = narrow<std::uint32_t>(firstBone),
                             .blend = blendOf(instance),
                             .isUnlit = blendingOf(instance.mode) == StudioBlending::Added ? 1U : 0U};
@@ -1437,11 +1437,11 @@ void StudioRenderer::placeInstances(const StudioFrame& frame) {
             place.call = solidCallOf(instance);
         } else {
             place.call = narrow<std::uint32_t>(m_modelCalls.size());
-            m_blendedDraws.push_back(BlendedDraw{
-                .distance =
-                    lengthSquared(frame.camera.position - (instance.origin + instance.model.get().m_middle)),
-                .mode = instance.mode,
-                .index = place.call});
+            m_blendedDraws.push_back(
+                BlendedDraw{.distance = SquaredDistance{lengthSquared(
+                                frame.camera.position - (instance.origin + instance.model.get().m_middle))},
+                            .mode = instance.mode,
+                            .index = place.call});
             m_modelCalls.push_back(callOf(instance, blending, m_meshCalls));
         }
         ++m_modelCalls[place.call].instanceCount;

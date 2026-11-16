@@ -103,7 +103,7 @@ void BloodEffects::update(nx::Seconds now, nx::Seconds elapsed, const nx::collis
     const float seconds = elapsed.count();
     const float fall = gravity.value() * look.gravity.value() * seconds;
     // e^-drag a second: the share of its speed a drop keeps over the frame, whatever its length.
-    const float kept = std::exp(-look.drag * seconds);
+    const float kept = std::exp(-look.drag.value() * seconds);
     for (BloodMist& mist : drifting) {
         mist.position = mist.position + (mist.velocity * seconds);
         mist.velocity = mist.velocity * kept;
@@ -180,7 +180,7 @@ auto BloodEffects::shown(nx::Seconds now, const BloodEnhancedLook& look)
         instances.push_back(nx::render::BloodInstance{.position = mist.position,
                                                       .radius = nx::HammerUnits{mist.radius.value() * grown},
                                                       .color = mist.shade.color,
-                                                      .light = mist.shade.light * look.mistLight,
+                                                      .light = mist.shade.light * look.mistLight.value(),
                                                       .opacity = mist.opacity * (1.0F - faded),
                                                       .shape = nx::render::BloodShape::Mist,
                                                       .seed = mist.seed});
