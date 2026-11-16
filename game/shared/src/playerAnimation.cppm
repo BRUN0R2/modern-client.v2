@@ -39,10 +39,10 @@ enum class PlayerAction : std::uint8_t {
 /// original's CBasePlayer keeps them (m_flGaityaw, m_flGaitMovement, m_flGaitframe, m_flYawModifier,
 /// m_prevgaitorigin, m_flYaw, m_flPitch), each player's client keeping its own for those it draws.
 struct Gait {
-    float yaw = 0.0F;            ///< The way its legs face, in degrees.
-    float movement = 0.0F;       ///< How far it went in the last frame: negative when it went backwards.
+    nx::Degrees yaw{};           ///< The way its legs face.
+    nx::HammerUnits movement{};  ///< How far it went in the last frame: negative when it went backwards.
     SequenceFrame frame{};       ///< Of the gait sequence.
-    float yawModifier = 0.0F;    ///< How fast its legs turn after its body while it stands.
+    nx::PerSecond yawModifier{}; ///< How fast its legs turn after its body while it stands, of the turn left.
     nx::Vec3 previousOrigin{};   ///< Where it was in the last frame.
     float yawBlend = 0.0F;       ///< 0 to 255: its aim from its legs' right (0) to their left (255).
     std::uint8_t pitchBlend = 0; ///< 0 to 255: its aim from up (0) to down (255).

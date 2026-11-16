@@ -6,6 +6,7 @@ nxAddTest(csServerTests
         gameTests.cpp
         entityBodiesTests.cpp
         playerNamesTests.cpp
+        playerBodiesTests.cpp
         agentNavigationTests.cpp
         agentHearingTests.cpp
         agentTouchTests.cpp
