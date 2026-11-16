@@ -162,10 +162,8 @@ auto ParticleRenderer::create(rhi::Device& device, rhi::CommandList& commands,
     if (auto made = renderer.createDot(commands); !made) {
         return fail(ParticleError::GpuFailed, std::move(made.error()));
     }
-    renderer.m_frameSlots.reserve(rhi::kMaxFramesInFlight);
-    for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
-        if (auto reserved = renderer.reserve(renderer.m_frameSlots.emplace_back(), kFirstQuadCapacity);
-            !reserved) {
+    for (ParticleFrameSlot& slot : renderer.frameSlots) {
+        if (auto reserved = renderer.reserve(slot, kFirstQuadCapacity); !reserved) {
             return fail(ParticleError::GpuFailed, std::move(reserved.error()));
         }
     }
@@ -321,8 +319,7 @@ auto ParticleRenderer::reserve(ParticleFrameSlot& slot, std::size_t quads) -> Re
 auto ParticleRenderer::prepare(const ParticleDraw& draw) -> Result<void, ParticleError> {
     m_preparedQuads = 0;
     preparedStreaks = 0;
-    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    ParticleFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    ParticleFrameSlot& slot = frameSlots.advance();
     const FrameUniform uniform{.viewProjection = viewProjectionMatrix(draw.camera, draw.aspect),
                                .fog = fogBlockOf(draw.fog, draw.camera, m_encoding),
                                .colorEncoding = std::to_underlying(m_encoding)};
@@ -358,7 +355,7 @@ void ParticleRenderer::drawPrepared(rhi::CommandList& commands) const {
         return;
     }
     // The particles, then the streaks after them (CL_DrawEFX).
-    const ParticleFrameSlot& slot = m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
+    const ParticleFrameSlot& slot = frameSlots.prepared();
     commands.setVertexBuffer(0, slot.vertices.get(), 0);
     if (m_preparedQuads > 0) {
         commands.setPipeline(m_pipeline.get());

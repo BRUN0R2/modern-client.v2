@@ -256,10 +256,8 @@ auto SpriteRenderer::create(rhi::Device& device, const SpriteRendererDesc& desc)
     if (auto made = renderer.createPipelines(desc.shaderCode, desc.colorFormat); !made) {
         return fail(SpriteError::GpuFailed, std::move(made.error()));
     }
-    renderer.m_frameSlots.reserve(rhi::kMaxFramesInFlight);
-    for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
-        if (auto reserved = renderer.reserve(renderer.m_frameSlots.emplace_back(), kFirstQuadCapacity);
-            !reserved) {
+    for (SpriteFrameSlot& slot : renderer.frameSlots) {
+        if (auto reserved = renderer.reserve(slot, kFirstQuadCapacity); !reserved) {
             return fail(SpriteError::GpuFailed, std::move(reserved.error()));
         }
     }
@@ -439,8 +437,7 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
     m_quadCalls.clear();
     m_spriteCalls.clear();
     m_blendedDraws.clear();
-    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    SpriteFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    SpriteFrameSlot& slot = frameSlots.advance();
     const FrameUniform uniform{.viewProjection =
                                    inLayer(viewProjectionMatrix(draw.camera, draw.aspect), draw.depth),
                                .fog = fogBlockOf(draw.fog, draw.camera, m_encoding),
@@ -571,13 +568,8 @@ void SpriteRenderer::drawBlended(rhi::CommandList& commands, std::uint32_t index
     drawSprite(commands, m_spriteCalls[index]);
 }
 
-auto SpriteRenderer::preparedSlot() const noexcept -> const SpriteFrameSlot& {
-    expects(m_drawCount > 0, "SpriteRenderer: prepared before it is drawn");
-    return m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
-}
-
 void SpriteRenderer::drawSprite(rhi::CommandList& commands, const SpriteCall& sprite) const {
-    const SpriteFrameSlot& slot = preparedSlot();
+    const SpriteFrameSlot& slot = frameSlots.prepared();
     commands.setVertexBuffer(0, slot.vertices.get(), 0);
     for (std::uint32_t quad = sprite.firstQuad; quad < sprite.firstQuad + sprite.quadCount; ++quad) {
         commands.setPipeline(m_quadCalls[quad].pipeline);

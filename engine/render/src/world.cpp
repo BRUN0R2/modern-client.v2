@@ -804,7 +804,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     const auto gpuFailure = [](Failure<rhi::RhiError> failure) {
         return fail(WorldError::GpuFailed, std::move(failure));
     };
-    BspWorld world{device, map};
+    BspWorld world{device, map, std::max(desc.viewsPerFrame, 1U)};
     world.m_encoding = desc.encoding;
     Uploader uploader{device, commands};
     auto textures = loadTextures(uploader, desc);
@@ -830,7 +830,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     world.m_faces = std::move(geometry.faces);
     world.m_faceIndices = std::move(geometry.faceIndices);
     world.m_models = modelDrawsOf(map);
-    world.m_faceGathered.resize(world.m_faces.size());
+    world.faceGathered.resize(world.m_faces.size());
     world.m_bucketFaces.resize(geometry.bucketTextures.size());
     world.m_stats = WorldStats{.faces = faces.size(),
                                .triangles = world.m_faceIndices.size() / kTriangleCorners,
@@ -840,9 +840,9 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     if (auto made = world.createLayouts(desc.shaderCode)
                         .and_then([&] { return world.createPipelines(desc.colorFormat); })
                         .and_then([&] {
-                            return world.createFrameSlots(
-                                frameTextures->lightmaps.get(), frameTextures->lightTable.get(),
-                                frameTextures->sky.get(), std::max(desc.viewsPerFrame, 1U));
+                            return world.createFrameSlots(frameTextures->lightmaps.get(),
+                                                          frameTextures->lightTable.get(),
+                                                          frameTextures->sky.get());
                         })
                         .and_then([&] { return world.createBucketGroups(geometry.bucketTextures); })
                         .and_then([&] { return world.createDecalGroups(decalTextures->owned); });
@@ -911,10 +911,11 @@ auto BspWorld::isSeen(std::uint32_t face, Vec3 eye, bool isOfAnEntity) const noe
 }
 
 void BspWorld::addFace(std::uint32_t face, Vec3 eye) {
-    if (m_faceGathered[face] == m_drawCount) {
+    const PrepareNumber prepare = frameSlots.lastPrepare();
+    if (faceGathered[face] == prepare) {
         return; // in another leaf already
     }
-    m_faceGathered[face] = m_drawCount;
+    faceGathered[face] = prepare;
     if (!isSeen(face, eye, false)) {
         return;
     }
@@ -1028,9 +1029,7 @@ void BspWorld::gather(const Camera& camera, float aspect) {
 }
 
 void BspWorld::prepare(const WorldFrame& view) {
-    // A ring of viewsPerFrame slots a frame in flight: the slot written now was last read frames in
-    // flight ago.
-    FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    FrameSlot& slot = frameSlots.advance();
     if (auto written = writeDecals(slot); !written) {
         // The frame goes on without them; the next one tries again.
         log::error(kLog, "the decals are not drawn: {}", describe(written.error()));
@@ -1113,7 +1112,7 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
 }
 
 void BspWorld::drawSolid(rhi::CommandList& commands) const {
-    const FrameSlot& slot = preparedSlot();
+    const FrameSlot& slot = frameSlots.prepared();
     commands.setPipeline(m_pipeline.get());
     commands.setVertexBuffer(0, m_vertices.get(), 0);
     commands.setIndexBuffer(slot.indices.get(), 0, rhi::IndexFormat::Uint32);
@@ -1154,12 +1153,12 @@ void BspWorld::drawBlended(rhi::CommandList& commands, std::uint32_t index) cons
     }
     // Another renderer may have drawn since the world's buffers were bound.
     commands.setVertexBuffer(0, m_vertices.get(), 0);
-    commands.setIndexBuffer(preparedSlot().indices.get(), 0, rhi::IndexFormat::Uint32);
+    commands.setIndexBuffer(frameSlots.prepared().indices.get(), 0, rhi::IndexFormat::Uint32);
     drawEntity(commands, m_entityDraws[index]);
 }
 
 void BspWorld::drawEntity(rhi::CommandList& commands, const EntityDraw& entity) const {
-    const FrameSlot& slot = preparedSlot();
+    const FrameSlot& slot = frameSlots.prepared();
     const RenderMode mode = m_models[entity.model].mode;
     const rhi::BindGroupHandle entityGroup = slot.entityGroups[std::size_t{entity.model} + 1].get();
     const auto faces = std::span{m_entityFaces}.subspan(entity.firstFace, entity.faceCount);
@@ -1225,7 +1224,7 @@ void BspWorld::drawDecalRuns(rhi::CommandList& commands, std::span<const DecalRu
 }
 
 auto BspWorld::decalRunsOf(assets::FaceIndex face) const -> std::span<const DecalRun> {
-    const FrameSlot& slot = preparedSlot();
+    const FrameSlot& slot = frameSlots.prepared();
     const auto found = std::ranges::lower_bound(slot.faceDecals, face.value, {},
                                                 [](const FaceDecals& decals) { return decals.face.value; });
     if (found == slot.faceDecals.end() || found->face != face) {
@@ -1251,7 +1250,7 @@ void BspWorld::keepDecalsOf(const BspWorld& previous) {
     expects(previous.m_map == m_map && previous.m_decalSizes.size() == m_decalSizes.size(),
             "BspWorld::keepDecalsOf: a world of the same map and decals");
     m_decals = previous.m_decals;
-    for (FrameSlot& slot : m_frameSlots) {
+    for (FrameSlot& slot : frameSlots) {
         slot.decalRevision.reset(); // another pool's revisions: each frame writes its decals again
     }
 }
@@ -1326,11 +1325,6 @@ auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
     slot.faceDecals = std::move(faceDecals);
     slot.decalRevision = m_decals->revision();
     return {};
-}
-
-auto BspWorld::preparedSlot() const noexcept -> const FrameSlot& {
-    expects(m_drawCount > 0, "BspWorld: prepared before it is drawn");
-    return m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
 }
 
 auto BspWorld::pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle {
@@ -1520,12 +1514,10 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
 }
 
 auto BspWorld::createFrameSlots(rhi::TextureHandle lightmaps, rhi::TextureHandle lightTable,
-                                rhi::TextureHandle sky, std::uint32_t viewsPerFrame)
-    -> Result<void, rhi::RhiError> {
+                                rhi::TextureHandle sky) -> Result<void, rhi::RhiError> {
     rhi::Device& device = *m_device;
     const std::size_t models = m_models.size() + 1; // and the world, model 0
-    for (std::uint32_t index = 0; index < viewsPerFrame * rhi::kMaxFramesInFlight; ++index) {
-        FrameSlot& slot = m_frameSlots.emplace_back();
+    for (FrameSlot& slot : frameSlots) {
         auto buffer = device.createBuffer({.label = "world.frame",
                                            .size = sizeof(FrameUniform),
                                            .usage = {rhi::BufferUsage::Uniform},
