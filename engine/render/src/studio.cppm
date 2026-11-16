@@ -353,6 +353,13 @@ struct CrowdModelDesc {
     std::span<const CrowdSequence> sequences{};
 };
 
+/// The unit of EntityFrame: 256ths of a sequence, printed as a number alone.
+struct EntityFrameTag {};
+
+/// Where an entity is in its sequence as its server keeps it (pev->frame): 0 at its first frame, 256 at its
+/// last, as shaders/crowd.slang reads it. The game's own is cs::EntityFrame.
+using EntityFrame = Quantity<float, EntityFrameTag>;
+
 /// A body of a crowd as its last move left it, as shaders/crowd.slang reads it.
 struct alignas(16) CrowdBody {
     Vec3 previousOrigin{}; ///< Where its last move started.
@@ -360,13 +367,13 @@ struct alignas(16) CrowdBody {
     Vec3 origin{};
     std::uint32_t model = 0; ///< As loadCrowdModel numbers them.
     std::uint32_t sequence = 0;
-    float frame = 0.0F;    ///< Where its server left it, in 256ths of the sequence (pev->frame).
+    EntityFrame frame{};   ///< Where its server left it.
     Seconds advancedAgo{}; ///< How long before the last tick its server left it there.
     Scale framerate{1.0F}; ///< Times its sequence's own speed (pev->framerate).
     Vec3 lightDirection{.z = -1.0F};
-    float ambient = 0.0F;
+    LightLevel ambient{}; ///< As its ModelLight's.
     Vec3 lightColor{.x = 1.0F, .y = 1.0F, .z = 1.0F};
-    float shade = 0.0F;
+    LightLevel shade{};
     float moveShare = 0.0F;        ///< How far from where it started it shows at the last tick, 0 to 1.
     float moveSharePerTick = 1.0F; ///< How much farther it shows a tick later.
 };

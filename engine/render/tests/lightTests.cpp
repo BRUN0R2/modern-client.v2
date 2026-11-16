@@ -192,8 +192,8 @@ TEST(WorldLightTest, AModelIsLitFromBelowGoingTheWayTheLightDims) {
         world->light().modelLightAt({.origin = {.x = 32.0F, .y = 32.0F, .z = 32.0F}}, stylesAt("m"));
 
     // Under it, (255, 3, 10): its whole light is 255, 0.9 of it shade.
-    EXPECT_NEAR(light.shade, 229.5F, kTolerance);
-    EXPECT_NEAR(light.ambient, 25.5F, kTolerance);
+    EXPECT_NEAR(light.shade.value(), 229.5F, kTolerance);
+    EXPECT_NEAR(light.ambient.value(), 25.5F, kTolerance);
     expectNear(light.color, {.x = 1.0F, .y = 3.0F / 255.0F, .z = 10.0F / 255.0F});
     // The corners 16 units about it sum 410 (back left), 540 (back right), 398 (front right) and 267
     // (front left), of 768.
@@ -211,15 +211,15 @@ TEST(WorldLightTest, UnderOpenSkyAModelTakesTheSkysLight) {
     const nx::render::SkyLight upward{.color = {.x = 100.7F, .y = 150.0F, .z = 200.0F},
                                       .direction = {.z = 1.0F}};
     const ModelLight lit = world->light().modelLightAt({.origin = origin, .sky = upward}, stylesAt("m"));
-    EXPECT_NEAR(lit.shade, 180.0F, kTolerance) << "0.9 of its brightest channel";
-    EXPECT_NEAR(lit.ambient, 20.0F, kTolerance);
+    EXPECT_NEAR(lit.shade.value(), 180.0F, kTolerance) << "0.9 of its brightest channel";
+    EXPECT_NEAR(lit.ambient.value(), 20.0F, kTolerance);
     expectNear(lit.color, {.x = 0.5F, .y = 0.75F, .z = 1.0F}, "100.7 taken as 100");
     expectNear(lit.direction, {.z = 1.0F});
 
     // Against a sky above, the segment meets nothing: the light under the model instead.
     const nx::render::SkyLight downward{.color = upward.color, .direction = {.z = -1.0F}};
     const ModelLight floor = world->light().modelLightAt({.origin = origin, .sky = downward}, stylesAt("m"));
-    EXPECT_NEAR(floor.shade, 229.5F, kTolerance);
+    EXPECT_NEAR(floor.shade.value(), 229.5F, kTolerance);
 }
 
 TEST(WorldLightTest, AModelsLightIsHeldToTheOriginalsRanges) {
@@ -230,13 +230,14 @@ TEST(WorldLightTest, AModelsLightIsHeldToTheOriginalsRanges) {
     const Vec3 origin{.x = 32.0F, .y = 32.0F, .z = 32.0F};
 
     const ModelLight held = world->light().modelLightAt({.origin = origin, .sky = bright}, stylesAt("m"));
-    EXPECT_NEAR(held.ambient, 60.0F, kTolerance);
-    EXPECT_NEAR(held.shade, 195.0F, kTolerance) << "the two together no more than 255";
+    EXPECT_NEAR(held.ambient.value(), 60.0F, kTolerance);
+    EXPECT_NEAR(held.shade.value(), 195.0F, kTolerance) << "the two together no more than 255";
 
     const ModelLight direct =
         world->light().modelLightAt({.origin = origin, .sky = bright, .direct = 0.5F}, stylesAt("m"));
-    EXPECT_NEAR(direct.ambient, 128.0F, kTolerance) << "direct held to 0.75: 150 of ambient, held to 128";
-    EXPECT_NEAR(direct.shade, 127.0F, kTolerance);
+    EXPECT_NEAR(direct.ambient.value(), 128.0F, kTolerance)
+        << "direct held to 0.75: 150 of ambient, held to 128";
+    EXPECT_NEAR(direct.shade.value(), 127.0F, kTolerance);
 }
 
 } // namespace

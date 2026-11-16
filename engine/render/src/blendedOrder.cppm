@@ -11,18 +11,28 @@
 export module nx.render:blendedOrder;
 
 import std;
+import nx.core;
 import nx.rhi;
 import :renderMode;
 
 export namespace nx::render {
 
+/// The unit of SquaredDistance.
+struct SquaredDistanceTag {
+    static constexpr std::string_view kSuffix = "hu^2";
+};
+
+/// A distance times itself, in hammer units squared: what the original sorts blended things by, its root
+/// never taken.
+using SquaredDistance = Quantity<float, SquaredDistanceTag>;
+
 /// The distance of a blended thing drawn before every other: a brush entity drawn TransAlpha, as the
 /// original sorts it.
-inline constexpr float kFarthest = std::numeric_limits<float>::max();
+inline constexpr SquaredDistance kFarthest{std::numeric_limits<float>::max()};
 
 /// Something a renderer draws blended this frame, ordered among everything drawn blended in it.
 struct BlendedDraw {
-    float distance = 0.0F; ///< Squared, from the camera to the middle of its bounds; or kFarthest.
+    SquaredDistance distance{}; ///< From the camera to the middle of its bounds; or kFarthest.
     RenderMode mode = RenderMode::Normal;
     std::uint32_t index = 0; ///< Which, to the renderer that draws it.
 };

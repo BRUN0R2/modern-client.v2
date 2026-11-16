@@ -656,8 +656,8 @@ the sky's when the sky has a color (the game sets it from the map's `light_envir
 face met against its way, 8192 units, is the sky's (`SurfaceAtPoint`, whose coordinates are whole
 texels); else the light 2048 units down, going the way it grows dimmer across four points 16 units
 about the origin, and down. Its brightest channel is its whole light, `direct` (0.9, held from 0.75 to
-1) of it shade and the rest ambient, ambient held to 128 and the two to 255; its color is the light
-over its brightest channel. On de_dust2, a terrorist spawn in the sun is 191 under a model, a
+1) of it shade and the rest ambient, ambient held to 128 and the two to 255, each a level of the original's
+light (`nx::render::LightLevel`); its color is the light over its brightest channel. On de_dust2, a terrorist spawn in the sun is 191 under a model, a
 counter-terrorist one indoors 15 to 37. The *elights* and *dlights* come with the effects.
 
 ### 9.3 Instancing
@@ -763,7 +763,8 @@ the splats, then the droplets, then the mists.
 renderer of the scene mixing the color of each fragment toward the fog's by how much the fog hides
 there (`fogAmountAt`): its curve, `GL_LINEAR` from none at its start to all of it at its end, `GL_EXP`
 1 - e^-(density d) (the original's under water) or `GL_EXP2` 1 - e^-(density d)^2 (a map's
-`env_fog`), at the distance d past its start, held from its end on, times its opacity. With its start
+`env_fog`), at the distance d past its start, held from its end on, times its opacity; its density is for
+each unit of that distance (`nx::render::FogDensity`). With its start
 at 0, no end and an opacity of 1, it is the original's. The world's faces, its sky (`fogSkybox`), its
 decals and its blended brush entities, studio models, sprites (the light of a lit one too, as the
 original's fog mixes every fragment before it is blended) and particles are seen through it; what is

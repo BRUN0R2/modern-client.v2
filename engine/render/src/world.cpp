@@ -959,11 +959,11 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelP
                                      return dot(placed(m_faces[face.face].middle), forward);
                                  });
     }
-    m_entityDraws.push_back(
-        EntityDraw{.model = model,
-                   .distance = lengthSquared(drawn.bounds.center() + placement.origin - camera.position),
-                   .firstFace = first,
-                   .faceCount = count});
+    m_entityDraws.push_back(EntityDraw{.model = model,
+                                       .distance = SquaredDistance{lengthSquared(
+                                           drawn.bounds.center() + placement.origin - camera.position)},
+                                       .firstFace = first,
+                                       .faceCount = count});
 }
 
 auto BspWorld::mayShow(const Aabb& box) const noexcept -> bool {

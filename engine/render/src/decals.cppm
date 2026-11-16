@@ -96,7 +96,7 @@ struct DecalShot {
     DecalSize size{};
     assets::ModelIndex model = assets::kWorldModel;
     Vec3 center{};
-    float scale = 1.0F; ///< Held to 0.01 to 16.
+    Scale scale{1.0F}; ///< Held to 0.01 to 16.
     DecalLife life = DecalLife::Temporary;
 };
 
@@ -147,16 +147,16 @@ private:
     struct Slot {
         std::optional<PlacedDecal> decal{};
         Vec3 center{};
-        float scale = 1.0F;
+        Scale scale{1.0F};
         DecalSize size{};
         std::uint64_t sequence = 0; ///< Its stamping's, in the order of all of them.
         DecalLife life = DecalLife::Temporary;
     };
     /// A shot as the walk of its model's tree carries it: its scale held, and how far the walk looks
-    /// (half the image's larger side, in texels).
+    /// (half the image's larger side, a texel a unit).
     struct Walk {
         DecalShot shot{};
-        float reach = 0.0F;
+        HammerUnits reach{};
     };
 
     void walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& stamped);

@@ -25,7 +25,7 @@ auto SchemeFontSet::open(const assets::SchemeFont& font, std::uint32_t screenHei
         if (!choice) {
             continue; // no such face: the candidates after it stand in
         }
-        auto opened = catalog.open(*choice, {.cellHeight = candidate.tall,
+        auto opened = catalog.open(*choice, {.cellHeight = Pixels{candidate.tall},
                                              .smoothing = candidate.flags.test(assets::FontFlag::Antialias)
                                                               ? FontSmoothing::Antialiased
                                                               : FontSmoothing::None});

@@ -45,7 +45,7 @@ struct TempEntity {
     float frame = 0.0F;
     nx::PerSecond framerate{};
     float lastFrame = 0.0F;
-    float scale = 0.0F;
+    nx::Scale scale{};
     nx::render::RenderColor color{};
     std::uint8_t amount = 0;
     nx::Seconds goesAt{};

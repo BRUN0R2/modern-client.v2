@@ -63,10 +63,10 @@ a cell height (`tall`), a weight and flags such as `antialias`, and Windows' GDI
 `nx.ui:font` reads the faces with FreeType (`Font::open`) and reproduces both.
 
 **Size.** A cell height is the height of a line. GDI turns it into a whole number of pixels per em
-by the face's tables, which `fontMetricsFor` reproduces (the rule below was found by asking GDI
-for every height from 4 to 120 in Tahoma, Verdana, Arial, Trebuchet MS, Courier New, Marlett,
-Times New Roman, Segoe UI, Georgia and Lucida Console, regular and bold, and matches it in every
-case):
+by the face's tables, written in its own units (`nx::ui::FontUnits`), which `fontMetricsFor`
+reproduces in `nx::Pixels` (the rule below was found by asking GDI for every height from 4 to 120
+in Tahoma, Verdana, Arial, Trebuchet MS, Courier New, Marlett, Times New Roman, Segoe UI, Georgia
+and Lucida Console, regular and bold, and matches it in every case):
 
 - The device heights of the face's `VDMX` table (the highest and lowest pixel of its glyphs at each
   size, recorded by the font maker), when Windows takes them: a version 1 table, or a version 0
@@ -508,8 +508,8 @@ with loading off the main thread. The change of map has named states of its own 
 asked for, then told loading (`MapAskedStage`), loaded, and played from the frame that loads it, or left at the
 same point of the frame by `disconnect` (`MapSwitch`); each loading and each change of the map played is logged.
 
-**The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, made as
-large as the screen (`MenuScale`); the sizes of text made of the families a menu's data names for that height
+**The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, its
+lengths `cs::MenuUnits`, made as large as the screen (`MenuScale`, which turns them into `nx::Pixels`); the sizes of text made of the families a menu's data names for that height
 (`makeMenuFace`); and the colors, warm white text and gold over dark glass.
 
 **The buy menu** (`cs.client:buyMenu`, `:buyMenuLayout`, `:buyMenuPanel`): the project's own look, where the

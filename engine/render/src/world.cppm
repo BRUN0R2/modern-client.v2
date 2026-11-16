@@ -295,8 +295,8 @@ private:
     /// A brush entity drawn this frame, with the world or blended: its faces drawn, a range of
     /// m_entityFaces.
     struct EntityDraw {
-        std::uint32_t model = 0; ///< In m_models.
-        float distance = 0.0F;   ///< Squared, from the camera to its middle.
+        std::uint32_t model = 0;    ///< In m_models.
+        SquaredDistance distance{}; ///< From the camera to its middle.
         std::uint32_t firstFace = 0;
         std::uint32_t faceCount = 0;
     };
