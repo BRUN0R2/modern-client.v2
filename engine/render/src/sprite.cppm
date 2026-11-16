@@ -32,15 +32,15 @@ namespace nx::render {
 
 // What the sprite renderer keeps of a sprite and of a frame, which sprite.cpp builds; not exported.
 
-/// An image of a sprite on the GPU, and its extent about the sprite's origin, in texels: left and down
-/// negative where the image reaches past the origin that way.
+/// An image of a sprite on the GPU, and its extent about the sprite's origin, a texel a unit at a scale
+/// of 1: left and down negative where the image reaches past the origin that way.
 struct SpriteImageDraw {
     rhi::OwnedTexture texture{};
     rhi::OwnedBindGroup group{};
-    float left = 0.0F;
-    float right = 0.0F;
-    float up = 0.0F;
-    float down = 0.0F;
+    HammerUnits left{};
+    HammerUnits right{};
+    HammerUnits up{};
+    HammerUnits down{};
 };
 
 /// A frame of a sprite: its image, or the images of its group, each shown until its interval of the
@@ -122,8 +122,8 @@ private:
     std::vector<SpriteImageDraw> m_images;
     std::vector<SpriteFrameDraw> m_frames;
     /// Its bounds about its origin: half its widest image across, half its tallest up and down.
-    float m_halfWidth = 0.0F;
-    float m_halfHeight = 0.0F;
+    HammerUnits halfWidth{};
+    HammerUnits halfHeight{};
 };
 
 /// A sprite drawn in a frame: where its entity is, and how the game asks it to be drawn.
@@ -133,7 +133,7 @@ struct SpriteInstance {
     Vec3 origin{};
     EulerAngles angles{}; ///< Turn an oriented sprite; the roll turns a parallel one.
     float frame = 0.0F;   ///< The entity's `frame`: its whole part is the frame shown.
-    float scale = 0.0F;   ///< 0 is 1.
+    Scale scale{};        ///< Times its sprite's size; 0 is 1.
     RenderMode mode = RenderMode::Normal;
     RenderEffect effect = RenderEffect::None;
     std::uint8_t amount = 0; ///< `renderamt`.

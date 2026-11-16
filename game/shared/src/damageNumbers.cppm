@@ -52,6 +52,9 @@ struct DamageNumberFont {
 /// its whole size over `settleTime`; rises `rise` of the screen's height over its `life`, easing out, from
 /// where it was drawn up to `spread` of the screen's height to a side; and over its last `fadeOut`, fades
 /// out and shrinks to `endScale`. At most `mostNumbers` show at once, the oldest going first.
+/// A number at its whole size: what it settles back to.
+inline constexpr nx::Scale kWholeSize{1.0F};
+
 struct DamageNumberLook {
     DamageNumberFont font{};
     float height = 0.0F;
@@ -65,9 +68,9 @@ struct DamageNumberLook {
     nx::Seconds growTime{};
     nx::Seconds settleTime{};
     nx::Seconds fadeOut{};
-    float startScale = 0.0F;
-    float peakScale = 1.0F;
-    float endScale = 1.0F;
+    nx::Scale startScale{};
+    nx::Scale peakScale{kWholeSize};
+    nx::Scale endScale{kWholeSize};
     float rise = 0.0F;
     float spread = 0.0F;
     std::uint32_t mostNumbers = 0;

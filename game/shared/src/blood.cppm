@@ -111,7 +111,7 @@ struct BloodStreamLook {
     nx::Seconds streamLife{};
     std::uint32_t splashPerSpeed = 0;
     float firstSplashDip = 0.0F;
-    float splashSpread = 0.0F;
+    nx::Scale splashSpread{};
     std::uint32_t splashCompanions = 0;
     nx::HammerUnits companionJitter{};
     nx::Scale splashGravity{};
@@ -165,10 +165,10 @@ struct BloodEnhancedLook {
     std::uint32_t mostMists = 0;
     nx::Seconds streakTime{};
     float leastLight = 0.0F;
-    float mistLight = 0.0F;
+    nx::Scale mistLight{};
     float mistFadeFrom = 0.0F;
     nx::Scale gravity{};
-    float drag = 0.0F;
+    nx::PerSecond drag{};
     nx::Seconds dropletLife{};
     nx::Seconds dropletFade{};
     float splatShare = 0.0F;

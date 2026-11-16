@@ -7,8 +7,8 @@ include_guard(GLOBAL)
 
 include(nxLayers)
 
-# Applies the project warning policy (docs/02, section 12) to a target we own.
-# Warnings are per-target so third-party code is never compiled with them.
+# Applies the project warning policy (docs/02, section 12) to a target we own, and MSVC's room for its
+# objects' sections. Warnings are per-target so third-party code is never compiled with them.
 function(nxTargetDefaults target)
     if(MSVC)
         target_compile_options(${target} PRIVATE
@@ -29,6 +29,10 @@ function(nxTargetDefaults target)
             /w14905 /w14906  # string literal cast to a different character type
             /w14928       # illegal copy-initialization
             /wd4324       # structure padded due to alignas: intentional (cache-line separation)
+            # A COFF object holds at most 65,279 sections, one for each inline function and constant: a
+            # unit of many passes it once AddressSanitizer and libFuzzer instrument it (cs.shared's
+            # weapons.cpp in fuzz-windows-msvc, C1128). /bigobj lifts the limit and changes no code.
+            /bigobj
             $<$<BOOL:${NX_WARNINGS_AS_ERRORS}>:/WX>)
     else()
         target_compile_options(${target} PRIVATE
