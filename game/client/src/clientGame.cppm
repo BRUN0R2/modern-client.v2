@@ -89,7 +89,7 @@ public:
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_last.inventory; }
     /// The whole seconds the player's HUD shows of the round's time (RoundTimer::shownAt), at the
     /// moment of the game a frame shows.
-    [[nodiscard]] auto roundTimeShown() const -> std::uint32_t;
+    [[nodiscard]] auto roundTimeShown() const -> WholeSeconds;
     /// Replaces `placements` with where the game puts its brush entities now, how high their waves rise,
     /// and which textures they show. Keeps the destination's storage for the next frame.
     void writePlacements(std::vector<nx::render::ModelPlacement>& placements) const;

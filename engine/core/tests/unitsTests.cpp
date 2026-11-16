@@ -41,6 +41,11 @@ TEST(Units, DistanceOverSpeedIsTime) {
     EXPECT_EQ(500_hu / 250_ups, nx::Seconds{2.0F});
 }
 
+TEST(Units, MinutesAreSixtySecondsInFloat) {
+    EXPECT_EQ(nx::Seconds{nx::Minutes{2.501F}}.count(), 2.501F * 60.0F) << "the minutes times 60, in float";
+    EXPECT_EQ(nx::Minutes{nx::Seconds{15.0F}}.count(), 0.25F);
+}
+
 TEST(Units, DamageReducesHealthAndArmor) {
     EXPECT_EQ(100_hp - 36_dmg, 64_hp);
     EXPECT_EQ(100_ap - 18_dmg, 82_ap);

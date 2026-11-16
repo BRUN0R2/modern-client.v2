@@ -223,8 +223,8 @@ TEST_F(PlayerModelTest, TheLegsFaceTheWayThePlayerMovesTheAimTurnedTowardsTheBod
     cs::Gait gait;
     cs::processGait(gait, model(), sequence("walk"), {.x = 10.0F}, {.yaw = nx::Degrees{90.0F}},
                     nx::Seconds{0.01F}, cs::kOwnSpeed);
-    EXPECT_NEAR(gait.yaw, 0.0F, kTolerance);
-    EXPECT_NEAR(gait.movement, 10.0F, kTolerance);
+    EXPECT_NEAR(gait.yaw.value(), 0.0F, kTolerance);
+    EXPECT_NEAR(gait.movement.value(), 10.0F, kTolerance);
     // The body 90 degrees to the left of the legs: the yaw's blend at its end (0), the pitch's middle.
     EXPECT_NEAR(gait.yawBlend, 0.0F, kTolerance);
     EXPECT_EQ(gait.pitchBlend, 127);
@@ -236,8 +236,8 @@ TEST_F(PlayerModelTest, MovingAwayFromWhereItFacesTurnsTheLegsAroundAndBackwards
     cs::Gait gait;
     cs::processGait(gait, model(), sequence("walk"), {.x = 10.0F}, {.yaw = nx::Degrees{180.0F}},
                     nx::Seconds{0.01F}, cs::kOwnSpeed);
-    EXPECT_NEAR(gait.yaw, -180.0F, kTolerance);
-    EXPECT_NEAR(gait.movement, -10.0F, kTolerance);
+    EXPECT_NEAR(gait.yaw.value(), -180.0F, kTolerance);
+    EXPECT_NEAR(gait.movement.value(), -10.0F, kTolerance);
     EXPECT_NEAR(gait.yawBlend, 128.0F, kTolerance);
     EXPECT_NEAR(gait.frame.value(), 9.0F, kTolerance) << "backwards, wrapped into the sequence";
 }
@@ -246,12 +246,13 @@ TEST_F(PlayerModelTest, StillLegsTurnAfterTheBodySlowlyNearlyAheadFastFacingAway
     cs::Gait nearlyAhead;
     cs::processGait(nearlyAhead, model(), sequence("idle1"), {}, {.yaw = nx::Degrees{3.0F}},
                     nx::Seconds{0.01F}, cs::kOwnSpeed);
-    EXPECT_EQ(nearlyAhead.yaw, 0.0F) << "a turn under a whole degree is none";
-    EXPECT_EQ(nearlyAhead.yawModifier, 0.05F);
+    EXPECT_EQ(nearlyAhead.yaw, nx::Degrees{}) << "a turn under a whole degree is none";
+    EXPECT_EQ(nearlyAhead.yawModifier, nx::PerSecond{0.05F});
     cs::Gait away;
     cs::processGait(away, model(), sequence("idle1"), {}, {.yaw = nx::Degrees{100.0F}}, nx::Seconds{0.01F},
                     cs::kOwnSpeed);
-    EXPECT_NEAR(away.yaw, 3.5F, kTolerance) << "100 degrees times the frame times 3.5";
+    EXPECT_NEAR(away.yaw.value(), 3.5F, kTolerance) << "100 degrees times the frame times 3.5 a second";
+    EXPECT_EQ(away.yawModifier, nx::PerSecond{3.5F});
 }
 
 TEST_F(PlayerModelTest, AGaitSequenceThatDoesNotMovePlaysByTimeAtTheFramerate) {

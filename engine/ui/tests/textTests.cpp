@@ -30,7 +30,7 @@ using nx::ui::PlacedGlyph;
 /// The square font at 16 pixels per em (a line of 17 + 3), without antialiasing.
 [[nodiscard]] auto squareFont() -> Font {
     auto font = Font::open(std::make_shared<const std::vector<std::byte>>(nx::test::SquareFont::build()),
-                           {.cellHeight = 20});
+                           {.cellHeight = nx::Pixels{20}});
     EXPECT_TRUE(font.has_value()) << (font ? "" : font.error().detail);
     return std::move(font).value();
 }
