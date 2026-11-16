@@ -56,6 +56,8 @@ constexpr float kLeastGlowBlend = 0.01F;
 constexpr float kNearlyVertical = 0.999848F;
 /// An oriented sprite is drawn this far in front of its origin, against z-fighting.
 constexpr float kOrientedOffset = 0.01F;
+/// A sprite's bounds reach this much of its widest and tallest images each way about its origin.
+constexpr float kHalf = 0.5F;
 
 /// A corner of a sprite's quad: where it is, its texture coordinates, its color and opacity, what its
 /// fragments' alpha must be above, and its brightness.
@@ -181,9 +183,9 @@ struct QuadShade {
 /// Appends the quad of `image` on `axes`, `scale` times its size, shaded as `shade` (R_DrawSpriteQuad).
 void addQuad(std::vector<SpriteVertex>& vertices, const SpriteImageDraw& image, const QuadAxes& axes,
              Scale scale, const QuadShade& shade) {
-    const auto corner = [&](float along, float across, float u, float v) {
-        const Vec3 point =
-            axes.origin + (axes.up * (along * scale.value())) + (axes.right * (across * scale.value()));
+    const auto corner = [&](HammerUnits along, HammerUnits across, float u, float v) {
+        const Vec3 point = axes.origin + (axes.up * (along.value() * scale.value())) +
+                           (axes.right * (across.value() * scale.value()));
         return SpriteVertex{.position = point,
                             .u = u,
                             .v = v,
@@ -394,8 +396,8 @@ auto SpriteRenderer::load(rhi::CommandList& commands, const assets::SpriteView& 
     SpriteModel model;
     model.m_orientation = sprite.orientation;
     model.m_rendering = sprite.rendering;
-    model.m_halfWidth = static_cast<float>(sprite.maxWidth) / 2.0F;
-    model.m_halfHeight = static_cast<float>(sprite.maxHeight) / 2.0F;
+    model.halfWidth = HammerUnits{static_cast<float>(sprite.maxWidth) * kHalf};
+    model.halfHeight = HammerUnits{static_cast<float>(sprite.maxHeight) * kHalf};
     for (const assets::SpriteFrame& frame : sprite.frames) {
         SpriteFrameDraw& drawn = model.m_frames.emplace_back(
             SpriteFrameDraw{.firstImage = narrow<std::uint32_t>(model.m_images.size()),
@@ -424,10 +426,10 @@ auto SpriteRenderer::load(rhi::CommandList& commands, const assets::SpriteView& 
             model.m_images.push_back(SpriteImageDraw{
                 .texture = std::move(*texture),
                 .group = std::move(*group),
-                .left = static_cast<float>(image.originX),
-                .right = static_cast<float>(image.originX) + static_cast<float>(image.width),
-                .up = static_cast<float>(image.originY),
-                .down = static_cast<float>(image.originY) - static_cast<float>(image.height)});
+                .left = HammerUnits{static_cast<float>(image.originX)},
+                .right = HammerUnits{static_cast<float>(image.originX) + static_cast<float>(image.width)},
+                .up = HammerUnits{static_cast<float>(image.originY)},
+                .down = HammerUnits{static_cast<float>(image.originY) - static_cast<float>(image.height)}});
         }
     }
     return model;
@@ -477,9 +479,9 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
                 continue;
             }
         } else {
-            const Vec3 half{.x = model.m_halfWidth * scale.value(),
-                            .y = model.m_halfWidth * scale.value(),
-                            .z = model.m_halfHeight * scale.value()};
+            const Vec3 half{.x = model.halfWidth.value() * scale.value(),
+                            .y = model.halfWidth.value() * scale.value(),
+                            .z = model.halfHeight.value() * scale.value()};
             const Aabb box = Aabb::around(instance.origin, half);
             if (std::ranges::any_of(
                     frustum, [&box](const Plane& plane) { return plane.sideOf(box) == PlaneSide::Back; })) {

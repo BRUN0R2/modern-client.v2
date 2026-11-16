@@ -17,7 +17,7 @@ constexpr Scale kLeastScale{0.01F};
 constexpr Scale kMostScale{16.0F};
 /// A node's faces are tried when the decal's center is closer than this to its plane
 /// (DECAL_DISTANCE).
-constexpr float kNodeReach = 4.0F;
+constexpr HammerUnits kNodeReach{4.0F};
 /// A decal over this many others on a face, each covered more than kCoveredShare, replaces the one it
 /// covers least (MAX_OVERLAP_DECALS).
 constexpr std::size_t kMostCovered = 6;
@@ -212,7 +212,8 @@ auto DecalPool::shoot(const DecalShot& shot) -> std::uint32_t {
     if (m_limit == 0 || shot.size.width == 0 || shot.size.height == 0) {
         return 0;
     }
-    Walk walked{.shot = shot, .reach = static_cast<float>(std::max(shot.size.width, shot.size.height) / 2)};
+    const std::uint32_t halfSide = std::max(shot.size.width, shot.size.height) / 2;
+    Walk walked{.shot = shot, .reach = HammerUnits{static_cast<float>(halfSide)}};
     walked.shot.scale = std::clamp(shot.scale, kLeastScale, kMostScale);
     std::uint32_t stamped = 0;
     walk(models[shot.model.value].headNode, walked, stamped);
@@ -222,7 +223,7 @@ auto DecalPool::shoot(const DecalShot& shot) -> std::uint32_t {
 void DecalPool::walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& stamped) {
     const assets::BspNode& node = m_map->nodes()[index.value];
     const Plane& plane = m_map->planes()[node.plane.value].plane;
-    const float distance = dot(shot.shot.center, plane.normal) - plane.distance;
+    const HammerUnits distance{dot(shot.shot.center, plane.normal) - plane.distance};
     const auto into = [&](std::size_t side) {
         if (const auto* const child = std::get_if<assets::NodeIndex>(&node.children.at(side))) {
             walk(*child, shot, stamped);
@@ -236,7 +237,7 @@ void DecalPool::walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& s
         into(1);
         return;
     }
-    if (std::abs(distance) < kNodeReach) {
+    if (std::abs(distance.value()) < kNodeReach.value()) {
         for (std::uint32_t offset = 0; offset < node.faceCount; ++offset) {
             if (stamp(assets::FaceIndex{node.firstFace.value + offset}, shot)) {
                 ++stamped;
