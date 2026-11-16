@@ -56,8 +56,6 @@ constexpr std::int32_t kColonFromMiddle = 2;   ///< The colon's left.
 constexpr std::int32_t kColonTopAbove = 28;    ///< Its upper square's top, from the bottom.
 constexpr std::int32_t kColonBottomAbove = 22; ///< Its lower square's.
 constexpr float kColonSide = 2.0F;
-/// The whole minutes of a time, as the timer shows them.
-using WholeMinutes = std::chrono::duration<std::uint32_t, std::chrono::minutes::period>;
 /// The HUD's color, as the colon of the round's time is added in it.
 constexpr nx::render::ScreenColor kColonColor{
     .red = kHudColor.red, .green = kHudColor.green, .blue = kHudColor.blue, .alpha = kTimerColonAlpha};

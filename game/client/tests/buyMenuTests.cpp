@@ -439,7 +439,7 @@ TEST_F(BuyMenuTest, AFrameTellsWhatTheMenuShows) {
     openOnRifles();
     const cs::BuyMenuFrame frame = menu.frameOf(view());
     EXPECT_EQ(frame.money, nx::Money{16000});
-    EXPECT_EQ(frame.secondsLeft, 90U);
+    EXPECT_EQ(frame.timeLeft, cs::WholeSeconds{90});
     EXPECT_EQ(frame.tab, BuyTab::Rifles);
     ASSERT_EQ(frame.tabs.size(), 3U);
     EXPECT_EQ(frame.tabs[1], (cs::BuyMenuTab{.tab = BuyTab::Rifles, .picture = "gfx/vgui/gun.tga"}));
@@ -577,9 +577,9 @@ TEST(BuyMenuTextTest, MoneyIsWrittenWithItsThousands) {
 }
 
 TEST(BuyMenuTextTest, TimeAndSharesAreWrittenWhole) {
-    EXPECT_EQ(cs::clockText(90), "1:30");
-    EXPECT_EQ(cs::clockText(65), "1:05");
-    EXPECT_EQ(cs::clockText(0), "0:00");
+    EXPECT_EQ(cs::clockText(cs::WholeSeconds{90}), "1:30");
+    EXPECT_EQ(cs::clockText(cs::WholeSeconds{65}), "1:05");
+    EXPECT_EQ(cs::clockText(cs::WholeSeconds{0}), "0:00");
     EXPECT_EQ(cs::shareText(0.775F), "77.5%");
     EXPECT_EQ(cs::shareText(0.7F), "70%");
 }

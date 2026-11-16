@@ -130,6 +130,8 @@ using RoundEvents = nx::Flags<RoundEvent>;
 
 /// Whole seconds, none below 0, as the game tells a HUD the round's time (the RoundTime message).
 using WholeSeconds = std::chrono::duration<std::uint32_t>;
+/// The whole minutes of such a time, as a clock shows them before its seconds.
+using WholeMinutes = std::chrono::duration<std::uint32_t, std::chrono::minutes::period>;
 
 /// What a player's HUD counts the round's time down from, as the game tells it as the player spawns
 /// and as the round's freeze ends (SyncRoundTimer, the RoundTime message): the whole seconds the
