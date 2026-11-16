@@ -9,7 +9,7 @@ import nx.assets;
 
 namespace nx::ui {
 
-auto SchemeFontSet::open(const assets::SchemeFont& font, std::uint32_t screenHeight, FontCatalog& catalog)
+auto SchemeFontSet::open(const assets::SchemeFont& font, Pixels screenHeight, FontCatalog& catalog)
     -> Result<SchemeFontSet, FontError> {
     std::vector<Part> parts;
     std::vector<std::string> tried;
@@ -17,7 +17,7 @@ auto SchemeFontSet::open(const assets::SchemeFont& font, std::uint32_t screenHei
         if (candidate.heights && !candidate.heights->contains(screenHeight)) {
             continue; // for other screens
         }
-        tried.push_back(std::format("{:?} {}", candidate.face, candidate.tall));
+        tried.push_back(std::format("{:?} {}", candidate.face, candidate.tall.value()));
         const std::optional<FontChoice> choice =
             catalog.choose({.family = candidate.face,
                             .weight = candidate.weight,
@@ -25,7 +25,7 @@ auto SchemeFontSet::open(const assets::SchemeFont& font, std::uint32_t screenHei
         if (!choice) {
             continue; // no such face: the candidates after it stand in
         }
-        auto opened = catalog.open(*choice, {.cellHeight = Pixels{candidate.tall},
+        auto opened = catalog.open(*choice, {.cellHeight = candidate.tall,
                                              .smoothing = candidate.flags.test(assets::FontFlag::Antialias)
                                                               ? FontSmoothing::Antialiased
                                                               : FontSmoothing::None});
@@ -37,10 +37,10 @@ auto SchemeFontSet::open(const assets::SchemeFont& font, std::uint32_t screenHei
                          .hasDropShadow = candidate.flags.test(assets::FontFlag::DropShadow)});
     }
     if (parts.empty()) {
-        return fail(FontError::NoFace,
-                    std::format("{:?} for a screen {} tall: none of [{}] opens", font.name, screenHeight,
-                                tried | std::views::join_with(std::string_view{", "}) |
-                                    std::ranges::to<std::string>()));
+        return fail(FontError::NoFace, std::format("{:?} for a screen {} tall: none of [{}] opens", font.name,
+                                                   screenHeight.value(),
+                                                   tried | std::views::join_with(std::string_view{", "}) |
+                                                       std::ranges::to<std::string>()));
     }
     return SchemeFontSet{std::move(parts)};
 }

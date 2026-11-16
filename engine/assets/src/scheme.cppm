@@ -17,7 +17,7 @@ export namespace nx::assets {
 enum class SchemeError : std::uint8_t {
     NotAScheme, ///< The text has no `Scheme` block.
     BadColor,   ///< A color that is not three or four whole numbers from 0 to 255.
-    BadFont,    ///< A font's tall, weight, yres or range is not the numbers it must be.
+    BadFont,    ///< A font's tall, weight, blur, scanlines, yres or range is not the numbers it must be.
     BadBorder,  ///< A border's inset or a line's offset is not the numbers it must be, or a line has no
                 ///< color, or a border names one that does not exist.
 };
@@ -78,13 +78,13 @@ struct SchemeRange {
 /// One way of drawing a font, in the order the scheme lists them.
 struct FontCandidate {
     std::string face{};      ///< `name`: "Tahoma".
-    std::int32_t tall = 0;   ///< Its height in pixels.
+    Pixels tall{};           ///< Its cell height: the height of a line.
     std::int32_t weight = 0; ///< Its boldness, as Windows weighs it (0 to 1000).
-    std::int32_t blur = 0;
-    std::int32_t scanLines = 0;
+    Pixels blur{};           ///< How far VGUI2 blurs its glyphs.
+    Pixels scanLines{};      ///< `scanlines`: how many rows apart VGUI2 draws its scan lines.
     Flags<FontFlag> flags{};
-    std::optional<SchemeRange<std::uint32_t>> heights{}; ///< `yres`: the screens' heights it is for.
-    std::optional<SchemeRange<char32_t>> characters{};   ///< `range`: the characters it draws.
+    std::optional<SchemeRange<Pixels>> heights{};      ///< `yres`: the screens' heights it is for.
+    std::optional<SchemeRange<char32_t>> characters{}; ///< `range`: the characters it draws.
 };
 
 /// A named font of the scheme's `Fonts`, and its candidates.
@@ -106,15 +106,15 @@ enum class BorderSide : std::uint8_t {
 /// its two ends stop short of the side's.
 struct BorderLine {
     std::string color{};
-    std::int32_t startOffset = 0;
-    std::int32_t endOffset = 0;
+    Pixels startOffset{};
+    Pixels endOffset{};
 };
 
 /// A named border of the scheme's `Borders`: another's name, or its own inset and lines.
 struct SchemeBorder {
     std::string name{};
-    std::string sameAs{};                ///< The border it is, by name; empty for its own.
-    std::array<std::int32_t, 4> inset{}; ///< Left, top, right and bottom.
+    std::string sameAs{};                  ///< The border it is, by name; empty for its own.
+    EnumArray<BorderSide, Pixels> inset{}; ///< How far in from each side what it holds starts.
     EnumArray<BorderSide, std::vector<BorderLine>> sides{};
 };
 

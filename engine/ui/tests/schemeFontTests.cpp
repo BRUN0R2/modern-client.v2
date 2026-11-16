@@ -45,13 +45,14 @@ protected:
 };
 
 TEST_F(SchemeFontTest, ACharacterIsDrawnByTheFirstCandidateWhoseRangeHoldsIt) {
-    const SchemeFont font{
-        .name = "Default",
-        .candidates = {
-            FontCandidate{.face = "Missing", .tall = 16},
-            FontCandidate{.face = "Square", .tall = 20, .characters = SchemeRange<char32_t>{U'A', U'A'}},
-            FontCandidate{.face = "Mark", .tall = 9}, FontCandidate{.face = "Square", .tall = 30}}};
-    auto set = SchemeFontSet::open(font, 768, catalog);
+    const SchemeFont font{.name = "Default",
+                          .candidates = {FontCandidate{.face = "Missing", .tall = nx::Pixels{16}},
+                                         FontCandidate{.face = "Square",
+                                                       .tall = nx::Pixels{20},
+                                                       .characters = SchemeRange<char32_t>{U'A', U'A'}},
+                                         FontCandidate{.face = "Mark", .tall = nx::Pixels{9}},
+                                         FontCandidate{.face = "Square", .tall = nx::Pixels{30}}}};
+    auto set = SchemeFontSet::open(font, nx::Pixels{768}, catalog);
     ASSERT_TRUE(set.has_value()) << nx::describe(set.error());
     EXPECT_EQ(set->metrics().height(), nx::Pixels{20}) << "the first that opened";
     ASSERT_NE(set->fontFor(U'A'), nullptr);
@@ -68,32 +69,33 @@ TEST_F(SchemeFontTest, ACharacterIsDrawnByTheFirstCandidateWhoseRangeHoldsIt) {
 TEST_F(SchemeFontTest, OnlyTheCandidatesForTheScreensHeightCount) {
     const SchemeFont font{
         .name = "Title",
-        .candidates = {
-            FontCandidate{.face = "Square", .tall = 13, .heights = SchemeRange<std::uint32_t>{480, 599}},
-            FontCandidate{.face = "Square",
-                          .tall = 20,
-                          .flags = {FontFlag::Antialias},
-                          .heights = SchemeRange<std::uint32_t>{600, 767}}}};
-    const auto small = SchemeFontSet::open(font, 480, catalog);
+        .candidates = {FontCandidate{.face = "Square",
+                                     .tall = nx::Pixels{13},
+                                     .heights = SchemeRange<nx::Pixels>{nx::Pixels{480}, nx::Pixels{599}}},
+                       FontCandidate{.face = "Square",
+                                     .tall = nx::Pixels{20},
+                                     .flags = {FontFlag::Antialias},
+                                     .heights = SchemeRange<nx::Pixels>{nx::Pixels{600}, nx::Pixels{767}}}}};
+    const auto small = SchemeFontSet::open(font, nx::Pixels{480}, catalog);
     ASSERT_TRUE(small.has_value()) << nx::describe(small.error());
     EXPECT_EQ(small->metrics().height(), nx::Pixels{13});
-    const auto large = SchemeFontSet::open(font, 600, catalog);
+    const auto large = SchemeFontSet::open(font, nx::Pixels{600}, catalog);
     ASSERT_TRUE(large.has_value()) << nx::describe(large.error());
     EXPECT_EQ(large->metrics().height(), nx::Pixels{20});
     EXPECT_EQ(large->fontFor(U'A')->smoothing(), nx::ui::FontSmoothing::Antialiased);
 
-    const auto none = SchemeFontSet::open(font, 1080, catalog);
+    const auto none = SchemeFontSet::open(font, nx::Pixels{1080}, catalog);
     ASSERT_FALSE(none.has_value());
     EXPECT_EQ(none.error().code, FontError::NoFace);
 }
 
 TEST_F(SchemeFontTest, AnAtlasOfASchemesFont) {
-    const SchemeFont font{
-        .name = "Default",
-        .candidates = {
-            FontCandidate{.face = "Square", .tall = 20, .characters = SchemeRange<char32_t>{U'A', U'A'}},
-            FontCandidate{.face = "Mark", .tall = 9}}};
-    auto set = SchemeFontSet::open(font, 768, catalog);
+    const SchemeFont font{.name = "Default",
+                          .candidates = {FontCandidate{.face = "Square",
+                                                       .tall = nx::Pixels{20},
+                                                       .characters = SchemeRange<char32_t>{U'A', U'A'}},
+                                         FontCandidate{.face = "Mark", .tall = nx::Pixels{9}}}};
+    auto set = SchemeFontSet::open(font, nx::Pixels{768}, catalog);
     ASSERT_TRUE(set.has_value()) << nx::describe(set.error());
     const auto atlas = nx::ui::GlyphAtlas::build(*set, U"AB");
     ASSERT_TRUE(atlas.has_value()) << atlas.error().detail;
@@ -105,11 +107,11 @@ TEST_F(SchemeFontTest, AnAtlasOfASchemesFont) {
 TEST_F(SchemeFontTest, TheCharactersOfACandidateWithADropShadowCastIt) {
     const SchemeFont font{.name = "EngineFont",
                           .candidates = {FontCandidate{.face = "Square",
-                                                       .tall = 20,
+                                                       .tall = nx::Pixels{20},
                                                        .flags = {FontFlag::DropShadow},
                                                        .characters = SchemeRange<char32_t>{U'A', U'A'}},
-                                         FontCandidate{.face = "Mark", .tall = 9}}};
-    auto set = SchemeFontSet::open(font, 768, catalog);
+                                         FontCandidate{.face = "Mark", .tall = nx::Pixels{9}}}};
+    auto set = SchemeFontSet::open(font, nx::Pixels{768}, catalog);
     ASSERT_TRUE(set.has_value()) << nx::describe(set.error());
     EXPECT_TRUE(set->hasDropShadow(U'A'));
     EXPECT_FALSE(set->hasDropShadow(U'B')) << "Mark's, which casts none";
