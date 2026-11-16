@@ -56,7 +56,8 @@ constexpr std::int32_t kColonFromMiddle = 2;   ///< The colon's left.
 constexpr std::int32_t kColonTopAbove = 28;    ///< Its upper square's top, from the bottom.
 constexpr std::int32_t kColonBottomAbove = 22; ///< Its lower square's.
 constexpr float kColonSide = 2.0F;
-constexpr std::uint32_t kSecondsPerMinute = 60;
+/// The whole minutes of a time, as the timer shows them.
+using WholeMinutes = std::chrono::duration<std::uint32_t, std::chrono::minutes::period>;
 /// The HUD's color, as the colon of the round's time is added in it.
 constexpr nx::render::ScreenColor kColonColor{
     .red = kHudColor.red, .green = kHudColor.green, .blue = kHudColor.blue, .alpha = kTimerColonAlpha};
@@ -241,7 +242,7 @@ auto layoutAmmo(const HudAmmo& ammo, const HudSheet& sheet, nx::rhi::Extent2d si
     return layout;
 }
 
-auto layoutTimer(std::uint32_t seconds, const HudSheet& sheet, nx::rhi::Extent2d size) -> TimerLayout {
+auto layoutTimer(WholeSeconds time, const HudSheet& sheet, nx::rhi::Extent2d size) -> TimerLayout {
     const std::int32_t middle = sizeOf(size.width) / 2;
     const std::int32_t height = sizeOf(size.height);
     const std::int32_t y = height - kTimerAbove;
@@ -253,14 +254,15 @@ auto layoutTimer(std::uint32_t seconds, const HudSheet& sheet, nx::rhi::Extent2d
             x += digitWidth;
         }
     };
-    const std::string minutes = std::to_string(seconds / kSecondsPerMinute);
+    const auto wholeMinutes = std::chrono::duration_cast<WholeMinutes>(time);
+    const std::string minutes = std::to_string(wholeMinutes.count());
     const std::int32_t roomStart =
         middle - (nx::narrow<std::int32_t>(std::max(minutes.size(), kMinutesRoom)) * digitWidth);
     layout.marks.push_back({.picture = HudPicture::Stopwatch,
                             .x = roomStart - sizeOf(sheet[HudPicture::Stopwatch].rect.width),
                             .y = y});
     addDigits(minutes, middle - (nx::narrow<std::int32_t>(minutes.size()) * digitWidth));
-    addDigits(std::format("{:02}", seconds % kSecondsPerMinute), middle + kSecondsFromMiddle);
+    addDigits(std::format("{:02}", (time - wholeMinutes).count()), middle + kSecondsFromMiddle);
     const auto square = [&](std::int32_t above) {
         return nx::render::ScreenRect{.x = static_cast<float>(middle + kColonFromMiddle),
                                       .y = static_cast<float>(height - above),

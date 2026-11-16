@@ -310,16 +310,16 @@ TEST(RoundsTest, AFreezeThatRunsOutAsTheNextRoundIsDueEndsBeforeItStarts) {
 TEST(RoundsTest, TheHudCountsTheWholeSecondsItWasToldDown) {
     const Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
     const cs::RoundTimer timer = rounds.timerAt(at(0.0), kRate);
-    EXPECT_EQ(timer.seconds, 8U);
+    EXPECT_EQ(timer.left, cs::WholeSeconds{8});
     EXPECT_EQ(timer.toldAt, at(0.0));
-    EXPECT_EQ(timer.shownAt(at(0.0), kRate), 8U);
-    EXPECT_EQ(timer.shownAt(at(0.01), kRate), 7U);
-    EXPECT_EQ(timer.shownAt(at(1.0), kRate), 7U);
-    EXPECT_EQ(timer.shownAt(at(1.01), kRate), 6U);
-    EXPECT_EQ(timer.shownAt(at(7.5), kRate), 0U);
-    EXPECT_EQ(timer.shownAt(at(60.0), kRate), 0U);
+    EXPECT_EQ(timer.shownAt(at(0.0), kRate), cs::WholeSeconds{8});
+    EXPECT_EQ(timer.shownAt(at(0.01), kRate), cs::WholeSeconds{7});
+    EXPECT_EQ(timer.shownAt(at(1.0), kRate), cs::WholeSeconds{7});
+    EXPECT_EQ(timer.shownAt(at(1.01), kRate), cs::WholeSeconds{6});
+    EXPECT_EQ(timer.shownAt(at(7.5), kRate), cs::WholeSeconds{0});
+    EXPECT_EQ(timer.shownAt(at(60.0), kRate), cs::WholeSeconds{0});
     // Told part of a second into one, it cuts it: the original's message carries whole seconds.
-    EXPECT_EQ(rounds.timerAt(at(0.5), kRate).seconds, 7U);
+    EXPECT_EQ(rounds.timerAt(at(0.5), kRate).left, cs::WholeSeconds{7});
 }
 
 } // namespace

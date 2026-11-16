@@ -350,7 +350,8 @@ TEST(AmmoHudTest, TheAmmoShownIsTheHeldWeaponsWhenItFiresAny) {
 TEST(TimerHudTest, TheRoundsTimeIsWhereTheOriginalDrawsIt) {
     // Measured at 1280x720 (docs/12 section 3.2): the stopwatch at W / 2 - 64, H - 37; 4:39's minute
     // at W / 2 - 20, its seconds at W / 2 + 6 and W / 2 + 26; the colon at W / 2 + 2, H - 28 and H - 22.
-    const cs::TimerLayout layout = cs::layoutTimer(279, sheet(), {.width = 1280, .height = 720});
+    const cs::TimerLayout layout =
+        cs::layoutTimer(cs::WholeSeconds{279}, sheet(), {.width = 1280, .height = 720});
     const std::vector<HudMark> expected{{.picture = HudPicture::Stopwatch, .x = 576, .y = 683},
                                         digit('4', 620, 683),
                                         digit('3', 646, 683),
@@ -363,16 +364,19 @@ TEST(TimerHudTest, TheRoundsTimeIsWhereTheOriginalDrawsIt) {
         EXPECT_EQ(square.height, 2.0F);
     }
 
-    const cs::TimerLayout freeze = cs::layoutTimer(8, sheet(), {.width = 640, .height = 480});
+    const cs::TimerLayout freeze =
+        cs::layoutTimer(cs::WholeSeconds{8}, sheet(), {.width = 640, .height = 480});
     EXPECT_EQ(numberAt(freeze.marks, 443), "008");
     EXPECT_EQ(freeze.marks.front().x, 256);
 }
 
 TEST(TimerHudTest, MoreMinutesWidenTheirRoomPushingTheStopwatch) {
-    const cs::TimerLayout ten = cs::layoutTimer(600, sheet(), {.width = 1280, .height = 720});
+    const cs::TimerLayout ten =
+        cs::layoutTimer(cs::WholeSeconds{600}, sheet(), {.width = 1280, .height = 720});
     EXPECT_EQ(numberAt(ten.marks, 683), "1000");
     EXPECT_EQ(ten.marks.front().x, 576) << "two minutes' digits fit the room";
-    const cs::TimerLayout hundred = cs::layoutTimer(6000, sheet(), {.width = 1280, .height = 720});
+    const cs::TimerLayout hundred =
+        cs::layoutTimer(cs::WholeSeconds{6000}, sheet(), {.width = 1280, .height = 720});
     EXPECT_EQ(numberAt(hundred.marks, 683), "10000");
     EXPECT_EQ(hundred.marks[1].x, 580);
     EXPECT_EQ(hundred.marks.front().x, 556);
