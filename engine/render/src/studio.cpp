@@ -269,7 +269,8 @@ struct CrowdFrameUniform {
 };
 
 /// The bytes shaders/crowd.slang's Body takes in its buffer, which the client writes as a CrowdBody: its
-/// typed members (a duration, a scale, an angle, light levels) are a float each, as the shader reads them.
+/// typed members (its frame, a duration, a scale, an angle, light levels) are a float each, as the shader
+/// reads them.
 constexpr std::size_t kCrowdBodyBytes = 96;
 static_assert(sizeof(CrowdBody) == kCrowdBodyBytes && std::is_trivially_copyable_v<CrowdBody>,
               "a crowd body as shaders/crowd.slang reads it");
