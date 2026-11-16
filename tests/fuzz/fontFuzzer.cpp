@@ -6,6 +6,7 @@
 // glyph drawn; and the bytes read as a VDMX table.
 
 import std;
+import nx.core;
 import nx.ui;
 
 #include "fuzzTarget.hpp"
@@ -16,10 +17,12 @@ void nx::test::fuzz(std::span<const std::byte> input) {
         total += face.families.size() + face.style.size() + face.weight;
     }
     const auto file = std::make_shared<const std::vector<std::byte>>(input.begin(), input.end());
-    for (const std::int32_t cellHeight : {13, 16, 28}) {
+    constexpr nx::Pixels kEmboldenedCell{16};
+    for (const nx::Pixels cellHeight : {nx::Pixels{13}, kEmboldenedCell, nx::Pixels{28}}) {
         for (const auto smoothing : {nx::ui::FontSmoothing::None, nx::ui::FontSmoothing::Antialiased}) {
-            const auto font = nx::ui::Font::open(
-                file, {.cellHeight = cellHeight, .smoothing = smoothing, .isEmboldened = cellHeight == 16});
+            const auto font = nx::ui::Font::open(file, {.cellHeight = cellHeight,
+                                                        .smoothing = smoothing,
+                                                        .isEmboldened = cellHeight == kEmboldenedCell});
             if (!font) {
                 return;
             }
