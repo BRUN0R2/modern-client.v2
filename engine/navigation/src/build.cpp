@@ -511,11 +511,15 @@ struct TileBounds {
                       .high = {box.max.x + reach, 0.0F, -box.min.y + reach}};
 }
 
+/// How far across a tile built by `settings` is: its cells, each a voxel's side.
+[[nodiscard]] auto tileSideOf(const BuildSettings& settings) noexcept -> HammerUnits {
+    return settings.cellSize * static_cast<float>(settings.tileCells);
+}
+
 [[nodiscard]] auto boundsOf(const TileInput& input, std::int32_t tileX, std::int32_t tileY) -> TileBounds {
     const float cell = input.settings.cellSize.value();
-    const auto tileCells = static_cast<float>(input.settings.tileCells);
     const auto border = static_cast<float>(input.voxels.borderCells);
-    const float tileSide = tileCells * cell;
+    const float tileSide = tileSideOf(input.settings).value();
     TileBounds bounds{.low = input.low, .high = input.high};
     bounds.low[0] = input.low[0] + (static_cast<float>(tileX) * tileSide) - (border * cell);
     bounds.low[2] = input.low[2] + (static_cast<float>(tileY) * tileSide) - (border * cell);
@@ -728,7 +732,7 @@ public:
     /// (leastLeapSpeedOf) from the ground its start is (takeoffIdOf), the one back starting where this one
     /// ends, in whichever tile that is.
     void addFlight(Vec3 start, Vec3 end, float radius, const Flight& flight) {
-        if (gapAcross(start, end, HammerUnits{radius}) <= 0.0F) {
+        if (gapAcross(start, end, HammerUnits{radius}) <= HammerUnits{}) {
             const bool goesBack = flight.kind == AreaKind::Jump || flight.kind == AreaKind::CrouchedJump;
             ownLinks.push_back({.start = start,
                                 .end = end,
@@ -1097,7 +1101,7 @@ private:
     }
     const ProfileBody standing = standingBodyOf(input);
     const ProfileBody ducked = duckedBodyOf(input);
-    const bool spansGap = gapAcross(high, low, profile.radius) > 0.0F;
+    const bool spansGap = gapAcross(high, low, profile.radius) > HammerUnits{};
     // A way over a gap, from `start`, where a body stands upright or not, its feet as high as `leap` takes
     // them at most: one that does not come down on the other end goes none.
     const auto wayOf = [&](bool flies, const ProfileBody& body, Vec3 start, bool standsAtStart,
@@ -1398,7 +1402,7 @@ constexpr std::uint16_t kTileSideEdge = 0x8000;
             for (std::size_t sample = 0; sample < samples; ++sample) {
                 const float share = (static_cast<float>(sample) + 0.5F) / static_cast<float>(samples);
                 const Vec3 start = (from + ((to - from) * share)) -
-                                   (isTileSide ? outward * detail::kLinkInsetFromTileSide : Vec3{});
+                                   (isTileSide ? outward * detail::kLinkInsetFromTileSide.value() : Vec3{});
                 for (const FoundLink& link : linksFrom(start, outward, input, near)) {
                     links.addFlight(start, link.end, profile.radius.value(), link.flight);
                 }
@@ -1554,10 +1558,8 @@ using DraftResult = Result<std::optional<TileDraft>, MeshBuildError>;
 /// How many tiles about a tile's, across or down, the links that start in it may be found from: as many as a
 /// flight from a ledge reaches over (linksOf).
 [[nodiscard]] auto linkReachInTiles(const TileInput& input) noexcept -> std::int32_t {
-    const float reach = farthestLeapOf(input.profile).value() + input.profile.radius.value() +
-                        input.settings.cellSize.value();
-    const float tileSide = static_cast<float>(input.settings.tileCells) * input.settings.cellSize.value();
-    return static_cast<std::int32_t>(std::ceil(reach / tileSide));
+    const HammerUnits reach = farthestLeapOf(input.profile) + input.profile.radius + input.settings.cellSize;
+    return static_cast<std::int32_t>(std::ceil(reach / tileSideOf(input.settings)));
 }
 
 /// The tile whose draft is at `index` of `drafts`, row by row, `tilesAcross` to a row and `tilesDown` rows,
@@ -1601,7 +1603,7 @@ using DraftResult = Result<std::optional<TileDraft>, MeshBuildError>;
 /// The grid of tiles over `input`, with none built yet: none for no triangle. Errors: TooLarge.
 [[nodiscard]] auto gridOf(const TileInput& input, bool isEmpty) -> Result<BuiltTiles, MeshBuildError> {
     const BuildSettings& settings = input.settings;
-    const float tileSide = static_cast<float>(settings.tileCells) * settings.cellSize.value();
+    const HammerUnits tileSide = tileSideOf(settings);
     if (isEmpty) {
         return BuiltTiles{.tileSide = tileSide};
     }

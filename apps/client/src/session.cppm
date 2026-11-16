@@ -6,6 +6,7 @@ export module app.client:session;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.jobs;
 import nx.game;
 import nx.navigation;
@@ -37,6 +38,8 @@ struct Session {
     cs::ViewModelEvents viewModelEvents{};
     std::optional<cs::ViewModelPose> viewPose{}; ///< Of the frame played.
     std::vector<cs::PassedEvent> clientEvents{}; ///< Its view model passed in the frame.
+    /// Where the other players show in the frame played, by cs::PlayerIndex: what their sounds follow.
+    std::vector<std::optional<nx::Vec3>> playerOrigins{};
     /// The map's mesh of cs::agentProfile, built as it loaded, which the horde and the bots walk:
     /// they go before it. Else why it could not be built.
     nx::Result<nx::navigation::NavigationMesh, nx::console::ConsoleError> agentMesh;

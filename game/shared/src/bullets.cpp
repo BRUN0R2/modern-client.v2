@@ -93,7 +93,7 @@ auto followRound(const Shot& shot, const WeaponTracer& tracer, const HitMaterial
         --penetration;
         const float travelled = met.trace.fraction * distance;
         const float rangedDamage =
-            static_cast<float>(damage) * std::pow(round.rangeModifier, travelled / kRangeStep);
+            static_cast<float>(damage) * std::pow(round.rangeModifier.value(), travelled / kRangeStep);
         damage = cut(static_cast<double>(rangedDamage));
         if (travelled > round.penetrationDistance.value()) {
             penetration = 0;
