@@ -124,7 +124,7 @@ auto ClientGame::buying() const -> BuyingState {
     return shown;
 }
 
-auto ClientGame::roundTimeShown() const -> std::uint32_t {
+auto ClientGame::roundTimeShown() const -> WholeSeconds {
     return m_last.roundTimer.shownAt(shownTime(), m_last.rate);
 }
 
