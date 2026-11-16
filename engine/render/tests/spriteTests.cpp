@@ -303,7 +303,8 @@ TEST(SpriteRendererTest, ASpriteIsSeenThroughTheFogButOneAddedIsNot) {
     constexpr float kAhead = 20.0F;
     const nx::render::Fog blue{.color = {.blue = 1.0F},
                                .curve = nx::render::FogCurve::ExponentialSquared,
-                               .density = std::sqrt(std::numbers::ln2_v<float>) / kAhead};
+                               .density =
+                                   nx::render::FogDensity{std::sqrt(std::numbers::ln2_v<float>) / kAhead}};
     const nx::render::SpriteModel solidModel = scene.load(spriteFile(kParallel, kNormal, images));
     const std::array solid{
         SpriteInstance{
