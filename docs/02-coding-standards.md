@@ -225,8 +225,10 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
 } // namespace nx
 ```
 
-- Simulation time: `nx::Seconds`/`nx::Milliseconds` (`std::chrono::duration<float>`), and
-  `nx::GameTime` (ticks + fraction) from M3 on. Wall clock only through `nx.platform`; the
+- Simulation time: `nx::Seconds`/`nx::Milliseconds` (`std::chrono::duration<float>`), `nx::Minutes`
+  for what a setting gives in minutes (`mp_roundtime`, `mp_buytime`), and `nx::GameTime` (ticks +
+  fraction) from M3 on. A cvar holds a number: the game reads it as the time or the money it gives
+  where it reads it, and sets it back from them. Wall clock only through `nx.platform`; the
   one exception is the time stamped on log records, which `nx.core` takes itself because it
   sits below `nx.platform`.
 - Angles: `nx::Degrees` and `nx::Radians`, with no implicit conversion between them: `nx::toRadians`
