@@ -37,7 +37,7 @@ struct DamageNumberCvars {
 /// How a number shows at an age: the share of its whole size it is drawn at, how opaque, from 0 to 1, and
 /// the share of its rise it rose.
 struct DamageNumberPose {
-    float scale = 0.0F;
+    nx::Scale scale{}; ///< Of its whole size.
     float opacity = 0.0F;
     float rise = 0.0F;
 };
