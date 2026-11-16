@@ -654,8 +654,8 @@ the sky's when the sky has a color (the game sets it from the map's `light_envir
 face met against its way, 8192 units, is the sky's (`SurfaceAtPoint`, whose coordinates are whole
 texels); else the light 2048 units down, going the way it grows dimmer across four points 16 units
 about the origin, and down. Its brightest channel is its whole light, `direct` (0.9, held from 0.75 to
-1) of it shade and the rest ambient, ambient held to 128 and the two to 255; its color is the light
-over its brightest channel. On de_dust2, a terrorist spawn in the sun is 191 under a model, a
+1) of it shade and the rest ambient, ambient held to 128 and the two to 255, each a level of the original's
+light (`nx::render::LightLevel`); its color is the light over its brightest channel. On de_dust2, a terrorist spawn in the sun is 191 under a model, a
 counter-terrorist one indoors 15 to 37. The *elights* and *dlights* come with the effects.
 
 ### 9.3 Instancing

@@ -114,7 +114,7 @@ struct Scene {
 
 /// A light of `ambient` alone, white.
 [[nodiscard]] auto ambientLight(float ambient) -> ModelLight {
-    return {.ambient = ambient, .shade = 0.0F};
+    return {.ambient = nx::render::LightLevel{ambient}, .shade = nx::render::LightLevel{}};
 }
 
 /// The model's texture lit by `ambient` alone, from 0 to 1: the original's light curve at four times
@@ -300,7 +300,7 @@ TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
                                      .origin = kOrigin,
                                      .frame = kHalfOfTheFrames,
                                      .framerate = nx::Scale{0.0F},
-                                     .ambient = 100.0F,
+                                     .ambient = nx::render::LightLevel{100.0F},
                                      .moveShare = 1.0F,
                                      .moveSharePerTick = 0.0F};
     ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, body, 1));
@@ -358,7 +358,7 @@ TEST(StudioRendererTest, ACrowdReadsTheBodiesOfThisFrameOnceOnlyTheirRoomGrew) {
     OffscreenTarget target{**device};
     const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
     ASSERT_NO_FATAL_FAILURE(loadCrowdOf(**device, *scene));
-    const nx::render::CrowdBody shown{.ambient = 100.0F, .moveShare = 1.0F};
+    const nx::render::CrowdBody shown{.ambient = nx::render::LightLevel{100.0F}, .moveShare = 1.0F};
     nx::render::CrowdBody behind = shown;
     const Vec3 away = nx::normalized(-kWoundSide) * (kViewDistance * 4.0F);
     behind.previousOrigin = away;
@@ -434,7 +434,7 @@ TEST(StudioRendererTest, ACrowdPlacesEachBoneInItsParentAsTheCpuDoes) {
     const nx::render::CrowdBody body{.previousOrigin = kOrigin,
                                      .yaw = kYaw,
                                      .origin = kOrigin,
-                                     .ambient = 100.0F,
+                                     .ambient = nx::render::LightLevel{100.0F},
                                      .moveShare = 1.0F,
                                      .moveSharePerTick = 0.0F};
     ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, body, 1));
