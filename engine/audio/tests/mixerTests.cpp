@@ -234,6 +234,25 @@ TEST(MixerTest, GainsChangeWhileItPlays) {
     EXPECT_EQ(out[1], 0.0F);
 }
 
+TEST(MixerTest, GainsChangedForAPlayNeverReachTheNextOne) {
+    // A sound's gains followed as it plays, sent as the voice already started the next.
+    Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
+    const Sound level = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &level, .tag = nx::audio::PlayTag{1}});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &level, .tag = nx::audio::PlayTag{2}});
+    send(mixer, SetVoiceGains{.voice = nx::audio::VoiceId{0},
+                              .tag = nx::audio::PlayTag{1},
+                              .gains = {.left = Gain{}, .right = Gain{}}});
+    const std::vector<float> next = render(mixer, 128);
+    EXPECT_NEAR(next[kSettled * 2], 0.5F, 1e-3F) << "the next play's own gains";
+    send(mixer, SetVoiceGains{.voice = nx::audio::VoiceId{0},
+                              .tag = nx::audio::PlayTag{2},
+                              .gains = {.left = Gain{}, .right = nx::kFullGain}});
+    const std::vector<float> changed = render(mixer, 128);
+    EXPECT_EQ(changed[0], 0.0F);
+    EXPECT_NEAR(changed[1], 0.5F, 1e-3F);
+}
+
 TEST(MixerTest, TheLimiterKeepsTheMixUnderFullScaleAndLetsGo) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 2}};
     const Sound loud = sineOf(kMixRate, 440.0, 1.0F);

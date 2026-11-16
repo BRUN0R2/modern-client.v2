@@ -58,16 +58,28 @@ struct VoiceId {
 struct VoiceGains {
     Gain left{kFullGain};
     Gain right{kFullGain};
+
+    [[nodiscard]] inline auto operator==(const VoiceGains&) const noexcept -> bool = default;
+};
+
+/// What a play of a voice is known by: a change of the gains tagged so reaches that play alone, never the
+/// next sound the voice plays, however late it comes.
+struct PlayTag {
+    std::uint64_t value = 0;
+
+    [[nodiscard]] inline auto operator==(const PlayTag&) const noexcept -> bool = default;
 };
 
 /// Plays `sound`, which must outlive the play (until a StopVoice or another PlayVoice of the voice has
-/// been mixed, or the end of a sound that does not loop), in voice `voice`, replacing what it played.
+/// been mixed, or the end of a sound that does not loop), in voice `voice`, replacing what it played,
+/// known by `tag`.
 struct PlayVoice {
     VoiceId voice{};
     const Sound* sound = nullptr;
     VoiceGains gains{};
     Pitch pitch{kRecordedPitch};
     bool loops = false; ///< From its loop start to its end, again and again.
+    PlayTag tag{};
 };
 
 /// Stops voice `voice`.
@@ -75,9 +87,11 @@ struct StopVoice {
     VoiceId voice{};
 };
 
-/// Changes the gains of voice `voice`.
+/// Changes the gains of voice `voice` while it plays the play known by `tag`; nothing once it plays
+/// another.
 struct SetVoiceGains {
     VoiceId voice{};
+    PlayTag tag{};
     VoiceGains gains{};
 };
 
@@ -193,6 +207,7 @@ private:
         float cutoff = 1.0F;   ///< Of the kernel, under 1 when it speeds its sound up.
         VoiceGains gains{};
         bool loops = false;
+        PlayTag tag{};
     };
 
     /// Frames of `sound` a frame of the mix at `pitch`: none for one it cannot play.

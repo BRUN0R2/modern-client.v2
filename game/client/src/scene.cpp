@@ -23,7 +23,7 @@ constexpr std::uint8_t kFullAmount = 255;
 constexpr float kKeyLightAbove = 48.0F;
 constexpr float kKeyLightLeft = 40.0F;
 constexpr float kKeyLightBehind = 24.0F;
-constexpr float kKeyLightReach = 256.0F;
+constexpr nx::HammerUnits kKeyLightReach{256.0F};
 constexpr nx::Vec3 kKeyLightColor{.x = 4200.0F, .y = 3900.0F, .z = 3500.0F};
 
 /// The key light of the weapon in hand of a player whose eye and view are `camera`'s.
@@ -245,7 +245,7 @@ auto Scene::prepare(nx::rhi::CommandList& list, const Level& level, const SceneV
     if (auto recorded = m_studio.recordCrowd(list, {.frustum = m_world.frustum(),
                                                     .visibleLeaves = &m_world.visibleLeaves(),
                                                     .between = crowd.between,
-                                                    .sinceLastTick = crowd.sinceLastTick.count()});
+                                                    .sinceLastTick = crowd.sinceLastTick});
         !recorded) {
         return nx::fail(SceneError::DrawFailed, "the crowd", std::move(recorded.error()));
     }

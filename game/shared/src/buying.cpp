@@ -11,8 +11,6 @@ namespace cs {
 
 namespace {
 
-constexpr float kSecondsAMinute = 60.0F;
-
 /// The kind of ammo `weapon` fires; none for one that fires none.
 [[nodiscard]] auto ammoOf(WeaponIndex weapon, const WeaponCatalog& weapons) noexcept -> const AmmoType* {
     const std::optional<WeaponMagazine>& magazine = weapons.weapon(weapon).magazine;
@@ -76,10 +74,10 @@ auto readBuyingRules(std::string_view text, std::string_view sourceName)
     return std::move(*rules);
 }
 
-auto readBuyTime(float minutes) noexcept -> BuyTime {
-    const std::int32_t seconds = nx::truncateAsX86(minutes * kSecondsAMinute);
+auto readBuyTime(nx::Minutes buyTime) noexcept -> BuyTime {
+    const std::int32_t seconds = nx::truncateAsX86(nx::Seconds{buyTime}.count());
     if (static_cast<float>(seconds) < kLeastBuyTime.count()) {
-        return BuyTime{.length = kLeastBuyTime, .setToMinutes = kLeastBuyTime.count() / kSecondsAMinute};
+        return BuyTime{.length = kLeastBuyTime, .setTo = nx::Minutes{kLeastBuyTime}};
     }
     return BuyTime{.length = nx::Seconds{static_cast<float>(seconds)}};
 }

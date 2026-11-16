@@ -82,10 +82,10 @@ TEST_F(WindowFontsTest, AFontIsMadeForTheScreensHeight) {
 
     const auto small = windowFonts->font("EngineFont", 480);
     ASSERT_TRUE(small.has_value()) << nx::describe(small.error());
-    EXPECT_EQ(small->metrics().height(), 13);
+    EXPECT_EQ(small->metrics().height(), nx::Pixels{13});
     const auto large = windowFonts->font("EngineFont", 1080);
     ASSERT_TRUE(large.has_value()) << nx::describe(large.error());
-    EXPECT_EQ(large->metrics().height(), 20);
+    EXPECT_EQ(large->metrics().height(), nx::Pixels{20});
     EXPECT_TRUE(large->hasDropShadow(U'A'));
 
     const auto missing = windowFonts->font("Default", 768);

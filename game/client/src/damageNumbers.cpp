@@ -75,18 +75,18 @@ auto damageNumberPoseAt(const DamageNumberLook& look, nx::Seconds age) noexcept
     }
     age = std::max(age, nx::Seconds{});
     // From small it pops up past its whole size, then settles back to it.
-    float scale =
+    nx::Scale scale =
         age < look.growTime
             ? look.startScale + ((look.peakScale - look.startScale) * easedOut(shareOf(age, look.growTime)))
-            : look.peakScale +
-                  ((1.0F - look.peakScale) * nx::smoothstep(shareOf(age - look.growTime, look.settleTime)));
+            : look.peakScale + ((kWholeSize - look.peakScale) *
+                                nx::smoothstep(shareOf(age - look.growTime, look.settleTime)));
     float opacity = nx::smoothstep(shareOf(age, look.fadeIn));
     // Over its last moments, it fades out shrinking.
     const nx::Seconds fadeStart = look.life - look.fadeOut;
     if (age > fadeStart) {
         const float faded = nx::smoothstep(shareOf(age - fadeStart, look.fadeOut));
         opacity *= 1.0F - faded;
-        scale *= 1.0F + ((look.endScale - 1.0F) * faded);
+        scale *= (kWholeSize + ((look.endScale - kWholeSize) * faded)).value();
     }
     return DamageNumberPose{.scale = scale, .opacity = opacity, .rise = easedOut(shareOf(age, look.life))};
 }
@@ -113,10 +113,11 @@ auto DamageNumbers::open(nx::ui::FontCatalog& fonts, const DamageNumberLook& loo
     }
     const float wholeHeight = look.height * static_cast<float>(screenHeight);
     // Drawn at its largest from glyphs as large, a number is only ever made smaller, which keeps it sharp.
-    const float largest = wholeHeight * std::max({look.peakScale, look.endScale, 1.0F});
-    auto font =
-        fonts.open(*choice, {.cellHeight = std::max(static_cast<std::int32_t>(std::lround(largest)), 1),
-                             .smoothing = nx::ui::FontSmoothing::Antialiased});
+    const float largest = wholeHeight * std::max({look.peakScale, look.endScale, kWholeSize}).value();
+    auto font = fonts.open(
+        *choice, {.cellHeight = std::max(nx::Pixels{static_cast<std::int32_t>(std::lround(largest))},
+                                         nx::ui::kMinCellHeight),
+                  .smoothing = nx::ui::FontSmoothing::Antialiased});
     if (!font) {
         return nx::fail(DamageNumbersError::Unusable, look.font.family, std::move(font.error()));
     }
@@ -182,7 +183,7 @@ void DamageNumbers::append(std::vector<nx::render::ScreenQuad>& quads, const nx:
         const float centerX = middle.x;
         const float centerY = middle.y;
         // The atlas's glyphs, drawn at the pose's share of the whole size, about the number's middle.
-        const float shrink = pose->scale * m_wholeHeight / line;
+        const float shrink = pose->scale.value() * m_wholeHeight / line;
         const float textWidth = static_cast<float>(nx::ui::widthOf(m_atlas, number.text).value());
         const std::vector<nx::ui::PlacedGlyph> glyphs = nx::ui::layoutText(m_atlas, number.text, 0.0F, 0.0F);
         const auto quadOf = [&](const nx::ui::PlacedGlyph& glyph, float offsetX, float offsetY,
@@ -197,7 +198,7 @@ void DamageNumbers::append(std::vector<nx::render::ScreenQuad>& quads, const nx:
                 .color = color,
                 .filter = nx::render::ScreenFilter::Linear};
         };
-        const float outline = look.outline * m_wholeHeight * pose->scale;
+        const float outline = look.outline * m_wholeHeight * pose->scale.value();
         const nx::render::ScreenColor outlineColor = colorOf(look.outlineColor, pose->opacity);
         if (outline > 0.0F) {
             for (const auto& [x, y] : kOutlineWays) {

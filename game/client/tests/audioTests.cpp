@@ -8,7 +8,9 @@
 
 import std;
 import nx.core;
+import nx.math;
 import nx.assets;
+import nx.audio;
 import nx.console;
 import cs.shared;
 import cs.client;
@@ -82,6 +84,51 @@ TEST_F(ClientAudioTest, ASoundReadBeforeItIsPlayedPlaysWithoutItsFile) {
     const auto click = audio->playLocal(kClick, nx::kFullGain);
     ASSERT_FALSE(click.has_value());
     EXPECT_EQ(click.error().code, cs::PlayError::NoSound);
+}
+
+/// At the origin, looking along +x: its right is -y.
+constexpr nx::audio::Listener kListener{.position = {}, .right = {.y = -1.0F}};
+constexpr float kTolerance = 1e-5F;
+
+/// A sound of full volume and ATTN_NORM's made at `position`, heard as kListener hears it there.
+[[nodiscard]] auto placedAt(nx::Vec3 position) -> cs::PlacedSound {
+    cs::PlacedSound sound{.position = position};
+    sound.gains = nx::audio::legacyGains(kListener, position, sound.volume, sound.attenuation);
+    return sound;
+}
+
+TEST(FollowSoundTest, ASoundIsHeardWhereItsMakerIsNow) {
+    cs::PlacedSound sound = placedAt({.y = 250.0F}); // to the left
+    EXPECT_EQ(sound.gains.right.value(), 0.0F);
+    const std::optional<nx::audio::VoiceGains> gains =
+        cs::followSound(sound, nx::Vec3{.y = -250.0F}, kListener);
+    ASSERT_TRUE(gains.has_value());
+    EXPECT_EQ(gains->left.value(), 0.0F) << "now to the right";
+    EXPECT_NEAR(gains->right.value(), 1.0F, kTolerance);
+    EXPECT_EQ(sound.position, (nx::Vec3{.y = -250.0F}));
+    EXPECT_EQ(sound.gains, *gains);
+}
+
+TEST(FollowSoundTest, ASoundWhoseMakerIsGoneStaysWhereItWasAsTheListenerTurns) {
+    cs::PlacedSound sound = placedAt({.y = 250.0F});
+    const nx::audio::Listener turned{.position = {}, .right = {.y = 1.0F}}; // facing -x
+    const std::optional<nx::audio::VoiceGains> gains = cs::followSound(sound, std::nullopt, turned);
+    ASSERT_TRUE(gains.has_value());
+    EXPECT_NEAR(gains->right.value(), 1.0F, kTolerance) << "on the right of who turned about";
+    EXPECT_EQ(gains->left.value(), 0.0F);
+    EXPECT_EQ(sound.position, (nx::Vec3{.y = 250.0F}));
+}
+
+TEST(FollowSoundTest, AChangeNoEarOfTheOriginalTellsApartIsNotSentUntilItAddsUp) {
+    // Ahead, 1000 units away: a unit further fades it by 0.0008, less than a 255th.
+    cs::PlacedSound sound = placedAt({.x = 1000.0F});
+    EXPECT_FALSE(cs::followSound(sound, nx::Vec3{.x = 1001.0F}, kListener).has_value());
+    EXPECT_FLOAT_EQ(sound.gains.left.value(), 0.2F) << "the gains it was last heard at kept";
+    EXPECT_FALSE(cs::followSound(sound, nx::Vec3{.x = 1004.0F}, kListener).has_value());
+    const std::optional<nx::audio::VoiceGains> gains =
+        cs::followSound(sound, nx::Vec3{.x = 1005.0F}, kListener);
+    ASSERT_TRUE(gains.has_value()) << "5 units further: 0.004, more than a 255th";
+    EXPECT_NEAR(gains->left.value(), 0.196F, kTolerance);
 }
 
 TEST_F(ClientAudioTest, ASoundThatCannotBeReadIsTold) {
