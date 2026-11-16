@@ -43,8 +43,6 @@ constexpr nx::EnumArray<RoundEndReason, std::optional<Team>> kWinners{
         Team::CounterTerrorists, Team::Terrorists, Team::CounterTerrorists, Team::Terrorists, std::nullopt,
         Team::CounterTerrorists, Team::Terrorists, std::nullopt}};
 
-constexpr float kSecondsPerMinute = 60.0F;
-
 [[nodiscard]] auto isLength(nx::Seconds length) noexcept -> bool {
     return std::isfinite(length.count()) && length >= nx::Seconds{};
 }
@@ -58,13 +56,13 @@ constexpr float kSecondsPerMinute = 60.0F;
 /// mp_roundtime to where it holds a round.
 constexpr std::int32_t kLeastRoundSeconds = 60;
 constexpr std::int32_t kMostRoundSeconds = 540;
-constexpr float kLeastRoundMinutes = 1.0F;
-constexpr float kMostRoundMinutes = 9.0F;
+constexpr nx::Minutes kLeastRoundTime{1.0F};
+constexpr nx::Minutes kMostRoundTime{9.0F};
 constexpr std::int32_t kMostFreezeSeconds = 60;
 
-[[nodiscard]] auto wholeSecondsOf(nx::Seconds time) noexcept -> std::uint32_t {
-    return nx::tryRound<std::uint32_t>(std::trunc(std::max(time.count(), 0.0F)))
-        .value_or(std::numeric_limits<std::uint32_t>::max());
+[[nodiscard]] auto wholeSecondsOf(nx::Seconds time) noexcept -> WholeSeconds {
+    return WholeSeconds{nx::tryRound<std::uint32_t>(std::trunc(std::max(time.count(), 0.0F)))
+                            .value_or(std::numeric_limits<std::uint32_t>::max())};
 }
 
 } // namespace
@@ -84,22 +82,22 @@ auto timeOutReasonOf(MapObjectives objectives) noexcept -> std::optional<RoundEn
     return found != kTimeOuts.end() ? std::optional{found->reason} : std::nullopt;
 }
 
-auto readRoundCvars(float freezeSeconds, float roundMinutes) noexcept -> RoundCvars {
+auto readRoundCvars(nx::Seconds freezeTime, nx::Minutes roundTime) noexcept -> RoundCvars {
     RoundCvars read;
-    std::int32_t round = nx::truncateAsX86(roundMinutes * kSecondsPerMinute);
+    std::int32_t round = nx::truncateAsX86(nx::Seconds{roundTime}.count());
     if (round > kMostRoundSeconds) {
-        read.roundMinutes = kMostRoundMinutes;
+        read.roundTime = kMostRoundTime;
         round = kMostRoundSeconds;
     } else if (round < kLeastRoundSeconds) {
-        read.roundMinutes = kLeastRoundMinutes;
+        read.roundTime = kLeastRoundTime;
         round = kLeastRoundSeconds;
     }
-    std::int32_t freeze = nx::truncateAsX86(freezeSeconds);
+    std::int32_t freeze = nx::truncateAsX86(freezeTime.count());
     if (freeze > kMostFreezeSeconds) {
-        read.freezeSeconds = static_cast<float>(kMostFreezeSeconds);
+        read.freezeTime = nx::Seconds{static_cast<float>(kMostFreezeSeconds)};
         freeze = kMostFreezeSeconds;
     } else if (freeze < 0) {
-        read.freezeSeconds = 0.0F;
+        read.freezeTime = nx::Seconds{};
         freeze = 0;
     }
     read.lengths = {.freeze = nx::Seconds{static_cast<float>(freeze)},
@@ -107,10 +105,10 @@ auto readRoundCvars(float freezeSeconds, float roundMinutes) noexcept -> RoundCv
     return read;
 }
 
-auto restartDelayOf(float restartRound, float restart) noexcept -> std::optional<nx::Seconds> {
-    std::int32_t seconds = nx::truncateAsX86(restartRound);
+auto restartDelayOf(nx::Seconds restartRound, nx::Seconds restart) noexcept -> std::optional<nx::Seconds> {
+    std::int32_t seconds = nx::truncateAsX86(restartRound.count());
     if (seconds == 0) {
-        seconds = nx::truncateAsX86(restart);
+        seconds = nx::truncateAsX86(restart.count());
     }
     if (seconds <= 0) {
         return std::nullopt;
@@ -118,8 +116,8 @@ auto restartDelayOf(float restartRound, float restart) noexcept -> std::optional
     return std::min(nx::Seconds{static_cast<float>(seconds)}, kMostRestart);
 }
 
-auto RoundTimer::shownAt(nx::GameTime now, nx::TickRate rate) const noexcept -> std::uint32_t {
-    return wholeSecondsOf(nx::Seconds{static_cast<float>(seconds)} - now.since(toldAt, rate));
+auto RoundTimer::shownAt(nx::GameTime now, nx::TickRate rate) const noexcept -> WholeSeconds {
+    return wholeSecondsOf(nx::Seconds{left} - now.since(toldAt, rate));
 }
 
 Rounds::Rounds(MapObjectives objectives, const RoundLengths& lengths, nx::GameTime now,
@@ -144,7 +142,7 @@ auto Rounds::sinceStartAt(nx::GameTime now, nx::TickRate rate) const noexcept ->
 }
 
 auto Rounds::timerAt(nx::GameTime now, nx::TickRate rate) const noexcept -> RoundTimer {
-    return {.seconds = wholeSecondsOf(remainingAt(now, rate)), .toldAt = now};
+    return {.left = wholeSecondsOf(remainingAt(now, rate)), .toldAt = now};
 }
 
 void Rounds::restartGameIn(nx::Seconds delay, nx::GameTime now, nx::TickRate rate) noexcept {

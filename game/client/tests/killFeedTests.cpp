@@ -160,7 +160,7 @@ protected:
     KillFeedTest() {
         auto font =
             nx::ui::Font::open(std::make_shared<const std::vector<std::byte>>(nx::test::SquareFont::build()),
-                               {.cellHeight = 20});
+                               {.cellHeight = nx::Pixels{20}});
         EXPECT_TRUE(font.has_value());
         auto atlas = nx::ui::GlyphAtlas::build(*font, U"AB");
         EXPECT_TRUE(atlas.has_value());

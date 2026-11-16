@@ -182,8 +182,8 @@ void appendArmor(std::vector<BuyEntry>& entries, const BuyMenuContent& content, 
 constexpr std::string_view kAmmoItem = "Ammo";
 
 /// The seconds of `time`, whole ones up.
-[[nodiscard]] auto wholeSecondsOf(nx::Seconds time) noexcept -> std::uint32_t {
-    return static_cast<std::uint32_t>(std::ceil(std::max(time.count(), 0.0F)));
+[[nodiscard]] auto wholeSecondsOf(nx::Seconds time) noexcept -> WholeSeconds {
+    return WholeSeconds{static_cast<std::uint32_t>(std::ceil(std::max(time.count(), 0.0F)))};
 }
 
 } // namespace
@@ -391,7 +391,7 @@ auto BuyMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mouse
 auto BuyMenu::frameOf(const BuyerView& view) const -> BuyMenuFrame {
     BuyMenuFrame frame{.team = view.team,
                        .money = view.status.money,
-                       .secondsLeft = wholeSecondsOf(view.buying.timeLeft),
+                       .timeLeft = wholeSecondsOf(view.buying.timeLeft),
                        .tab = shownTab,
                        .isArmed = isTabArmed,
                        .entries = buyEntriesOf(shownTab, content, view),

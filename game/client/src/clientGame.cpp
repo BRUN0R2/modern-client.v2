@@ -124,7 +124,7 @@ auto ClientGame::buying() const -> BuyingState {
     return shown;
 }
 
-auto ClientGame::roundTimeShown() const -> std::uint32_t {
+auto ClientGame::roundTimeShown() const -> WholeSeconds {
     return m_last.roundTimer.shownAt(shownTime(), m_last.rate);
 }
 
@@ -164,25 +164,25 @@ void ClientGame::updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay,
         }
         std::optional<Gait>& gait = m_gaits[state.player.value];
         if (!gait) {
-            gait = Gait{.yaw = state.angles.yaw.value(), .previousOrigin = origin};
+            gait = Gait{.yaw = state.angles.yaw, .previousOrigin = origin};
         }
         processGait(*gait, *model, state.gaitSequence, origin, state.angles, frameTime, state.framerate);
         const std::span<const nx::assets::StudioSequence> sequences = model->sequences();
         const nx::assets::SequenceIndex sequence =
             state.sequence.value < sequences.size() ? state.sequence : nx::assets::SequenceIndex{};
-        players.push_back(ShownPlayer{
-            .character = state.character,
-            .weapon = state.weapon,
-            .origin = origin,
-            .angles = nx::EulerAngles{.yaw = nx::Degrees{gait->yaw}, .roll = state.angles.roll},
-            .sequence = sequence,
-            .frame = estimatedFrameOf(sequences[sequence.value], state.frame,
-                                      shown.since(state.advancedAt, m_last.rate), state.framerate),
-            .gaitSequence = state.gaitSequence,
-            .gaitFrame = SequenceFrame{gait->frame},
-            .yawBlend = gait->yawBlend,
-            .pitchBlend = static_cast<float>(gait->pitchBlend),
-            .amount = amount});
+        players.push_back(ShownPlayer{.character = state.character,
+                                      .weapon = state.weapon,
+                                      .origin = origin,
+                                      .angles = nx::EulerAngles{.yaw = gait->yaw, .roll = state.angles.roll},
+                                      .sequence = sequence,
+                                      .frame = estimatedFrameOf(sequences[sequence.value], state.frame,
+                                                                shown.since(state.advancedAt, m_last.rate),
+                                                                state.framerate),
+                                      .gaitSequence = state.gaitSequence,
+                                      .gaitFrame = gait->frame,
+                                      .yawBlend = gait->yawBlend,
+                                      .pitchBlend = static_cast<float>(gait->pitchBlend),
+                                      .amount = amount});
     }
     playerCorpses.forgetUnasked();
 }
