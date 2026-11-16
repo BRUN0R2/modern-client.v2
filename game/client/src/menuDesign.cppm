@@ -15,8 +15,16 @@ import cs.shared;
 
 export namespace cs {
 
+/// The unit of MenuUnits.
+struct MenuUnitsTag {
+    static constexpr std::string_view kSuffix = " units";
+};
+
+/// Lengths of the menus' design: a screen's height is kMenuDesignHeight of them, whatever its pixels.
+using MenuUnits = nx::Quantity<std::int32_t, MenuUnitsTag>;
+
 /// How many lines tall the screen is that the menus are designed on.
-inline constexpr float kMenuDesignHeight = 1080.0F;
+inline constexpr MenuUnits kMenuDesignHeight{1080};
 
 /// Why a menu cannot be drawn.
 enum class MenuPanelError : std::uint8_t {
@@ -32,15 +40,15 @@ public:
     explicit MenuScale(std::uint32_t screenHeight) noexcept;
 
     /// `units` of the design's on this screen, to the nearest pixel, at least one of some.
-    [[nodiscard]] auto pixels(std::int32_t units) const noexcept -> nx::Pixels;
+    [[nodiscard]] auto pixels(MenuUnits units) const noexcept -> nx::Pixels;
 
 private:
     float scale = 1.0F; ///< Pixels of the screen for each unit of the design.
 };
 
-/// A size of text: its line in the design's units, and whether it stands out.
+/// A size of text: its line, and whether it stands out.
 struct MenuFontSize {
-    float units = 0.0F;
+    MenuUnits line{};
     bool isStrong = false;
 };
 

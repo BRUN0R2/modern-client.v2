@@ -508,8 +508,8 @@ with loading off the main thread. The change of map has named states of its own 
 asked for, then told loading (`MapAskedStage`), loaded, and played from the frame that loads it, or left at the
 same point of the frame by `disconnect` (`MapSwitch`); each loading and each change of the map played is logged.
 
-**The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, made as
-large as the screen (`MenuScale`); the sizes of text made of the families a menu's data names for that height
+**The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, its
+lengths `cs::MenuUnits`, made as large as the screen (`MenuScale`, which turns them into `nx::Pixels`); the sizes of text made of the families a menu's data names for that height
 (`makeMenuFace`); and the colors, warm white text and gold over dark glass.
 
 **The buy menu** (`cs.client:buyMenu`, `:buyMenuLayout`, `:buyMenuPanel`): the project's own look, where the
