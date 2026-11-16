@@ -745,6 +745,30 @@ TEST_F(GameTest, EachTickTellsTheClientWhatItMadeAndPlacedNothingAgain) {
     EXPECT_TRUE(second.sounds.empty()) << "a tick's sounds are its own";
 }
 
+TEST_F(GameTest, EachPlayerIsToldTheSoundsTheOthersMadeAndWhereTheyWere) {
+    const cs::PlayerIndex first =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "First");
+    const cs::PlayerIndex second = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Second");
+    // Each draws its knife as it joins, heard in the first tick.
+    idle(1);
+    const cs::GameSound& deploy =
+        *content().weapons.weapon(*content().weapons.indexOf("knife")).view.drawSound;
+    const cs::PlayerSnapshot told = game().snapshotFor(second);
+    EXPECT_FALSE(std::ranges::contains(told.playerSounds, second, &cs::PlayerSound::player)) << "not its own";
+    const auto found = std::ranges::find_if(
+        told.playerSounds, [&deploy](const cs::PlayerSound& sound) { return sound.made.sound == &deploy; });
+    ASSERT_NE(found, told.playerSounds.end()) << "the first's draw";
+    const cs::PlayerSound& heard = *found;
+    EXPECT_EQ(heard.player, first);
+    const cs::PlayerSnapshot made = game().snapshotFor(first);
+    const auto own = std::ranges::find(made.sounds, &deploy, &cs::SoundMade::sound);
+    ASSERT_NE(own, made.sounds.end());
+    EXPECT_EQ(heard.made.at, own->at) << "at the moment it made it";
+    EXPECT_EQ(heard.position, made.player.origin);
+    EXPECT_TRUE(std::ranges::contains(told.sounds, &deploy, &cs::SoundMade::sound)) << "its own, as before";
+    EXPECT_TRUE(play(second, 1).playerSounds.empty()) << "a tick's sounds are its own";
+}
+
 TEST_F(GameTest, APlayerMovesByItsCommandsOnceTheFirstFreezeIsOver) {
     const cs::PlayerIndex player =
         game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");

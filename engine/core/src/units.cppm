@@ -79,6 +79,8 @@ struct PixelsTag {
 };
 /// The unit of Gain: a bare factor, printed as a number alone.
 struct GainTag {};
+/// The unit of Attenuation: none.
+struct AttenuationTag {};
 
 /// Map distance. One hammer unit is the GoldSrc world unit (about one inch).
 using HammerUnits = Quantity<float, HammerUnitsTag>;
@@ -129,6 +131,11 @@ using SampleRate = Quantity<std::uint32_t, HertzTag>;
 /// recorded, none silent. A sound's volume, what each ear hears of it, and the gain of everything heard.
 using Gain = Quantity<float, GainTag>;
 
+/// How fast a sound fades with the distance from where it is made, as the original's game gives it: by
+/// an attenuation of 1 to nothing kNominalSoundReach away, by twice that at half the distance; by none,
+/// never.
+using Attenuation = Quantity<float, AttenuationTag>;
+
 /// Whole pixels of the screen: where the interface places things, from a top left (negative to its
 /// left or above it), how large it makes them, and how far apart.
 using Pixels = Quantity<std::int32_t, PixelsTag>;
@@ -146,6 +153,9 @@ inline constexpr Degrees kFullTurnDegrees = kHalfTurnDegrees * 2.0F;
 
 /// A sound as recorded: the most a sound's own volume is, as the original bounds it.
 inline constexpr Gain kFullGain{1.0F};
+/// How far a sound of an attenuation of 1 carries before it fades to nothing, the original's nominal
+/// clipping distance: one of attenuation `a` carries this over `a` (its ATTN_NORM, 0.8, 1250 units).
+inline constexpr HammerUnits kNominalSoundReach{1000.0F};
 
 // Arithmetic across units: only the combinations with a physical meaning compile.
 

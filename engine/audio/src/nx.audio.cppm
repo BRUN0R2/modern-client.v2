@@ -6,9 +6,12 @@
 ///
 /// Today: sounds made of WAV files, read by the original's names, and the mixer: voices at any rate
 /// and pitch through a windowed sinc, float mixing with headroom, and a limiter, played by the sound
-/// device of nx.platform. Spatialization, the room's DSP, streaming and voice come next (TODO.md).
+/// device of nx.platform; and how loud a sound made somewhere is in each ear of who hears it, as the
+/// original's stereo spatialization makes it. The other spatializations, the room's DSP, streaming and
+/// voice come next (TODO.md).
 export module nx.audio;
 
 export import :sound;
 export import :library;
 export import :mixer;
+export import :spatial;

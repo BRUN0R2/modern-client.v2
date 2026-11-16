@@ -61,7 +61,7 @@ standing = { base = 0.0, scale = 0.1 }
 
 [firing.recoil] # none
 
-[firing.sound] # its client event plays one of them, which to be measured on the original
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
 files = ["weapons/glock18-1.wav", "weapons/glock18-2.wav"]
 channel = "weapon"
 volume = 1.0
@@ -106,7 +106,7 @@ standing = { base = 0.0, scale = 0.3 }
 
 [alternate.firing.recoil] # none
 
-[alternate.firing.sound] # its client event plays one of them, which to be measured on the original
+[alternate.firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
 files = ["weapons/glock18-1.wav", "weapons/glock18-2.wav"]
 channel = "weapon"
 volume = 1.0
