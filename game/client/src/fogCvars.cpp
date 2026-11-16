@@ -137,7 +137,7 @@ auto FogCvars::fog() const -> nx::Result<std::optional<nx::render::Fog>, FogErro
                                                         .green = static_cast<float>(rgb->green) / kChannelTop,
                                                         .blue = static_cast<float>(rgb->blue) / kChannelTop},
                                .curve = *shape,
-                               .density = density.value(),
+                               .density = nx::render::FogDensity{density.value()},
                                .start = nx::HammerUnits{start.value()},
                                .end = endValue > 0.0F ? nx::HammerUnits{endValue} : nx::render::kEndlessFog,
                                .opacity = opacity.value()};
@@ -161,8 +161,9 @@ FogControl::FogValues::FogValues(const FogCvars& cvars)
 auto FogControl::FogValues::matches(const FogCvars& cvars) const noexcept -> bool {
     return isEnabled == cvars.enabled.value() &&
            (!isEnabled || (color == cvars.color.value() && curve == cvars.curve.value() &&
-                           density == cvars.density.value() && start == cvars.start.value() &&
-                           end == cvars.end.value() && opacity == cvars.opacity.value()));
+                           density == nx::render::FogDensity{cvars.density.value()} &&
+                           start == nx::HammerUnits{cvars.start.value()} &&
+                           end == nx::HammerUnits{cvars.end.value()} && opacity == cvars.opacity.value()));
 }
 
 void FogControl::update(const FogCvars& cvars, nx::Seconds elapsed) {

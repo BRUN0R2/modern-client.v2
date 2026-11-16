@@ -41,16 +41,29 @@ struct FogColor {
     [[nodiscard]] inline auto operator==(const FogColor&) const noexcept -> bool = default;
 };
 
+/// The unit of FogDensity.
+struct FogDensityTag {
+    static constexpr std::string_view kSuffix = "/hu";
+};
+
+/// How fast an exponential fog thickens: its density, for each unit of the distance past its start.
+using FogDensity = Quantity<float, FogDensityTag>;
+
+/// What `distance` past its start makes of an exponential fog's exponent: a bare number.
+[[nodiscard]] constexpr auto operator*(FogDensity density, HammerUnits distance) noexcept -> float {
+    return density.value() * distance.value();
+}
+
 /// The farthest a fog thickens to when it thickens all the way.
 inline constexpr HammerUnits kEndlessFog{std::numeric_limits<float>::infinity()};
 
-/// A fog: its color, how it thickens and how fast (its density, per unit, for the exponential curves),
+/// A fog: its color, how it thickens and how fast (its density, for the exponential curves),
 /// the nearest distance it hides anything at (start: nearer, nothing), the farthest it thickens to (end:
 /// farther, it hides as much as there), and the most of a color it hides, from 0 to 1.
 struct Fog {
     FogColor color{};
     FogCurve curve = FogCurve::ExponentialSquared;
-    float density = 0.0F;
+    FogDensity density{};
     HammerUnits start{};
     HammerUnits end = kEndlessFog;
     float opacity = 1.0F;
