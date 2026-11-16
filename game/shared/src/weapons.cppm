@@ -259,8 +259,8 @@ struct WeaponRecoil {
 /// The rounds a shot fires after it on its own, one a weapon frame (the Glock's burst: FireRemaining).
 struct FollowUps {
     std::uint32_t rounds{};
-    float spread{};        ///< Each strays this much, whatever the accuracy and the movement.
-    float rangeModifier{}; ///< Each one's (FireRemaining's), instead of its firing's.
+    float spread{};            ///< Each strays this much, whatever the accuracy and the movement.
+    nx::Scale rangeModifier{}; ///< Each one's (FireRemaining's), instead of its firing's.
 };
 
 /// How a gun fires.
@@ -269,7 +269,7 @@ struct WeaponFiring {
     bool isAutomatic{};          ///< Holding its button fires again; else each press fires once.
     nx::HammerUnits reach{};     ///< How far its rounds go (FireBullets3's distance).
     nx::Damage damage{};         ///< What a round deals as it leaves (iDamage), cut to a whole number.
-    float rangeModifier{};       ///< A round's damage is this many times as much for each 500 units it went.
+    nx::Scale rangeModifier{};   ///< A round's damage times this for each 500 units it went.
     std::uint32_t penetration{}; ///< How many things a round may meet (iPenetration).
     nx::Seconds idleAfterShot{};
     /// Its view model's sequences, by their numbers: one at random as it fires, and the one as it
@@ -308,7 +308,7 @@ struct MeleeAttack {
     nx::Damage damage{}; ///< What it deals what it meets (its TraceAttack's), before what that makes of it.
     /// Its damage times this in a player's back: one it meets facing the way it strikes, more than 0.8
     /// of its body's forward along the ground (the stab's KnifeBackStabMultiplier); none: no more there.
-    std::optional<float> backMultiplier{};
+    std::optional<nx::Scale> backMultiplier{};
     std::vector<std::uint32_t> missSequences{};
     std::vector<std::uint32_t> hitSequences{};
     MeleeTiming miss{};
