@@ -189,7 +189,7 @@ TEST(WeaponTypesTest, AWeaponsMuzzleFlashIsSetByItsKeyPaths) {
     const cs::Weapon& ak = weapons.weapon(kAk);
     ASSERT_TRUE(ak.view.muzzleFlash.has_value());
     EXPECT_EQ(ak.view.muzzleFlash->sprite, "sprites/muzzleflash341.spr");
-    EXPECT_EQ(ak.view.muzzleFlash->brightness, 6.0F);
+    EXPECT_EQ(ak.view.muzzleFlash.value_or(cs::MuzzleFlashLook{}).brightness, nx::Scale{6.0F});
     ASSERT_TRUE(ak.view.muzzleFlash->light.has_value());
     EXPECT_EQ(ak.view.muzzleFlash->light->reach, nx::HammerUnits{96.0F});
     EXPECT_EQ(varOf(weapons, kAk, "view.muzzleFlash.sprite"),

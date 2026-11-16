@@ -150,21 +150,34 @@ struct MuzzleFlashLight {
     nx::Seconds time{};
 };
 
+/// The unit of FlashFrameRate.
+struct FlashFrameRateTag {
+    static constexpr std::string_view kSuffix = "fps";
+};
+
+/// How many frames of its sprite a muzzle flash plays a second. Its own unit rather than nx::PerSecond,
+/// which GCC 16.2 cannot read back from cs.client:muzzleFlash's interface once MuzzleFlashStyle holds one
+/// (docs/17, section 2.2).
+using FlashFrameRate = nx::Quantity<float, FlashFrameRateTag>;
+
+/// A muzzle flash's colors as made: its brightness unless a look gives another.
+inline constexpr nx::Scale kAsMadeBrightness{1.0F};
+
 /// What a weapon's muzzle flashes look like, over what the events of its view model's sequences say
 /// (cs.client:muzzleFlash): each value given replaces the event's, the others are the event's.
 struct MuzzleFlashLook {
     std::optional<std::string> sprite{}; ///< A path of the game's files: "sprites/muzzleflash341.spr".
-    std::optional<float> scale{};        ///< Times its sprite's size; 0 is its own size.
+    std::optional<nx::Scale> scale{};    ///< Times its sprite's size; 0 is its own size.
     /// The frame it shows first; an event of the original's shows one at random.
     std::optional<std::uint32_t> firstFrame{};
-    std::optional<float> frameRate{};  ///< The frames a second it plays on at, once; 0 holds its first.
+    std::optional<FlashFrameRate> frameRate{}; ///< It plays on at this, once; 0 holds its first frame.
     std::optional<nx::Seconds> time{}; ///< It shows this long at most: less when it plays its last frame.
     std::optional<nx::Degrees> roll{}; ///< It is rolled at random, by a whole number of degrees up to this.
     /// It turns this fast as it shows, counter-clockwise as the player sees it (clockwise below 0).
     std::optional<nx::DegreesPerSecond> rollRate{};
-    /// Its colors times this, as the original adds them: 1 as made; beyond 1 brighter, each channel on
-    /// to white, and in the enhanced look the glow its light gives the bloom with it.
-    std::optional<float> brightness{};
+    /// Its colors times this, as the original adds them: kAsMadeBrightness as made; beyond it brighter,
+    /// each channel on to white, and in the enhanced look the glow its light gives the bloom with it.
+    std::optional<nx::Scale> brightness{};
     std::optional<MuzzleFlashLight> light{}; ///< None: it casts none (the original's light comes later).
 };
 

@@ -83,7 +83,7 @@ TEST(MuzzleFlashTest, AnOriginalEventsNumberChoosesTheSpriteAndItsSize) {
     EXPECT_EQ(rifle.frameRate, cs::FlashFrameRate{}) << "held";
     EXPECT_FLOAT_EQ(rifle.time.count(), 0.01F);
     EXPECT_FLOAT_EQ(rifle.roll.value(), 359.0F);
-    EXPECT_FLOAT_EQ(rifle.brightness, 1.0F);
+    EXPECT_FLOAT_EQ(rifle.brightness.value(), 1.0F);
     EXPECT_FALSE(rifle.light.has_value());
     const cs::MuzzleFlashStyle pistol = cs::muzzleFlashStyleOf("11", std::nullopt);
     EXPECT_EQ(pistol.sprite, "sprites/muzzleflash2.spr");
@@ -130,7 +130,7 @@ TEST(MuzzleFlashTest, CounterStrikeOnlinesKeysStyleItsFlash) {
     EXPECT_FLOAT_EQ(drakar.time.count(), 999.0F);
     EXPECT_FLOAT_EQ(drakar.roll.value(), 20.0F) << "rolled at first as the original's of 0";
     EXPECT_FLOAT_EQ(drakar.rollRate.value(), 60.0F) << "R2: 2 degrees a frame of its 30 a second";
-    EXPECT_FLOAT_EQ(drakar.brightness, 1.0F);
+    EXPECT_FLOAT_EQ(drakar.brightness.value(), 1.0F);
 
     // A key the options lack, or whose value is not a number of 0 or more, is the original's of 0.
     const cs::MuzzleFlashStyle partial = cs::muzzleFlashStyleOf("#S0.3  Pfast T-1 U Iten F2", std::nullopt);
@@ -185,10 +185,10 @@ TEST(MuzzleFlashTest, AWeaponsLookIsOverItsEventsStyle) {
         .color = {3000.0F, 1800.0F, 600.0F}, .reach = nx::HammerUnits{96.0F}, .time = nx::Seconds{0.06F}};
     const cs::MuzzleFlashLook look{.sprite = "sprites/drakarFlash.spr",
                                    .firstFrame = 2,
-                                   .frameRate = 0.0F,
+                                   .frameRate = cs::FlashFrameRate{},
                                    .roll = nx::Degrees{0.0F},
                                    .rollRate = nx::DegreesPerSecond{-30.0F},
-                                   .brightness = 6.0F,
+                                   .brightness = nx::Scale{6.0F},
                                    .light = light};
     const cs::MuzzleFlashStyle style = cs::muzzleFlashStyleOf(kDrakarOptions, look);
     EXPECT_EQ(style.sprite, "sprites/drakarFlash.spr");
@@ -198,12 +198,13 @@ TEST(MuzzleFlashTest, AWeaponsLookIsOverItsEventsStyle) {
     EXPECT_FLOAT_EQ(style.time.count(), 999.0F) << "the event's";
     EXPECT_FLOAT_EQ(style.roll.value(), 0.0F);
     EXPECT_FLOAT_EQ(style.rollRate.value(), -30.0F) << "over the events' R";
-    EXPECT_FLOAT_EQ(style.brightness, 6.0F);
+    EXPECT_FLOAT_EQ(style.brightness.value(), 6.0F);
     ASSERT_TRUE(style.light.has_value());
     EXPECT_EQ(style.light->color, light.color);
 
     // Over the original's too: its random frame and its time stay when the look does not give them.
-    const cs::MuzzleFlashStyle original = cs::muzzleFlashStyleOf("22", cs::MuzzleFlashLook{.scale = 0.4F});
+    const cs::MuzzleFlashStyle original =
+        cs::muzzleFlashStyleOf("22", cs::MuzzleFlashLook{.scale = nx::Scale{0.4F}});
     EXPECT_EQ(original.sprite, "sprites/muzzleflash3.spr");
     EXPECT_FLOAT_EQ(original.scale.value(), 0.4F);
     EXPECT_EQ(original.firstFrame, std::nullopt);

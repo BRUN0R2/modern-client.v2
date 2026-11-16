@@ -41,16 +41,6 @@ inline constexpr nx::Seconds kMuzzleFlashTime{0.01F};
 /// 5021 the third, 5031 the fourth; none for any other event.
 [[nodiscard]] auto muzzleFlashAttachmentOf(std::int32_t event) noexcept -> std::optional<std::uint32_t>;
 
-/// The unit of FlashFrameRate.
-struct FlashFrameRateTag {
-    static constexpr std::string_view kSuffix = "fps";
-};
-
-/// How many frames of its sprite a muzzle flash plays a second. Its own unit rather than nx::PerSecond,
-/// which GCC 16.2 cannot read back from this interface once MuzzleFlashStyle holds one (docs/17,
-/// section 2.2).
-using FlashFrameRate = nx::Quantity<float, FlashFrameRateTag>;
-
 /// What a muzzle flash looks like and how it plays, every value given.
 struct MuzzleFlashStyle {
     std::string sprite{};                      ///< A path of the game's files.
@@ -60,7 +50,7 @@ struct MuzzleFlashStyle {
     nx::Seconds time{};              ///< It shows this long at most.
     nx::Degrees roll{};              ///< It is rolled at random, by a whole number of degrees up to this,
     nx::DegreesPerSecond rollRate{}; ///< and turns this fast as it shows, counter-clockwise.
-    float brightness = 1.0F;         ///< Its colors times this.
+    nx::Scale brightness{kAsMadeBrightness}; ///< Its colors times this.
     std::optional<MuzzleFlashLight> light{};
 };
 
@@ -89,7 +79,7 @@ struct MuzzleFlash {
     nx::Scale scale{};
     nx::Degrees roll{};              ///< As it shows first,
     nx::DegreesPerSecond rollRate{}; ///< turning this fast, counter-clockwise.
-    float brightness = 1.0F;
+    nx::Scale brightness{kAsMadeBrightness};
     float firstFrame{};
     FlashFrameRate frameRate{};
     std::size_t frameCount{}; ///< Its sprite's.

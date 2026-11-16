@@ -283,7 +283,7 @@ TEST_F(ViewModelAppearanceTest, RejectsStaticAppearanceInAlternateViews) {
         } else if (key == "bodyChoices") {
             declared.alternate->view->bodyChoices = std::vector<std::uint32_t>{};
         } else {
-            declared.alternate->view->muzzleFlash = cs::MuzzleFlashLook{.brightness = 2.0F};
+            declared.alternate->view->muzzleFlash = cs::MuzzleFlashLook{.brightness = nx::Scale{2.0F}};
         }
         const auto viewModel = read(declared);
         ASSERT_FALSE(viewModel.has_value());
@@ -317,14 +317,15 @@ TEST_F(ViewModelMuzzleFlashTest, ItsEventsNameTheSpritesTheirFlashesShowEachOnce
 TEST_F(ViewModelMuzzleFlashTest, ItsWeaponsLookStylesItsFlashes) {
     flashes("22");
     cs::Weapon styled = weapon();
-    styled.view.muzzleFlash = cs::MuzzleFlashLook{.sprite = "sprites/goldFlash.spr", .brightness = 4.0F};
+    styled.view.muzzleFlash =
+        cs::MuzzleFlashLook{.sprite = "sprites/goldFlash.spr", .brightness = nx::Scale{4.0F}};
     const auto viewModel = read(styled);
     ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
     EXPECT_EQ(viewModel->muzzleFlashSprites(), (std::vector<std::string>{"sprites/goldFlash.spr"}));
     const cs::MuzzleFlashStyle style = viewModel->muzzleFlashStyleOf(viewModel->sequence(0).events.front());
     EXPECT_EQ(style.sprite, "sprites/goldFlash.spr");
     EXPECT_FLOAT_EQ(style.scale.value(), 0.2F) << "the event's";
-    EXPECT_FLOAT_EQ(style.brightness, 4.0F);
+    EXPECT_FLOAT_EQ(style.brightness.value(), 4.0F);
 }
 
 } // namespace
