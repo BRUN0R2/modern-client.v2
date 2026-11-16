@@ -165,10 +165,10 @@ struct BloodEnhancedLook {
     std::uint32_t mostMists = 0;
     nx::Seconds streakTime{};
     float leastLight = 0.0F;
-    float mistLight = 0.0F;
+    nx::Scale mistLight{};
     float mistFadeFrom = 0.0F;
     nx::Scale gravity{};
-    float drag = 0.0F;
+    nx::PerSecond drag{};
     nx::Seconds dropletLife{};
     nx::Seconds dropletFade{};
     float splatShare = 0.0F;
