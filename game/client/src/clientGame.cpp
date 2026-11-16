@@ -146,7 +146,6 @@ auto ClientGame::lightStylesAt(nx::Seconds time) const noexcept -> nx::render::L
 void ClientGame::updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay,
                                std::vector<ShownPlayer>& players) {
     const nx::GameTime shown = shownTime();
-    const float between = m_pending / kCommandInterval;
     players.clear();
     players.reserve(m_last.players.size());
     for (const PlayerEntityState& state : m_last.players) {
@@ -159,36 +158,50 @@ void ClientGame::updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay,
         if (amount == 0) {
             continue; // a corpse gone
         }
-        const std::optional<nx::Vec3> before = state.player.value < previousPlayerOrigins.size()
-                                                   ? previousPlayerOrigins[state.player.value]
-                                                   : std::nullopt;
-        const nx::Vec3 origin = before ? nx::lerp(*before, state.origin, between) : state.origin;
+        const nx::Vec3 origin = originShown(state);
         if (state.player.value >= m_gaits.size()) {
             m_gaits.resize(state.player.value + 1);
         }
         std::optional<Gait>& gait = m_gaits[state.player.value];
         if (!gait) {
-            gait = Gait{.yaw = state.angles.yaw.value(), .previousOrigin = origin};
+            gait = Gait{.yaw = state.angles.yaw, .previousOrigin = origin};
         }
         processGait(*gait, *model, state.gaitSequence, origin, state.angles, frameTime, state.framerate);
         const std::span<const nx::assets::StudioSequence> sequences = model->sequences();
         const nx::assets::SequenceIndex sequence =
             state.sequence.value < sequences.size() ? state.sequence : nx::assets::SequenceIndex{};
-        players.push_back(ShownPlayer{
-            .character = state.character,
-            .weapon = state.weapon,
-            .origin = origin,
-            .angles = nx::EulerAngles{.yaw = nx::Degrees{gait->yaw}, .roll = state.angles.roll},
-            .sequence = sequence,
-            .frame = estimatedFrameOf(sequences[sequence.value], state.frame,
-                                      shown.since(state.advancedAt, m_last.rate), state.framerate),
-            .gaitSequence = state.gaitSequence,
-            .gaitFrame = SequenceFrame{gait->frame},
-            .yawBlend = gait->yawBlend,
-            .pitchBlend = static_cast<float>(gait->pitchBlend),
-            .amount = amount});
+        players.push_back(ShownPlayer{.character = state.character,
+                                      .weapon = state.weapon,
+                                      .origin = origin,
+                                      .angles = nx::EulerAngles{.yaw = gait->yaw, .roll = state.angles.roll},
+                                      .sequence = sequence,
+                                      .frame = estimatedFrameOf(sequences[sequence.value], state.frame,
+                                                                shown.since(state.advancedAt, m_last.rate),
+                                                                state.framerate),
+                                      .gaitSequence = state.gaitSequence,
+                                      .gaitFrame = gait->frame,
+                                      .yawBlend = gait->yawBlend,
+                                      .pitchBlend = static_cast<float>(gait->pitchBlend),
+                                      .amount = amount});
     }
     playerCorpses.forgetUnasked();
+}
+
+void ClientGame::writePlayerOrigins(std::vector<std::optional<nx::Vec3>>& origins) const {
+    origins.clear();
+    for (const PlayerEntityState& state : m_last.players) {
+        if (state.player.value >= origins.size()) {
+            origins.resize(std::size_t{state.player.value} + 1);
+        }
+        origins[state.player.value] = originShown(state);
+    }
+}
+
+auto ClientGame::originShown(const PlayerEntityState& state) const -> nx::Vec3 {
+    const std::optional<nx::Vec3> before = state.player.value < previousPlayerOrigins.size()
+                                               ? previousPlayerOrigins[state.player.value]
+                                               : std::nullopt;
+    return before ? nx::lerp(*before, state.origin, m_pending / kCommandInterval) : state.origin;
 }
 
 void ClientGame::writeHostages(std::vector<ShownHostage>& hostages) const {

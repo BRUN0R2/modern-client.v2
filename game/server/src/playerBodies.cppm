@@ -23,14 +23,14 @@ export namespace cs {
 /// How a player's model plays where the server's traces meet it, as its entity holds it: the model,
 /// none when it could not be read (its box alone then); its torso's sequence (pev->sequence) at its frame
 /// (pev->frame); its legs' gait sequence (pev->gaitsequence) and the way they face
-/// (m_flGaityaw, degrees); the aim's blends (m_flYaw, m_flPitch); and how its body is turned (pev->angles:
+/// (m_flGaityaw); the aim's blends (m_flYaw, m_flPitch); and how its body is turned (pev->angles:
 /// the pitch a third of the view's, negated).
 struct PlayerPose {
     const PlayedModel* model = nullptr;
     nx::assets::SequenceIndex sequence{};
     EntityFrame frame{};
     nx::assets::SequenceIndex gaitSequence{};
-    float gaitYaw = 0.0F;
+    nx::Degrees gaitYaw{};
     float yawBlend = 0.0F;
     float pitchBlend = 0.0F;
     nx::EulerAngles angles{};
@@ -72,7 +72,7 @@ void setBodySolidity(nx::ecs::World& world, nx::ecs::Entity body, std::optional<
 /// is turned by then (R_StudioPlayerBlend's).
 struct PlayerBlend {
     std::uint8_t blending = 0;
-    float pitch = 0.0F;
+    nx::Degrees pitch{};
 };
 
 /// The PlayerBlend of a player's `sequence` when its body's pitch is `pitch`, as R_StudioPlayerBlend
@@ -80,7 +80,7 @@ struct PlayerBlend {
 /// end; below its start, the first blending, and the pitch less a third of the start; up to its end, the
 /// share of the way from the start, cut to a whole one of 255, or the middle's for a way shorter than a
 /// tenth, and no pitch; beyond, the last, and the pitch less a third of the end.
-[[nodiscard]] auto playerBlendOf(const nx::assets::StudioSequence& sequence, float pitch) noexcept
+[[nodiscard]] auto playerBlendOf(const nx::assets::StudioSequence& sequence, nx::Degrees pitch) noexcept
     -> PlayerBlend;
 
 /// The bones of a player's model posed as `pose` says at `origin` for the server's traces

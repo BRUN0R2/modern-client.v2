@@ -114,9 +114,10 @@ auto DamageNumbers::open(nx::ui::FontCatalog& fonts, const DamageNumberLook& loo
     const float wholeHeight = look.height * static_cast<float>(screenHeight);
     // Drawn at its largest from glyphs as large, a number is only ever made smaller, which keeps it sharp.
     const float largest = wholeHeight * std::max({look.peakScale, look.endScale, 1.0F});
-    auto font =
-        fonts.open(*choice, {.cellHeight = std::max(static_cast<std::int32_t>(std::lround(largest)), 1),
-                             .smoothing = nx::ui::FontSmoothing::Antialiased});
+    auto font = fonts.open(
+        *choice, {.cellHeight = std::max(nx::Pixels{static_cast<std::int32_t>(std::lround(largest))},
+                                         nx::ui::kMinCellHeight),
+                  .smoothing = nx::ui::FontSmoothing::Antialiased});
     if (!font) {
         return nx::fail(DamageNumbersError::Unusable, look.font.family, std::move(font.error()));
     }

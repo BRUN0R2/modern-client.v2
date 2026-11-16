@@ -86,13 +86,13 @@ inline constexpr nx::Seconds kLeastBuyTime{15.0F};
 /// mp_buytime as the game reads it, and what it sets it to where it holds it.
 struct BuyTime {
     nx::Seconds length{};
-    std::optional<float> setToMinutes{}; ///< What mp_buytime is set to where it was held.
+    std::optional<nx::Minutes> setTo{}; ///< What mp_buytime is set to where it was held.
 };
 
-/// mp_buytime's `minutes` read as CanPlayerBuy reads them: times 60 in float, cut to whole seconds as the
-/// original's processors cut them (nx::truncateAsX86), held to kLeastBuyTime at least, mp_buytime then set
-/// to it.
-[[nodiscard]] auto readBuyTime(float minutes) noexcept -> BuyTime;
+/// mp_buytime's `buyTime` read as CanPlayerBuy reads it: in seconds, times 60 in float, cut to whole
+/// seconds as the original's processors cut them (nx::truncateAsX86), held to kLeastBuyTime at least,
+/// mp_buytime then set to it.
+[[nodiscard]] auto readBuyTime(nx::Minutes buyTime) noexcept -> BuyTime;
 
 /// A player as it asks to buy, as the rules weigh it: its team and its money, whether it lives, whether it
 /// is where its team buys (SIGNAL_BUY), whether its map lets its team buy, and how long ago its round

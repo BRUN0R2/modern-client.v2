@@ -115,6 +115,10 @@ public:
     /// `corpseStay` and gone (corpseAmountOf). Replaces `players`, keeping its storage for the next frame.
     /// Previous origins are indexed once per received snapshot.
     void updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay, std::vector<ShownPlayer>& players);
+    /// Where each other player shows at the moment a frame shows, by PlayerIndex, between where the last
+    /// two ticks left it, as updatePlayers places it; none for one the server did not tell of last.
+    /// Replaces `origins`, keeping its storage for the next frame.
+    void writePlayerOrigins(std::vector<std::optional<nx::Vec3>>& origins) const;
 
     /// The way the game last turned the player's view since the last call, as the original's fixangle
     /// turns it: the way the spawn point it last spawned at faces; none.
@@ -176,6 +180,9 @@ private:
     [[nodiscard]] auto shownTime() const -> nx::GameTime;
     /// The command of the next tick, `command` numbered after the last.
     [[nodiscard]] auto numbered(UserCommand command) -> UserCommand;
+    /// Where `state`'s player shows at the moment a frame shows: between where the last two ticks left it,
+    /// where the last did when the one before had none of it.
+    [[nodiscard]] auto originShown(const PlayerEntityState& state) const -> nx::Vec3;
 
     const MapModels* m_models;
     const PlayerModels* m_players;

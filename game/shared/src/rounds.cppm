@@ -99,20 +99,21 @@ struct RoundLengths {
 /// to where it holds them (ReadMultiplayCvars).
 struct RoundCvars {
     RoundLengths lengths{};
-    std::optional<float> freezeSeconds{}; ///< What mp_freezetime is set to where it was held.
-    std::optional<float> roundMinutes{};  ///< What mp_roundtime is set to where it was held.
+    std::optional<nx::Seconds> freezeTime{}; ///< What mp_freezetime is set to where it was held.
+    std::optional<nx::Minutes> roundTime{};  ///< What mp_roundtime is set to where it was held.
 };
 
-/// mp_freezetime's `freezeSeconds` and mp_roundtime's `roundMinutes` read as ReadMultiplayCvars reads
-/// them: the minutes times 60 in float, each cut to whole seconds as the original's processors cut
-/// them (nx::truncateAsX86); the round held to 60 to 540 seconds, mp_roundtime then set to 1 or 9, and
-/// the freeze to 0 to 60, mp_freezetime then set to 0 or 60.
-[[nodiscard]] auto readRoundCvars(float freezeSeconds, float roundMinutes) noexcept -> RoundCvars;
+/// mp_freezetime's `freezeTime` and mp_roundtime's `roundTime` read as ReadMultiplayCvars reads them:
+/// the minutes in seconds, times 60 in float, each cut to whole seconds as the original's processors
+/// cut them (nx::truncateAsX86); the round held to 60 to 540 seconds, mp_roundtime then set to 1 or 9
+/// minutes, and the freeze to 0 to 60 seconds, mp_freezetime then set to 0 or 60.
+[[nodiscard]] auto readRoundCvars(nx::Seconds freezeTime, nx::Minutes roundTime) noexcept -> RoundCvars;
 
 /// The restart sv_restartround's `restartRound` and sv_restart's `restart` ask for, as the game reads
 /// them once a second (CheckRestartRound): sv_restartround cut to whole seconds, else sv_restart; above
 /// 0, held to kMostRestart, which then sets both back to 0; none otherwise, both then left as they are.
-[[nodiscard]] auto restartDelayOf(float restartRound, float restart) noexcept -> std::optional<nx::Seconds>;
+[[nodiscard]] auto restartDelayOf(nx::Seconds restartRound, nx::Seconds restart) noexcept
+    -> std::optional<nx::Seconds>;
 
 /// The longest restart sv_restartround and sv_restart ask for (CheckRestartRound).
 inline constexpr nx::Seconds kMostRestart{60.0F};

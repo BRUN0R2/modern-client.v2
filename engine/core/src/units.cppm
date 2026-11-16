@@ -143,6 +143,8 @@ using Pixels = Quantity<std::int32_t, PixelsTag>;
 /// Simulation durations. Wall-clock time belongs to nx.platform.
 using Seconds = std::chrono::duration<float>;
 using Milliseconds = std::chrono::duration<float, std::milli>;
+/// What a setting gives in minutes (a round's time): Seconds{minutes} is them times 60, in float.
+using Minutes = std::chrono::duration<float, std::chrono::minutes::period>;
 
 /// A half turn: the definition that relates degrees to radians.
 inline constexpr Degrees kHalfTurnDegrees{180.0F};

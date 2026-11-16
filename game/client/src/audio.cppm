@@ -4,12 +4,14 @@
 /// What the player hears (docs/11-audio.md): the system's sound output playing the mixer, the
 /// game's sounds read by their names, the sounds the player makes on its channels, and those the
 /// client plays itself, as the original's `play` and `playvol` do, at full level in both ears; and
-/// the sounds the other players make, heard where they were made as the original's stereo
-/// spatialization places them. Each takes the voice the original's engine would choose (voiceFor).
+/// the sounds the other players make, heard where their makers are as the original's stereo
+/// spatialization places them, followed as they and the listener move. Each takes the voice the
+/// original's engine would choose (voiceFor).
 export module cs.client:audio;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.assets;
 import nx.platform;
 import nx.console;
@@ -31,6 +33,26 @@ enum class PlayError : std::uint8_t {
     QueueFull, ///< The mixer has not taken the commands sent yet (cause: the MixerError).
     NoVoice,   ///< Every voice plays one of the player's own sounds, which another's never cuts short.
 };
+
+/// The step of a sound's volume in an ear the original tells apart: its ears' volumes are whole numbers
+/// of 255.
+inline constexpr nx::Gain kEarVolumeStep = nx::kFullGain / 255.0F;
+
+/// A sound another player made as it plays: where it is heard from, its volume and how fast it fades
+/// with distance, and how loud it was last heard in each ear.
+struct PlacedSound {
+    nx::Vec3 position{};
+    nx::Gain volume{nx::kFullGain};
+    nx::Attenuation attenuation{kNormalAttenuation};
+    nx::audio::VoiceGains gains{};
+};
+
+/// Follows `sound` to where its maker is now, `maker` (none once it is gone, as the original's client
+/// keeps a sound where its entity was last told of), as `listener` hears it there
+/// (nx::audio::legacyGains): the gains it is heard at now, which it holds from then on, when either ear
+/// changed by kEarVolumeStep or more since those it held; none otherwise, nothing heard any differently.
+[[nodiscard]] auto followSound(PlacedSound& sound, std::optional<nx::Vec3> maker,
+                               const nx::audio::Listener& listener) -> std::optional<nx::audio::VoiceGains>;
 
 /// The sound output and what plays on it. It stays where it is made: the output's thread reads its
 /// mixer.
@@ -73,11 +95,17 @@ public:
     /// Plays the sound another player made, `heard`, `delay` from now, as `listener` hears it where it was
     /// made: one of its files and a pitch at random as play chooses them, on its channel of its maker,
     /// replacing what that channel plays as it starts, in each ear as the original's legacy stereo
-    /// spatialization makes it (nx::audio::legacyGains, by its attenuation); not at all when neither ear
-    /// hears it, as the original drops a sound out of reach as it starts. Errors: NoSound, QueueFull,
-    /// NoVoice.
+    /// spatialization makes it (nx::audio::legacyGains, by its attenuation), followed from then on
+    /// (follow); not at all when neither ear hears it, as the original drops a sound out of reach as it
+    /// starts. Errors: NoSound, QueueFull, NoVoice.
     [[nodiscard]] auto playAt(const PlayerSound& heard, const nx::audio::Listener& listener,
                               nx::Seconds delay = nx::Seconds{}) -> nx::Result<void, PlayError>;
+
+    /// Each frame: the sounds the other players made that still play heard as `listener` hears them from
+    /// where their makers are now, `makers`, by PlayerIndex (ClientGame::writePlayerOrigins), as the
+    /// original's client places them again each frame (followSound); a maker it has none of left where it
+    /// was last. A change the mixer could not take is sent again the next time.
+    void follow(const nx::audio::Listener& listener, std::span<const std::optional<nx::Vec3>> makers);
 
     /// Reads the sound `name` names (nx::audio::SoundLibrary::load) without playing it, so that
     /// playing it reads no file: a file read as a frame plays holds that frame up as long as the disk,
@@ -106,13 +134,21 @@ private:
     };
 
     /// Who makes a sound and how it plays: its maker, none for the player itself, and the channel of
-    /// its maker it plays on; how loud in each ear, at what pitch, `delay` from now.
+    /// its maker it plays on; how loud in each ear, at what pitch, `delay` from now; and, another's,
+    /// where it is heard from, none for one heard as the player's own.
     struct Playing {
         std::optional<PlayerIndex> maker{};
         SoundChannel channel = SoundChannel::Auto;
         nx::audio::VoiceGains gains{};
         nx::audio::Pitch pitch{nx::audio::kRecordedPitch};
         nx::Seconds delay{};
+        std::optional<PlacedSound> placed{};
+    };
+
+    /// A play of a voice that follows its maker: where it is heard from, and what the play is known by.
+    struct FollowedPlay {
+        PlacedSound sound{};
+        nx::audio::PlayTag tag{};
     };
 
     /// One of `sound`'s files and a pitch of its range, at random, as the original's client and engine
@@ -126,7 +162,10 @@ private:
     nx::audio::Mixer m_mixer;
     nx::platform::AudioDevice m_device; ///< Last: it stops reading the mixer before the mixer goes.
     std::vector<VoiceUse> voiceUses;    ///< What each voice of the mixer was last given, by its VoiceId.
-    std::optional<nx::Gain> sentGain;   ///< The gain the mixer was last sent.
+    /// What each voice plays that follows its maker, by its VoiceId; none for any other.
+    std::vector<std::optional<FollowedPlay>> followedPlays;
+    nx::audio::PlayTag lastTag{};     ///< Of the last play: each one's is the next.
+    std::optional<nx::Gain> sentGain; ///< The gain the mixer was last sent.
     Muting m_muting = Muting::Off;
     nx::Random m_random; ///< What chooses the files and the pitches.
 };
