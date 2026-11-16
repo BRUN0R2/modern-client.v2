@@ -107,7 +107,7 @@ constexpr float kTolerance = 1e-5F;
                                   .bodySound = sound("weapons/knife_hit1.wav", cs::SoundChannel::Weapon)},
                         .stab = {.reach = nx::HammerUnits{32.0F},
                                  .damage = nx::Damage{65.0F},
-                                 .backMultiplier = 3.0F,
+                                 .backMultiplier = nx::Scale{3.0F},
                                  .missSequences = {5},
                                  .hitSequences = {4},
                                  .miss = {.primary = nx::Seconds{1.0F}, .secondary = nx::Seconds{1.0F}},

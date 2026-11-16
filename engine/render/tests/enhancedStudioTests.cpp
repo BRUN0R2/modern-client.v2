@@ -241,7 +241,7 @@ void setSky(nx::rhi::Device& device, SurfaceScene& scene, int channel = kSkyChan
 
 /// A light at the camera that views the triangle from `direction`, of `power` in each channel.
 [[nodiscard]] auto lightAtTheView(Vec3 direction, float power) -> std::array<nx::render::StudioLight, 1> {
-    constexpr float kReach = 100.0F;
+    constexpr nx::HammerUnits kReach{100.0F};
     return {nx::render::StudioLight{.position = cameraFrom(direction).position,
                                     .reach = kReach,
                                     .color = {.x = power, .y = power, .z = power}}};
@@ -333,8 +333,11 @@ TEST(EnhancedStudioTest, ACrowdIsDrawnByTheProbesOfThisFrame) {
     const std::size_t boneCount = scene->model.boneCount();
     const std::vector<nx::render::CrowdBonePose> poses(boneCount, {.rotation = {.w = 1.0F}});
     const std::vector<std::int32_t> parents(boneCount, -1);
-    const std::array sequences{nx::render::CrowdSequence{
-        .poses = poses, .frameCount = 1, .reach = 64.0F, .lowest = -64.0F, .highest = 64.0F}};
+    const std::array sequences{nx::render::CrowdSequence{.poses = poses,
+                                                         .frameCount = 1,
+                                                         .reach = nx::HammerUnits{64.0F},
+                                                         .lowest = nx::HammerUnits{-64.0F},
+                                                         .highest = nx::HammerUnits{64.0F}}};
     const auto loaded = nx::test::inFrameOfItsOwn(**device, [&](nx::rhi::CommandList& commands) {
         return scene->renderer.loadCrowdModel(
             commands, {.model = scene->model, .parents = parents, .sequences = sequences});

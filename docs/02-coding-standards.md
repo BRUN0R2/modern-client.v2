@@ -225,8 +225,10 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
 } // namespace nx
 ```
 
-- Simulation time: `nx::Seconds`/`nx::Milliseconds` (`std::chrono::duration<float>`), and
-  `nx::GameTime` (ticks + fraction) from M3 on. Wall clock only through `nx.platform`; the
+- Simulation time: `nx::Seconds`/`nx::Milliseconds` (`std::chrono::duration<float>`), `nx::Minutes`
+  for what a setting gives in minutes (`mp_roundtime`, `mp_buytime`), and `nx::GameTime` (ticks +
+  fraction) from M3 on. A cvar holds a number: the game reads it as the time or the money it gives
+  where it reads it, and sets it back from them. Wall clock only through `nx.platform`; the
   one exception is the time stamped on log records, which `nx.core` takes itself because it
   sits below `nx.platform`.
 - Angles: `nx::Degrees` and `nx::Radians`, with no implicit conversion between them: `nx::toRadians`
@@ -237,6 +239,9 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
 - The interface's places and sizes: `nx::Pixels`, whole pixels, grouped as `nx::ui::PixelPoint`,
   `PixelSize` and `PixelRect`, so that no `x` is passed for a `wide`. What the GPU takes (`nx::rhi`'s
   rectangles, a screen quad's fractions of a pixel) stays its own data, converted where it is handed over.
+  What the game writes straight into memory the GPU reads (a crowd's bodies, `nx::render::CrowdBody`) keeps its
+  units: a `float` quantity, an `nx::Seconds` and an angle are one `float` each, and a `static_assert` holds the
+  structure to the size its shader reads.
 - Sound: `nx::Gain`, how loud a sound is against its recording (a sound's volume, what an ear hears of
   it, the gain of everything heard); `nx::audio::Pitch`, how fast a voice plays its sound, and
   `cs::SoundPitch`, the game's pitch in the original's hundredths; `nx::audio::MixFrames`, the mix's
@@ -246,6 +251,10 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
   `cs::kFrameScale` from its first frame to its last), and `cs::EntityFramesPerSecond`, how fast that goes;
   how fast an entity plays its sequence against the sequence's own speed (`pev->framerate`) is an
   `nx::Scale`, `cs::kOwnSpeed` as recorded.
+- Factors and shares: a factor a quantity is multiplied by, which may pass 1 (a size, a gravity, a
+  damage's range modifier or a back stab's multiplier), is an `nx::Scale`, and the share of an attack's
+  damage a body takes a `cs::DamageShare`; a share of a whole, from 0 to 1 (a probability, an opacity,
+  the share of a speed kept), stays a `float`, as `Quantity / Quantity` gives it.
 
 ### 4.2 Enums
 

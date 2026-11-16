@@ -30,7 +30,7 @@ constexpr std::size_t kEntityLumpOffset = 4;
 constexpr std::size_t kGroupFileBytes = 1024UZ * 1024UZ;
 constexpr std::int64_t kManySequences = 64;
 constexpr std::int64_t kManyLights = 4096;
-constexpr float kLightReach = 10000.0F;
+constexpr nx::HammerUnits kLightReach{10000.0F};
 constexpr float kAimYaw = 191.25F;
 constexpr float kAimPitch = 63.75F;
 constexpr std::string_view kCharacterPath = "models/player/benchmark/benchmark.mdl";

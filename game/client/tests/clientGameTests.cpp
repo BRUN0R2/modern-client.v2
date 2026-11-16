@@ -287,6 +287,24 @@ TEST_F(ClientGameTest, AnotherPlayerIsShownBetweenTheLastTwoTicksItsLegsFacingIt
     EXPECT_NEAR(moving[0].yawBlend, 0.0F, kTolerance);
 }
 
+TEST_F(ClientGameTest, ThePlayersSoundsFollowWhereTheyShowByTheirIndex) {
+    cs::PlayerSnapshot first = snapshotAt(0, {});
+    first.players = {otherAt({.x = 100.0F}, 90.0F)};
+    cs::ClientGame client{models(), playerModels(), std::move(first)};
+    std::vector<std::optional<nx::Vec3>> origins{nx::Vec3{.z = 7.0F}, std::nullopt, nx::Vec3{}};
+    const std::optional<nx::Vec3>* const storage = origins.data();
+    cs::PlayerSnapshot second = snapshotAt(1, {});
+    second.players = {otherAt({.x = 110.0F}, 90.0F)};
+    ASSERT_EQ(client.ticksDue(kTick * 1.5F, cs::CatchUp::Limited), 1U);
+    client.receive(std::move(second));
+    client.writePlayerOrigins(origins);
+    ASSERT_EQ(origins.size(), 2U) << "up to the last player told of";
+    EXPECT_FALSE(origins[0].has_value()) << "none told of in its slot";
+    ASSERT_TRUE(origins[1].has_value());
+    EXPECT_NEAR(origins[1]->x, 105.0F, kTolerance) << "halfway, as it is drawn";
+    EXPECT_EQ(origins.data(), storage) << "its storage kept";
+}
+
 TEST_F(ClientGameTest, FrameExtractionReusesItsStorageAndReplacesWhatItShowedBefore) {
     constexpr float kPlayerX = 100.0F;
     cs::PlayerSnapshot first = snapshotAt(0, {});

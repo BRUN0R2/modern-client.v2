@@ -146,7 +146,6 @@ auto ClientGame::lightStylesAt(nx::Seconds time) const noexcept -> nx::render::L
 void ClientGame::updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay,
                                std::vector<ShownPlayer>& players) {
     const nx::GameTime shown = shownTime();
-    const float between = m_pending / kCommandInterval;
     players.clear();
     players.reserve(m_last.players.size());
     for (const PlayerEntityState& state : m_last.players) {
@@ -159,10 +158,7 @@ void ClientGame::updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay,
         if (amount == 0) {
             continue; // a corpse gone
         }
-        const std::optional<nx::Vec3> before = state.player.value < previousPlayerOrigins.size()
-                                                   ? previousPlayerOrigins[state.player.value]
-                                                   : std::nullopt;
-        const nx::Vec3 origin = before ? nx::lerp(*before, state.origin, between) : state.origin;
+        const nx::Vec3 origin = originShown(state);
         if (state.player.value >= m_gaits.size()) {
             m_gaits.resize(state.player.value + 1);
         }
@@ -189,6 +185,23 @@ void ClientGame::updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay,
                                       .amount = amount});
     }
     playerCorpses.forgetUnasked();
+}
+
+void ClientGame::writePlayerOrigins(std::vector<std::optional<nx::Vec3>>& origins) const {
+    origins.clear();
+    for (const PlayerEntityState& state : m_last.players) {
+        if (state.player.value >= origins.size()) {
+            origins.resize(std::size_t{state.player.value} + 1);
+        }
+        origins[state.player.value] = originShown(state);
+    }
+}
+
+auto ClientGame::originShown(const PlayerEntityState& state) const -> nx::Vec3 {
+    const std::optional<nx::Vec3> before = state.player.value < previousPlayerOrigins.size()
+                                               ? previousPlayerOrigins[state.player.value]
+                                               : std::nullopt;
+    return before ? nx::lerp(*before, state.origin, m_pending / kCommandInterval) : state.origin;
 }
 
 void ClientGame::writeHostages(std::vector<ShownHostage>& hostages) const {
