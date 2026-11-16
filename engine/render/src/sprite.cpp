@@ -524,10 +524,10 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
                 SpriteQuadCall{.pipeline = m_lightPipeline.get(), .image = image.group.get()});
         }
         if (!isSolid(instance.mode)) {
-            m_blendedDraws.push_back(
-                BlendedDraw{.distance = lengthSquared(draw.camera.position - instance.origin),
-                            .mode = instance.mode,
-                            .index = narrow<std::uint32_t>(m_spriteCalls.size())});
+            m_blendedDraws.push_back(BlendedDraw{
+                .distance = SquaredDistance{lengthSquared(draw.camera.position - instance.origin)},
+                .mode = instance.mode,
+                .index = narrow<std::uint32_t>(m_spriteCalls.size())});
         }
         m_spriteCalls.push_back(SpriteCall{.firstQuad = firstQuad,
                                            .quadCount = narrow<std::uint32_t>(m_quadCalls.size()) - firstQuad,
