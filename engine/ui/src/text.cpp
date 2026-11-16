@@ -96,7 +96,7 @@ auto GlyphAtlas::pack(const FontMetrics& metrics, std::vector<std::pair<char32_t
     atlas.m_metrics = metrics;
     std::uint32_t widest = 0;
     for (const auto& [character, glyph] : drawn) {
-        widest = std::max(widest, narrow<std::uint32_t>(glyph.width));
+        widest = std::max(widest, narrow<std::uint32_t>(glyph.width.value()));
     }
     atlas.m_width = std::max(width, widest + (2 * kGap));
     std::vector<std::size_t> order(drawn.size());
@@ -108,8 +108,8 @@ auto GlyphAtlas::pack(const FontMetrics& metrics, std::vector<std::pair<char32_t
     std::uint32_t y = kGap;
     std::uint32_t rowHeight = 0;
     for (const std::size_t index : order) {
-        const auto glyphWidth = narrow<std::uint32_t>(drawn[index].second.width);
-        const auto glyphHeight = narrow<std::uint32_t>(drawn[index].second.height);
+        const auto glyphWidth = narrow<std::uint32_t>(drawn[index].second.width.value());
+        const auto glyphHeight = narrow<std::uint32_t>(drawn[index].second.height.value());
         if (glyphWidth == 0 || glyphHeight == 0) {
             continue; // nothing to draw: a space
         }
@@ -141,10 +141,9 @@ auto GlyphAtlas::pack(const FontMetrics& metrics, std::vector<std::pair<char32_t
                     std::byte{glyph.coverage[(std::size_t{row} * place.width) + column]};
             }
         }
-        atlas.m_glyphs.emplace_back(character, AtlasGlyph{.source = place,
-                                                          .left = Pixels{glyph.left},
-                                                          .top = Pixels{glyph.top},
-                                                          .advance = Pixels{glyph.advance}});
+        atlas.m_glyphs.emplace_back(
+            character,
+            AtlasGlyph{.source = place, .left = glyph.left, .top = glyph.top, .advance = glyph.advance});
     }
     return atlas;
 }

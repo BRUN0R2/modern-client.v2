@@ -50,8 +50,8 @@ auto mapSpritesOf(const nx::assets::BspView& map) -> std::vector<MapSprite> {
         MapSprite sprite{.model = std::string{model},
                          .kind = *kind,
                          .origin = entity.findVector("origin").value_or(nx::Vec3{}),
-                         .scale = entity.findNumber("scale").value_or(0.0F),
-                         .framerate = entity.findNumber("framerate").value_or(0.0F)};
+                         .scale = nx::Scale{entity.findNumber("scale").value_or(0.0F)},
+                         .framerate = nx::PerSecond{entity.findNumber("framerate").value_or(0.0F)}};
         nx::Vec3 angles = nx::game::anglesOf(entity);
         if (*kind == SpriteClass::Sprite) {
             // CSprite::Spawn: the editors set the yaw alone, which the game makes the roll.
@@ -80,7 +80,7 @@ auto frameAt(const MapSprite& sprite, std::size_t frameCount, nx::Seconds sinceS
         return std::nullopt;
     }
     const double lastFrame = static_cast<double>(frameCount) - 1.0;
-    const double framerate = static_cast<double>(sprite.framerate);
+    const auto framerate = static_cast<double>(sprite.framerate.value());
     const bool animates = sprite.kind == SpriteClass::Sprite
                               ? (framerate != 0.0 && lastFrame > 1.0) || sprite.playsOnce
                           : sprite.kind == SpriteClass::Glow ? framerate != 0.0 && lastFrame > 1.0

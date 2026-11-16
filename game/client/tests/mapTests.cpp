@@ -134,7 +134,7 @@ TEST(MapSpriteTest, SpriteEntitiesAreReadAsTheGameMakesThem) {
     EXPECT_EQ(flare.mode, RenderMode::TransAdd);
     EXPECT_EQ(flare.amount, 90);
     EXPECT_EQ(flare.color, (nx::render::RenderColor{.red = 255, .green = 128, .blue = 0}));
-    EXPECT_FLOAT_EQ(flare.scale, 0.5F);
+    EXPECT_EQ(flare.scale, nx::Scale{0.5F});
     EXPECT_TRUE(flare.isOn) << "named, but it starts on";
 
     EXPECT_FALSE(sprites[1].isOn) << "named, it waits to be turned on";
@@ -144,13 +144,13 @@ TEST(MapSpriteTest, SpriteEntitiesAreReadAsTheGameMakesThem) {
 }
 
 TEST(MapSpriteTest, AnEnvSpriteAnimatesTenTimesASecondAndLoopsShortOfItsLastFrame) {
-    const MapSprite flare{.kind = SpriteClass::Sprite, .framerate = 10.0F};
+    const MapSprite flare{.kind = SpriteClass::Sprite, .framerate = nx::PerSecond{10.0F}};
     EXPECT_EQ(cs::frameAt(flare, 10, nx::Seconds{0.05F}), 0.0F) << "no think has added a frame";
     EXPECT_EQ(cs::frameAt(flare, 10, nx::Seconds{0.35F}), 3.0F) << "three thinks";
     EXPECT_EQ(cs::frameAt(flare, 10, nx::Seconds{1.05F}), 1.0F) << "frame 10 is past 9: 10 modulo 9";
     EXPECT_EQ(cs::frameAt(flare, 2, nx::Seconds{1.0F}), 0.0F) << "two frames do not animate";
 
-    const MapSprite once{.kind = SpriteClass::Sprite, .framerate = 10.0F, .playsOnce = true};
+    const MapSprite once{.kind = SpriteClass::Sprite, .framerate = nx::PerSecond{10.0F}, .playsOnce = true};
     EXPECT_EQ(cs::frameAt(once, 10, nx::Seconds{0.95F}), 9.0F);
     EXPECT_EQ(cs::frameAt(once, 10, nx::Seconds{1.05F}), std::nullopt) << "past its last frame it turns off";
 
@@ -161,9 +161,9 @@ TEST(MapSpriteTest, AnEnvSpriteAnimatesTenTimesASecondAndLoopsShortOfItsLastFram
 TEST(MapSpriteTest, GlowsAnimateWithAFramerateAndCyclersWithout) {
     const MapSprite still{.kind = SpriteClass::Glow};
     EXPECT_EQ(cs::frameAt(still, 10, nx::Seconds{1.0F}), 0.0F);
-    const MapSprite glow{.kind = SpriteClass::Glow, .framerate = 20.0F};
+    const MapSprite glow{.kind = SpriteClass::Glow, .framerate = nx::PerSecond{20.0F}};
     EXPECT_EQ(cs::frameAt(glow, 10, nx::Seconds{0.25F}), 4.0F) << "two thinks of two frames";
-    const MapSprite cycler{.kind = SpriteClass::Cycler, .framerate = 10.0F};
+    const MapSprite cycler{.kind = SpriteClass::Cycler, .framerate = nx::PerSecond{10.0F}};
     EXPECT_EQ(cs::frameAt(cycler, 3, nx::Seconds{0.25F}), 0.0F) << "frame 2 of the loop's 2: 0 again";
 }
 
