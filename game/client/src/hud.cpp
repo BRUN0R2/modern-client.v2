@@ -27,14 +27,14 @@ constexpr nx::render::ScreenColor kHudColor{.red = 255, .green = 160, .blue = 0,
 
 // Where the elements are, in pixels from the screen's edges (docs/12-ui-hud-and-console.md, section
 // 3.2: measured on the original at 640x480, 1280x720 and 1920x1080).
-constexpr std::int32_t kCrossX = 10;
-constexpr std::int32_t kHealthX = 36;          ///< Where the room of the health's digits starts.
-constexpr std::int32_t kHealthAbove = 40;      ///< The cross's top and the health's, from the bottom.
-constexpr std::int32_t kArmorAbove = 37;       ///< The suit's top and the armor's.
-constexpr std::int32_t kSuitAcross = 5;        ///< The suit is a fifth of the way across.
-constexpr std::int32_t kMoneyAbove = 75;       ///< The dollar's top and the money's.
-constexpr std::int32_t kMoneyRightMargin = 16; ///< Between the money's room and the right edge.
-constexpr std::int32_t kSuitAfterHealth = 32;  ///< Between the health's room and the suit at 640 wide.
+constexpr nx::Pixels kCrossX{10};
+constexpr nx::Pixels kHealthX{36};          ///< Where the room of the health's digits starts.
+constexpr nx::Pixels kHealthAbove{40};      ///< The cross's top and the health's, from the bottom.
+constexpr nx::Pixels kArmorAbove{37};       ///< The suit's top and the armor's.
+constexpr std::int32_t kSuitAcross = 5;     ///< The suit is a fifth of the way across.
+constexpr nx::Pixels kMoneyAbove{75};       ///< The dollar's top and the money's.
+constexpr nx::Pixels kMoneyRightMargin{16}; ///< Between the money's room and the right edge.
+constexpr nx::Pixels kSuitAfterHealth{32};  ///< Between the health's room and the suit at 640 wide.
 /// The digits of each number the original has room for.
 constexpr std::size_t kHealthRoom = 3;
 constexpr std::size_t kArmorRoom = 3;
@@ -42,19 +42,19 @@ constexpr std::size_t kMoneyRoom = 5;
 /// The armor that fills the suit.
 constexpr float kFullArmor = 100.0F;
 // The ammo (docs/12 section 3.2, measured with a Glock's 20 and 40).
-constexpr std::int32_t kAmmoPictureFromRight = 42; ///< The left of the weapon's `ammo` picture.
-constexpr std::int32_t kAmmoPictureAbove = 40;     ///< Its top, from the bottom.
-constexpr std::int32_t kAmmoAbove = 37;            ///< The digits' and the bar's top.
-constexpr std::int32_t kAmmoBarGap = 10;           ///< Between the bar and each number's room.
-constexpr std::int32_t kAmmoBarWidth = 2;
+constexpr nx::Pixels kAmmoPictureFromRight{42}; ///< The left of the weapon's `ammo` picture.
+constexpr nx::Pixels kAmmoPictureAbove{40};     ///< Its top, from the bottom.
+constexpr nx::Pixels kAmmoAbove{37};            ///< The digits' and the bar's top.
+constexpr nx::Pixels kAmmoBarGap{10};           ///< Between the bar and each number's room.
+constexpr nx::Pixels kAmmoBarWidth{2};
 constexpr std::size_t kAmmoRoom = 3;
 // The round's time (docs/12 section 3.2, measured at 640x480, 1024x768 and 1280x720).
-constexpr std::int32_t kTimerAbove = 37;       ///< The stopwatch's top and the digits'.
-constexpr std::size_t kMinutesRoom = 2;        ///< Its room ends in the middle.
-constexpr std::int32_t kSecondsFromMiddle = 6; ///< Where the seconds' digits start.
-constexpr std::int32_t kColonFromMiddle = 2;   ///< The colon's left.
-constexpr std::int32_t kColonTopAbove = 28;    ///< Its upper square's top, from the bottom.
-constexpr std::int32_t kColonBottomAbove = 22; ///< Its lower square's.
+constexpr nx::Pixels kTimerAbove{37};       ///< The stopwatch's top and the digits'.
+constexpr std::size_t kMinutesRoom = 2;     ///< Its room ends in the middle.
+constexpr nx::Pixels kSecondsFromMiddle{6}; ///< Where the seconds' digits start.
+constexpr nx::Pixels kColonFromMiddle{2};   ///< The colon's left.
+constexpr nx::Pixels kColonTopAbove{28};    ///< Its upper square's top, from the bottom.
+constexpr nx::Pixels kColonBottomAbove{22}; ///< Its lower square's.
 constexpr float kColonSide = 2.0F;
 /// The HUD's color, as the colon of the round's time is added in it.
 constexpr nx::render::ScreenColor kColonColor{
@@ -111,8 +111,8 @@ constexpr Fraction kMediumFactor{.numerator = 4, .denominator = 5};
     return static_cast<HudPicture>(std::to_underlying(HudPicture::Number0) + (digit - '0'));
 }
 
-[[nodiscard]] auto sizeOf(std::uint32_t pixels) noexcept -> std::int32_t {
-    return nx::narrow<std::int32_t>(pixels);
+[[nodiscard]] auto sizeOf(std::uint32_t pixels) noexcept -> nx::Pixels {
+    return nx::Pixels{nx::narrow<std::int32_t>(pixels)};
 }
 
 } // namespace
@@ -151,15 +151,15 @@ auto moneyDigits(nx::Money money) -> std::string {
 }
 
 auto layoutHud(const HudView& view, const HudSheet& sheet, nx::rhi::Extent2d size) -> std::vector<HudMark> {
-    const std::int32_t width = sizeOf(size.width);
-    const std::int32_t height = sizeOf(size.height);
-    const std::int32_t digitWidth = sizeOf(sheet[HudPicture::Number0].rect.width);
+    const nx::Pixels width = sizeOf(size.width);
+    const nx::Pixels height = sizeOf(size.height);
+    const nx::Pixels digitWidth = sizeOf(sheet[HudPicture::Number0].rect.width);
     std::vector<HudMark> marks;
     // Each number's digits aligned to the right of its room, which more digits widen; returns where
     // the room ends.
-    const auto addNumber = [&](std::string_view digits, std::int32_t x, std::int32_t y, std::size_t room) {
-        const std::int32_t end = x + (nx::narrow<std::int32_t>(std::max(digits.size(), room)) * digitWidth);
-        std::int32_t at = end - (nx::narrow<std::int32_t>(digits.size()) * digitWidth);
+    const auto addNumber = [&](std::string_view digits, nx::Pixels x, nx::Pixels y, std::size_t room) {
+        const nx::Pixels end = x + (nx::narrow<std::int32_t>(std::max(digits.size(), room)) * digitWidth);
+        nx::Pixels at = end - (nx::narrow<std::int32_t>(digits.size()) * digitWidth);
         for (const char digit : digits) {
             marks.push_back({.picture = digitPicture(digit), .x = at, .y = y});
             at += digitWidth;
@@ -167,12 +167,12 @@ auto layoutHud(const HudView& view, const HudSheet& sheet, nx::rhi::Extent2d siz
         return end;
     };
 
-    const std::int32_t healthY = height - kHealthAbove;
+    const nx::Pixels healthY = height - kHealthAbove;
     marks.push_back({.picture = HudPicture::Cross, .x = kCrossX, .y = healthY});
-    const std::int32_t healthEnd = addNumber(healthDigits(view.health), kHealthX, healthY, kHealthRoom);
+    const nx::Pixels healthEnd = addNumber(healthDigits(view.health), kHealthX, healthY, kHealthRoom);
 
-    const std::int32_t suitX = std::max(width / kSuitAcross, healthEnd + kSuitAfterHealth);
-    const std::int32_t armorY = height - kArmorAbove;
+    const nx::Pixels suitX = std::max(width / kSuitAcross, healthEnd + kSuitAfterHealth);
+    const nx::Pixels armorY = height - kArmorAbove;
     const bool wearsHelmet = view.armorKind == ArmorKind::KevlarAndHelmet;
     const HudPicture emptySuit = wearsHelmet ? HudPicture::HelmetEmpty : HudPicture::SuitEmpty;
     const HudPicture fullSuit = wearsHelmet ? HudPicture::HelmetFull : HudPicture::SuitFull;
@@ -182,15 +182,15 @@ auto layoutHud(const HudView& view, const HudSheet& sheet, nx::rhi::Extent2d siz
     const auto filled = static_cast<std::uint32_t>(static_cast<float>(suitHeight) * armor / kFullArmor);
     if (filled > 0) {
         const std::uint32_t cut = suitHeight - filled;
-        marks.push_back({.picture = fullSuit, .x = suitX, .y = armorY + sizeOf(cut), .cutTop = cut});
+        marks.push_back({.picture = fullSuit, .x = suitX, .y = armorY + sizeOf(cut), .cutTop = sizeOf(cut)});
     }
     std::ignore =
         addNumber(armorDigits(view.armor), suitX + sizeOf(sheet[emptySuit].rect.width), armorY, kArmorRoom);
 
     const std::string money = moneyDigits(view.money);
-    const std::int32_t moneyY = height - kMoneyAbove;
-    const std::int32_t moneyEnd = width - kMoneyRightMargin;
-    const std::int32_t moneyX =
+    const nx::Pixels moneyY = height - kMoneyAbove;
+    const nx::Pixels moneyEnd = width - kMoneyRightMargin;
+    const nx::Pixels moneyX =
         moneyEnd - (nx::narrow<std::int32_t>(std::max(money.size(), kMoneyRoom)) * digitWidth);
     marks.push_back({.picture = HudPicture::Dollar,
                      .x = moneyX - sizeOf(sheet[HudPicture::Dollar].rect.width),
@@ -212,16 +212,16 @@ auto hudAmmoOf(const Inventory& inventory, const WeaponCatalog& catalog) -> std:
 }
 
 auto layoutAmmo(const HudAmmo& ammo, const HudSheet& sheet, nx::rhi::Extent2d size) -> AmmoLayout {
-    const std::int32_t width = sizeOf(size.width);
-    const std::int32_t height = sizeOf(size.height);
-    const std::int32_t digitWidth = sizeOf(sheet[HudPicture::Number0].rect.width);
-    const std::int32_t y = height - kAmmoAbove;
+    const nx::Pixels width = sizeOf(size.width);
+    const nx::Pixels height = sizeOf(size.height);
+    const nx::Pixels digitWidth = sizeOf(sheet[HudPicture::Number0].rect.width);
+    const nx::Pixels y = height - kAmmoAbove;
     AmmoLayout layout{.pictureX = width - kAmmoPictureFromRight, .pictureY = height - kAmmoPictureAbove};
     // A number's digits, added to `marks`, aligned to the right of its room, which ends at `end` and
     // more digits widen to the left; returns where the room starts.
-    const auto addNumber = [&](std::vector<HudMark>& marks, std::uint32_t number, std::int32_t end) {
+    const auto addNumber = [&](std::vector<HudMark>& marks, std::uint32_t number, nx::Pixels end) {
         const std::string digits = std::to_string(number);
-        std::int32_t at = end - (nx::narrow<std::int32_t>(digits.size()) * digitWidth);
+        nx::Pixels at = end - (nx::narrow<std::int32_t>(digits.size()) * digitWidth);
         for (const char digit : digits) {
             marks.push_back({.picture = digitPicture(digit), .x = at, .y = y});
             at += digitWidth;
@@ -229,11 +229,11 @@ auto layoutAmmo(const HudAmmo& ammo, const HudSheet& sheet, nx::rhi::Extent2d si
         return end - (nx::narrow<std::int32_t>(std::max(digits.size(), kAmmoRoom)) * digitWidth);
     };
     std::vector<HudMark> reserve;
-    const std::int32_t reserveStart = addNumber(reserve, ammo.reserve, layout.pictureX);
-    const std::int32_t barX = reserveStart - kAmmoBarGap - kAmmoBarWidth;
-    layout.bar = nx::render::ScreenRect{.x = static_cast<float>(barX),
-                                        .y = static_cast<float>(y),
-                                        .width = static_cast<float>(kAmmoBarWidth),
+    const nx::Pixels reserveStart = addNumber(reserve, ammo.reserve, layout.pictureX);
+    const nx::Pixels barX = reserveStart - kAmmoBarGap - kAmmoBarWidth;
+    layout.bar = nx::render::ScreenRect{.x = static_cast<float>(barX.value()),
+                                        .y = static_cast<float>(y.value()),
+                                        .width = static_cast<float>(kAmmoBarWidth.value()),
                                         .height = static_cast<float>(sheet[HudPicture::Number0].rect.height)};
     std::ignore = addNumber(layout.digits, ammo.clip, barX - kAmmoBarGap);
     std::ranges::move(reserve, std::back_inserter(layout.digits));
@@ -241,12 +241,12 @@ auto layoutAmmo(const HudAmmo& ammo, const HudSheet& sheet, nx::rhi::Extent2d si
 }
 
 auto layoutTimer(WholeSeconds time, const HudSheet& sheet, nx::rhi::Extent2d size) -> TimerLayout {
-    const std::int32_t middle = sizeOf(size.width) / 2;
-    const std::int32_t height = sizeOf(size.height);
-    const std::int32_t y = height - kTimerAbove;
-    const std::int32_t digitWidth = sizeOf(sheet[HudPicture::Number0].rect.width);
+    const nx::Pixels middle = sizeOf(size.width) / 2;
+    const nx::Pixels height = sizeOf(size.height);
+    const nx::Pixels y = height - kTimerAbove;
+    const nx::Pixels digitWidth = sizeOf(sheet[HudPicture::Number0].rect.width);
     TimerLayout layout;
-    const auto addDigits = [&](std::string_view digits, std::int32_t x) {
+    const auto addDigits = [&](std::string_view digits, nx::Pixels x) {
         for (const char digit : digits) {
             layout.marks.push_back({.picture = digitPicture(digit), .x = x, .y = y});
             x += digitWidth;
@@ -254,16 +254,16 @@ auto layoutTimer(WholeSeconds time, const HudSheet& sheet, nx::rhi::Extent2d siz
     };
     const auto wholeMinutes = std::chrono::duration_cast<WholeMinutes>(time);
     const std::string minutes = std::to_string(wholeMinutes.count());
-    const std::int32_t roomStart =
+    const nx::Pixels roomStart =
         middle - (nx::narrow<std::int32_t>(std::max(minutes.size(), kMinutesRoom)) * digitWidth);
     layout.marks.push_back({.picture = HudPicture::Stopwatch,
                             .x = roomStart - sizeOf(sheet[HudPicture::Stopwatch].rect.width),
                             .y = y});
     addDigits(minutes, middle - (nx::narrow<std::int32_t>(minutes.size()) * digitWidth));
     addDigits(std::format("{:02}", (time - wholeMinutes).count()), middle + kSecondsFromMiddle);
-    const auto square = [&](std::int32_t above) {
-        return nx::render::ScreenRect{.x = static_cast<float>(middle + kColonFromMiddle),
-                                      .y = static_cast<float>(height - above),
+    const auto square = [&](nx::Pixels above) {
+        return nx::render::ScreenRect{.x = static_cast<float>((middle + kColonFromMiddle).value()),
+                                      .y = static_cast<float>((height - above).value()),
                                       .width = kColonSide,
                                       .height = kColonSide};
     };
@@ -436,11 +436,12 @@ void Hud::layOut(std::vector<nx::render::ScreenQuad>& quads, const HudView& view
                  const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const {
     const auto addMark = [&](const HudMark& mark) {
         nx::assets::SpriteRect source = m_sheet[mark.picture].rect;
-        source.y += mark.cutTop;
-        source.height -= mark.cutTop;
-        quads.push_back(nx::render::spriteQuad(m_images[m_imageOf[mark.picture]], source,
-                                               static_cast<float>(mark.x), static_cast<float>(mark.y),
-                                               kHudColor, nx::render::ScreenBlend::Additive));
+        const auto cut = nx::narrow<std::uint32_t>(mark.cutTop.value());
+        source.y += cut;
+        source.height -= cut;
+        quads.push_back(nx::render::spriteQuad(
+            m_images[m_imageOf[mark.picture]], source, static_cast<float>(mark.x.value()),
+            static_cast<float>(mark.y.value()), kHudColor, nx::render::ScreenBlend::Additive));
     };
     std::ranges::for_each(layoutHud(view, m_sheet, size), addMark);
     if (view.roundTime) {
@@ -459,8 +460,8 @@ void Hud::layOut(std::vector<nx::render::ScreenQuad>& quads, const HudView& view
         if (const auto found = m_ammoPictures.find(view.ammo->ammo); found != m_ammoPictures.end()) {
             const HudSpritePicture& picture = found->second;
             quads.push_back(nx::render::spriteQuad(
-                m_images[picture.image], picture.rect, static_cast<float>(ammo.pictureX),
-                static_cast<float>(ammo.pictureY), kHudColor, nx::render::ScreenBlend::Additive));
+                m_images[picture.image], picture.rect, static_cast<float>(ammo.pictureX.value()),
+                static_cast<float>(ammo.pictureY.value()), kHudColor, nx::render::ScreenBlend::Additive));
         }
     }
     if (!view.crosshairDistance) {
