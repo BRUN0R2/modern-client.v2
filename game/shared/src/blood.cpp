@@ -71,7 +71,7 @@ constexpr std::uint32_t kByteTop = 255;
     return isWithinPalette && look.streamParticles > 0 && look.splashPerSpeed > 0 &&
            isPositive(look.streamLife.count()) && isPositive(look.splashLife.count()) &&
            std::isfinite(look.firstDip) && std::isfinite(look.dipStep) &&
-           std::isfinite(look.firstSplashDip) && std::isfinite(look.splashSpread) &&
+           std::isfinite(look.firstSplashDip) && std::isfinite(look.splashSpread.value()) &&
            look.speedStep >= nx::UnitsPerSecond{} && look.streamGravity >= nx::Scale{} &&
            look.splashGravity >= nx::Scale{} && look.companionJitter >= nx::HammerUnits{};
 }
