@@ -46,11 +46,11 @@ constexpr std::size_t kSmallestFoundBatch = 256;
         const nx::Aabb shown = shownBoxOf({}, std::array{sequence.bounds});
         played[index] = {.poses = poses[index],
                          .frameCount = sequence.frameCount,
-                         .fps = sequence.fps,
+                         .fps = nx::PerSecond{sequence.fps},
                          .isLooping = sequence.isLooping,
-                         .reach = shown.max.x,
-                         .lowest = shown.min.z,
-                         .highest = shown.max.z};
+                         .reach = nx::HammerUnits{shown.max.x},
+                         .lowest = nx::HammerUnits{shown.min.z},
+                         .highest = nx::HammerUnits{shown.max.z}};
     }
     const std::vector<std::int32_t> parents =
         view.bones() | std::views::transform([](const nx::assets::StudioBone& bone) {
@@ -215,13 +215,13 @@ void EntityModels::writeBodies(const EntityCatalog& catalog, const ShownCrowd& c
             const float sharePerTick = 1.0F / static_cast<float>(state.ticksPerMove);
             room.bodies[place++] = {
                 .previousOrigin = state.movedFrom + offset,
-                .yaw = nx::toRadians(state.angles.yaw).value(),
+                .yaw = nx::toRadians(state.angles.yaw),
                 .origin = origin,
                 .model = type.model.value,
                 .sequence = state.animation.sequence.value,
                 .frame = state.animation.frame,
-                .advancedAgo = crowd.lastTick.since(state.animation.advancedAt, crowd.rate).count(),
-                .framerate = state.animation.framerate,
+                .advancedAgo = crowd.lastTick.since(state.animation.advancedAt, crowd.rate),
+                .framerate = nx::Scale{state.animation.framerate},
                 .lightDirection = lit.light.direction,
                 .ambient = lit.light.ambient,
                 .lightColor = lit.light.color,
