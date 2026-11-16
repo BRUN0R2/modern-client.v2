@@ -622,7 +622,7 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
             return fail(StudioError::GpuFailed, std::move(nodes.error()));
         }
         renderer.m_crowdNodes = std::move(*nodes);
-        renderer.m_crowdSlots.resize(rhi::kMaxFramesInFlight);
+        renderer.crowdSlots.emplace(rhi::kMaxFramesInFlight);
     }
     // A material without an image is white; a renderer without a sky or probes reflects none.
     constexpr std::array kWhite{assets::kFullChannel, assets::kFullChannel, assets::kFullChannel,
@@ -661,11 +661,8 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
         return fail(StudioError::GpuFailed, std::move(noProbes.error()));
     }
     renderer.m_noProbes = std::move(*noProbes);
-    renderer.m_frameSlots.reserve(rhi::kMaxFramesInFlight);
-    for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
-        if (auto reserved = renderer.reserve(renderer.m_frameSlots.emplace_back(), kFirstBoneCapacity,
-                                             kFirstInstanceCapacity);
-            !reserved) {
+    for (StudioFrameSlot& slot : renderer.frameSlots) {
+        if (auto reserved = renderer.reserve(slot, kFirstBoneCapacity, kFirstInstanceCapacity); !reserved) {
             return fail(StudioError::GpuFailed, std::move(reserved.error()));
         }
     }
@@ -1035,7 +1032,7 @@ void StudioRenderer::setProbes(rhi::TextureHandle probes, std::uint32_t mipLevel
 
 auto StudioRenderer::loadCrowdModel(rhi::CommandList& commands, const CrowdModelDesc& desc)
     -> Result<void, StudioError> {
-    expects(!m_crowdSlots.empty(), "StudioRenderer::loadCrowdModel: a renderer with the crowd's shader");
+    expects(drawsCrowds(), "StudioRenderer::loadCrowdModel: a renderer with the crowd's shader");
     const StudioModel& model = desc.model.get();
     expects(desc.parents.size() == model.boneCount(), "StudioRenderer::loadCrowdModel: each bone's parent");
     m_crowdModels.push_back(
@@ -1078,7 +1075,7 @@ auto StudioRenderer::loadCrowdModel(rhi::CommandList& commands, const CrowdModel
 
 auto StudioRenderer::setCrowdWorld(rhi::CommandList& commands, const assets::BspView& map)
     -> Result<void, StudioError> {
-    expects(!m_crowdSlots.empty(), "StudioRenderer::setCrowdWorld: a renderer with the crowd's shader");
+    expects(drawsCrowds(), "StudioRenderer::setCrowdWorld: a renderer with the crowd's shader");
     if (map.models().empty() || map.nodes().empty()) {
         return {};
     }
@@ -1103,9 +1100,11 @@ auto StudioRenderer::setCrowdWorld(rhi::CommandList& commands, const assets::Bsp
 }
 
 auto StudioRenderer::crowdRoom(std::size_t bodies, std::uint64_t tick) -> Result<CrowdRoom, StudioError> {
-    expects(!m_crowdSlots.empty(), "StudioRenderer::crowdRoom: a renderer with the crowd's shader");
-    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    StudioCrowdSlot& slot = m_crowdSlots[m_crowdFrames++ % m_crowdSlots.size()];
+    expects(drawsCrowds(), "StudioRenderer::crowdRoom: a renderer with the crowd's shader");
+    if (!crowdSlots) {
+        return CrowdRoom{}; // the handler let execution continue ("observe"): room for none
+    }
+    StudioCrowdSlot& slot = crowdSlots->advance();
     auto grown = growUploadBuffer(*m_device, "studio.crowdBodies", rhi::BufferUsage::Storage, slot.bodies,
                                   slot.bodyCapacity, std::max<std::size_t>(bodies, 1), sizeof(CrowdBody));
     if (!grown) {
@@ -1223,9 +1222,13 @@ auto StudioRenderer::bindCrowd(StudioCrowdSlot& slot) -> Result<void, rhi::RhiEr
 
 auto StudioRenderer::recordCrowd(rhi::CommandList& commands, const CrowdFrame& frame)
     -> Result<void, StudioError> {
+    expects(drawsCrowds(), "StudioRenderer::recordCrowd: a renderer with the crowd's shader");
+    if (!crowdSlots) {
+        return {}; // the handler let execution continue ("observe"): no crowd to record
+    }
     m_crowdCalls.clear();
     m_crowdMeshCalls.clear();
-    StudioCrowdSlot& slot = m_crowdSlots[(m_crowdFrames - 1) % m_crowdSlots.size()];
+    StudioCrowdSlot& slot = crowdSlots->prepared();
     // Each model's bodies have room for all of them to show, one after another.
     std::vector<CrowdModelEntry> entries(m_crowdModels.size());
     std::vector<CrowdDrawTemplate> templates;
@@ -1342,7 +1345,7 @@ auto StudioRenderer::reserveCrowdGroup(StudioFrameSlot& slot) -> Result<void, rh
 }
 
 void StudioRenderer::drawCrowd(rhi::CommandList& commands) const {
-    const StudioFrameSlot& slot = preparedSlot();
+    const StudioFrameSlot& slot = frameSlots.prepared();
     for (const StudioModelCall& call : m_crowdCalls) {
         const std::span<const StudioMeshCall> meshes =
             std::span{m_crowdMeshCalls}.subspan(call.firstMesh, call.meshCount);
@@ -1367,8 +1370,7 @@ void StudioRenderer::drawCrowd(rhi::CommandList& commands) const {
 }
 
 auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioError> {
-    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    StudioFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    StudioFrameSlot& slot = frameSlots.advance();
     std::size_t boneCount = 0;
     for (const StudioInstance& instance : frame.instances) {
         expects(instance.bones.size() == instance.model.get().boneCount(),
@@ -1549,11 +1551,6 @@ auto StudioRenderer::callOf(const StudioInstance& instance, StudioBlending blend
     return call;
 }
 
-auto StudioRenderer::preparedSlot() const noexcept -> const StudioFrameSlot& {
-    expects(m_drawCount > 0, "StudioRenderer: prepared before it is drawn");
-    return m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
-}
-
 void StudioRenderer::drawModel(rhi::CommandList& commands, std::size_t index) const {
     const StudioModelCall& call = m_modelCalls[index];
     const std::span<const StudioMeshCall> meshes =
@@ -1561,7 +1558,7 @@ void StudioRenderer::drawModel(rhi::CommandList& commands, std::size_t index) co
     if (meshes.empty()) {
         return;
     }
-    const StudioFrameSlot& slot = preparedSlot();
+    const StudioFrameSlot& slot = frameSlots.prepared();
     // The frame's group binds with a pipeline set.
     MeshKind bound = meshes.front().kind;
     commands.setPipeline(m_pipelines[call.facing][call.blending][bound].get());

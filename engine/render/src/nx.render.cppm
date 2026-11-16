@@ -19,6 +19,7 @@ export import :renderMode;
 export import :blendedOrder;
 export import :surface;
 export import :upload;
+export import :frameSlots;
 export import :light;
 export import :decals;
 export import :world;

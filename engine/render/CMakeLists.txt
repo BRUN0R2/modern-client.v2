@@ -16,6 +16,7 @@ nxAddModuleLibrary(nxRender
         src/blendedOrder.cppm
         src/surface.cppm
         src/upload.cppm
+        src/frameSlots.cppm
         src/light.cppm
         src/decals.cppm
         src/world.cppm

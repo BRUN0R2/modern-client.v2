@@ -15,6 +15,7 @@ import nx.core;
 import nx.rhi;
 import nx.assets;
 import :gamma;
+import :frameSlots;
 
 namespace nx::render {
 
@@ -261,7 +262,7 @@ public:
     [[nodiscard]] auto draw(rhi::CommandList& commands, const ScreenDraw& draw) -> Result<void, ScreenError>;
 
 private:
-    inline explicit ScreenRenderer(rhi::Device& device) noexcept : m_device{&device} {}
+    inline explicit ScreenRenderer(rhi::Device& device) : m_device{&device} {}
     /// The shader, the bind group layouts, a sampler for each filter, and a pipeline for each way a
     /// rectangle is drawn, with a picture and with a color alone.
     [[nodiscard]] auto createPipelines(const ScreenRendererDesc& desc) -> Result<void, rhi::RhiError>;
@@ -281,10 +282,9 @@ private:
     EnumArray<ScreenFilter, rhi::OwnedSampler> m_samplers;
     EnumArray<ScreenBlend, rhi::OwnedRenderPipeline> m_picturePipelines;
     EnumArray<ScreenBlend, rhi::OwnedRenderPipeline> m_colorPipelines;
-    std::vector<ScreenFrameSlot> m_frameSlots;
+    FrameSlots<ScreenFrameSlot> frameSlots{rhi::kMaxFramesInFlight};
     std::vector<ScreenBatch> m_batches; ///< Of the last prepare.
     rhi::Extent2d m_targetSize{};       ///< Of the last prepare.
-    std::uint64_t m_drawCount = 0;      ///< Prepares so far: the frame slot of the next is this one's.
 };
 
 } // namespace nx::render
