@@ -34,6 +34,10 @@ function(rookTargetDefaults target)
             -Wshadow -Wnon-virtual-dtor -Woverloaded-virtual
             -Wold-style-cast -Wcast-align -Wnull-dereference
             -Wformat=2 -Wimplicit-fallthrough
+            # GCC's -Wshadow refuses a constructor parameter named like a member of its class, Clang's
+            # only with this group: without it the Clang build passes what the GCC build refuses. The
+            # other groups of -Wshadow-all stay off, as each also refuses what GCC accepts.
+            $<$<CXX_COMPILER_ID:Clang>:-Wshadow-field-in-constructor>
             $<$<BOOL:${ROOK_WARNINGS_AS_ERRORS}>:-Werror>)
     endif()
 endfunction()

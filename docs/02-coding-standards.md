@@ -558,6 +558,9 @@ if (m_budgetWarnings.allow()) {
   are listed in `.clang-tidy` with a justification. Local analysis uses a Clang build with
   modules; its automated CI gate remains planned ([18](18-testing-and-quality.md#sanitizers-and-analysis)).
 - Warnings as errors (`-Werror` / `/WX`) in all of the project's own targets.
+- The same warnings on GCC and Clang (`nxTargetDefaults`, `cmake/nxTargets.cmake`): where a flag
+  refuses less on Clang than on GCC, Clang also gets each group that refuses more of GCC's cases
+  without refusing what GCC accepts ([17 §2.2](17-build-and-tools.md#22-known-quirks), `-Wshadow`).
 - Sanitizers in CI: TSan on the tests of every pull request and of every push to `main` (GCC,
   `tsan-linux-gcc`); ASan + UBSan and MSan arrive with Clang in CI (planned,
   [17 §7](17-build-and-tools.md#7-continuous-integration)).
