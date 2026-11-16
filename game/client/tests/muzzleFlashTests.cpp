@@ -78,19 +78,19 @@ TEST(MuzzleFlashTest, AnOriginalEventsNumberChoosesTheSpriteAndItsSize) {
     // The AK-47's 22: the third sprite, two tenths; the USP's 11: the second, a tenth; 0, the first, half.
     const cs::MuzzleFlashStyle rifle = cs::muzzleFlashStyleOf("22", std::nullopt);
     EXPECT_EQ(rifle.sprite, "sprites/muzzleflash3.spr");
-    EXPECT_FLOAT_EQ(rifle.scale, 0.2F);
+    EXPECT_FLOAT_EQ(rifle.scale.value(), 0.2F);
     EXPECT_EQ(rifle.firstFrame, std::nullopt) << "a frame at random";
-    EXPECT_FLOAT_EQ(rifle.frameRate, 0.0F) << "held";
+    EXPECT_EQ(rifle.frameRate, cs::FlashFrameRate{}) << "held";
     EXPECT_FLOAT_EQ(rifle.time.count(), 0.01F);
     EXPECT_FLOAT_EQ(rifle.roll.value(), 359.0F);
     EXPECT_FLOAT_EQ(rifle.brightness, 1.0F);
     EXPECT_FALSE(rifle.light.has_value());
     const cs::MuzzleFlashStyle pistol = cs::muzzleFlashStyleOf("11", std::nullopt);
     EXPECT_EQ(pistol.sprite, "sprites/muzzleflash2.spr");
-    EXPECT_FLOAT_EQ(pistol.scale, 0.1F);
+    EXPECT_FLOAT_EQ(pistol.scale.value(), 0.1F);
     const cs::MuzzleFlashStyle none = cs::muzzleFlashStyleOf("0", std::nullopt);
     EXPECT_EQ(none.sprite, "sprites/muzzleflash1.spr");
-    EXPECT_FLOAT_EQ(none.scale, 0.5F);
+    EXPECT_EQ(none.scale, nx::Scale{0.5F});
     EXPECT_FLOAT_EQ(none.roll.value(), 20.0F) << "a rifle's sprite rolls 20 degrees at most";
     EXPECT_EQ(cs::muzzleFlashStyleOf("not a number", std::nullopt).sprite, "sprites/muzzleflash1.spr");
     EXPECT_EQ(cs::muzzleFlashStyleOf("-3", std::nullopt).sprite, "sprites/muzzleflash1.spr");
@@ -110,7 +110,7 @@ TEST(MuzzleFlashTest, AnOriginalFlashShowsAFrameAtRandomRolledAtRandomForAHundre
     const cs::MuzzleFlash flash = shown(rifle, 3, nx::Seconds{5.0F}, random);
     EXPECT_EQ(flash.sprite, 4U);
     EXPECT_EQ(flash.anchor, kAnchor);
-    EXPECT_FLOAT_EQ(flash.scale, 0.1F);
+    EXPECT_FLOAT_EQ(flash.scale.value(), 0.1F);
     EXPECT_FLOAT_EQ(flash.until.count(), 5.01F);
     EXPECT_EQ(flash.frameAt(nx::Seconds{5.0F}), flash.firstFrame);
     EXPECT_EQ(flash.frameAt(nx::Seconds{5.009F}), flash.firstFrame) << "held";
@@ -124,9 +124,9 @@ TEST(MuzzleFlashTest, AnOriginalFlashShowsAFrameAtRandomRolledAtRandomForAHundre
 TEST(MuzzleFlashTest, CounterStrikeOnlinesKeysStyleItsFlash) {
     const cs::MuzzleFlashStyle drakar = cs::muzzleFlashStyleOf(kDrakarOptions, std::nullopt);
     EXPECT_EQ(drakar.sprite, "sprites/muzzleflash341.spr");
-    EXPECT_FLOAT_EQ(drakar.scale, 0.16F);
+    EXPECT_FLOAT_EQ(drakar.scale.value(), 0.16F);
     EXPECT_EQ(drakar.firstFrame, 0U);
-    EXPECT_FLOAT_EQ(drakar.frameRate, 30.0F);
+    EXPECT_EQ(drakar.frameRate, cs::FlashFrameRate{30.0F});
     EXPECT_FLOAT_EQ(drakar.time.count(), 999.0F);
     EXPECT_FLOAT_EQ(drakar.roll.value(), 20.0F) << "rolled at first as the original's of 0";
     EXPECT_FLOAT_EQ(drakar.rollRate.value(), 60.0F) << "R2: 2 degrees a frame of its 30 a second";
@@ -135,8 +135,8 @@ TEST(MuzzleFlashTest, CounterStrikeOnlinesKeysStyleItsFlash) {
     // A key the options lack, or whose value is not a number of 0 or more, is the original's of 0.
     const cs::MuzzleFlashStyle partial = cs::muzzleFlashStyleOf("#S0.3  Pfast T-1 U Iten F2", std::nullopt);
     EXPECT_EQ(partial.sprite, "sprites/muzzleflash1.spr");
-    EXPECT_FLOAT_EQ(partial.scale, 0.3F);
-    EXPECT_FLOAT_EQ(partial.frameRate, 0.0F);
+    EXPECT_FLOAT_EQ(partial.scale.value(), 0.3F);
+    EXPECT_EQ(partial.frameRate, cs::FlashFrameRate{});
     EXPECT_FLOAT_EQ(partial.time.count(), 0.01F);
     EXPECT_EQ(partial.firstFrame, 2U);
     EXPECT_FLOAT_EQ(partial.rollRate.value(), 0.0F) << "no R: it does not turn";
@@ -192,9 +192,9 @@ TEST(MuzzleFlashTest, AWeaponsLookIsOverItsEventsStyle) {
                                    .light = light};
     const cs::MuzzleFlashStyle style = cs::muzzleFlashStyleOf(kDrakarOptions, look);
     EXPECT_EQ(style.sprite, "sprites/drakarFlash.spr");
-    EXPECT_FLOAT_EQ(style.scale, 0.16F) << "the event's";
+    EXPECT_FLOAT_EQ(style.scale.value(), 0.16F) << "the event's";
     EXPECT_EQ(style.firstFrame, 2U);
-    EXPECT_FLOAT_EQ(style.frameRate, 0.0F) << "held";
+    EXPECT_EQ(style.frameRate, cs::FlashFrameRate{}) << "held";
     EXPECT_FLOAT_EQ(style.time.count(), 999.0F) << "the event's";
     EXPECT_FLOAT_EQ(style.roll.value(), 0.0F);
     EXPECT_FLOAT_EQ(style.rollRate.value(), -30.0F) << "over the events' R";
@@ -205,7 +205,7 @@ TEST(MuzzleFlashTest, AWeaponsLookIsOverItsEventsStyle) {
     // Over the original's too: its random frame and its time stay when the look does not give them.
     const cs::MuzzleFlashStyle original = cs::muzzleFlashStyleOf("22", cs::MuzzleFlashLook{.scale = 0.4F});
     EXPECT_EQ(original.sprite, "sprites/muzzleflash3.spr");
-    EXPECT_FLOAT_EQ(original.scale, 0.4F);
+    EXPECT_FLOAT_EQ(original.scale.value(), 0.4F);
     EXPECT_EQ(original.firstFrame, std::nullopt);
     EXPECT_FLOAT_EQ(original.time.count(), 0.01F);
 }

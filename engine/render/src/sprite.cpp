@@ -180,9 +180,10 @@ struct QuadShade {
 
 /// Appends the quad of `image` on `axes`, `scale` times its size, shaded as `shade` (R_DrawSpriteQuad).
 void addQuad(std::vector<SpriteVertex>& vertices, const SpriteImageDraw& image, const QuadAxes& axes,
-             float scale, const QuadShade& shade) {
+             Scale scale, const QuadShade& shade) {
     const auto corner = [&](float along, float across, float u, float v) {
-        const Vec3 point = axes.origin + (axes.up * (along * scale)) + (axes.right * (across * scale));
+        const Vec3 point =
+            axes.origin + (axes.up * (along * scale.value())) + (axes.right * (across * scale.value()));
         return SpriteVertex{.position = point,
                             .u = u,
                             .v = v,
@@ -455,7 +456,7 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
         if (model.m_frames.empty()) {
             continue;
         }
-        float scale = instance.scale > 0.0F ? instance.scale : 1.0F;
+        Scale scale = instance.scale > Scale{} ? instance.scale : Scale{1.0F};
         float blend = isSolid(instance.mode) ? 1.0F : static_cast<float>(instance.amount) / kChannelTop;
         if (!isSolid(instance.mode) && instance.amount == 0) {
             continue; // invisible (R_AddEntity)
@@ -476,9 +477,9 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
                 continue;
             }
         } else {
-            const Vec3 half{.x = model.m_halfWidth * scale,
-                            .y = model.m_halfWidth * scale,
-                            .z = model.m_halfHeight * scale};
+            const Vec3 half{.x = model.m_halfWidth * scale.value(),
+                            .y = model.m_halfWidth * scale.value(),
+                            .z = model.m_halfHeight * scale.value()};
             const Aabb box = Aabb::around(instance.origin, half);
             if (std::ranges::any_of(
                     frustum, [&box](const Plane& plane) { return plane.sideOf(box) == PlaneSide::Back; })) {
@@ -521,10 +522,10 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
                 SpriteQuadCall{.pipeline = m_lightPipeline.get(), .image = image.group.get()});
         }
         if (!isSolid(instance.mode)) {
-            m_blendedDraws.push_back(
-                BlendedDraw{.distance = lengthSquared(draw.camera.position - instance.origin),
-                            .mode = instance.mode,
-                            .index = narrow<std::uint32_t>(m_spriteCalls.size())});
+            m_blendedDraws.push_back(BlendedDraw{
+                .distance = SquaredDistance{lengthSquared(draw.camera.position - instance.origin)},
+                .mode = instance.mode,
+                .index = narrow<std::uint32_t>(m_spriteCalls.size())});
         }
         m_spriteCalls.push_back(SpriteCall{.firstQuad = firstQuad,
                                            .quadCount = narrow<std::uint32_t>(m_quadCalls.size()) - firstQuad,
