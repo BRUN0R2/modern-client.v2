@@ -153,10 +153,10 @@ private:
         DecalLife life = DecalLife::Temporary;
     };
     /// A shot as the walk of its model's tree carries it: its scale held, and how far the walk looks
-    /// (half the image's larger side, in texels).
+    /// (half the image's larger side, a texel a unit).
     struct Walk {
         DecalShot shot{};
-        float reach = 0.0F;
+        HammerUnits reach{};
     };
 
     void walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& stamped);
