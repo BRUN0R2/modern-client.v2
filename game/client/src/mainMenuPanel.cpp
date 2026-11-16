@@ -27,8 +27,10 @@ constexpr ScreenColor kBackgroundVeil{.red = 6, .green = 7, .blue = 9, .alpha = 
 
 constexpr nx::EnumArray<MainMenuFont, MenuFontSize> kFontSizes{
     nx::EnumArray<MainMenuFont, MenuFontSize>::Storage{
-        MenuFontSize{.units = 84.0F, .isStrong = true}, MenuFontSize{.units = 34.0F, .isStrong = true},
-        MenuFontSize{.units = 26.0F, .isStrong = false}, MenuFontSize{.units = 18.0F, .isStrong = false}}};
+        MenuFontSize{.line = MenuUnits{84}, .isStrong = true},
+        MenuFontSize{.line = MenuUnits{34}, .isStrong = true},
+        MenuFontSize{.line = MenuUnits{26}, .isStrong = false},
+        MenuFontSize{.line = MenuUnits{18}, .isStrong = false}}};
 
 /// The game's name, the same in every language.
 constexpr std::string_view kGameName = "COUNTER-STRIKE";
@@ -59,18 +61,18 @@ constexpr nx::EnumArray<OptionCategory, std::string OptionsTexts::*> kTabTexts{
 }
 
 // In the design's units: what the layout leaves to what draws in it.
-constexpr std::int32_t kRuleGap = 14;
-constexpr std::int32_t kRuleWide = 72;
-constexpr std::int32_t kRuleTall = 4;
-constexpr std::int32_t kAccentBar = 4;
-constexpr std::int32_t kItemInset = 24;
-constexpr std::int32_t kHintKeyGap = 8;
-constexpr std::int32_t kHintGap = 28;
-constexpr std::int32_t kRowInset = 16;
-constexpr std::int32_t kTabRule = 2;         ///< Under the tab shown.
-constexpr std::int32_t kMapsNameGap = 6;     ///< From the name of the list to its first row.
-constexpr std::int32_t kRowButtonInset = 16; ///< From a row's button's sides to its text.
-constexpr std::int32_t kRowButtonMargin = 6; ///< From a row's top and foot to its button's.
+constexpr MenuUnits kRuleGap{14};
+constexpr MenuUnits kRuleWide{72};
+constexpr MenuUnits kRuleTall{4};
+constexpr MenuUnits kAccentBar{4};
+constexpr MenuUnits kItemInset{24};
+constexpr MenuUnits kHintKeyGap{8};
+constexpr MenuUnits kHintGap{28};
+constexpr MenuUnits kRowInset{16};
+constexpr MenuUnits kTabRule{2};         ///< Under the tab shown.
+constexpr MenuUnits kMapsNameGap{6};     ///< From the name of the list to its first row.
+constexpr MenuUnits kRowButtonInset{16}; ///< From a row's button's sides to its text.
+constexpr MenuUnits kRowButtonMargin{6}; ///< From a row's top and foot to its button's.
 /// What the room left is divided by to put a thing halfway into it.
 constexpr std::int32_t kMiddleDivisor = 2;
 /// The sides an inset or a margin is left on: left and right, or top and foot.

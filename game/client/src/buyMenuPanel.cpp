@@ -34,9 +34,11 @@ constexpr std::uint8_t kTabPicture = 128;
 
 constexpr nx::EnumArray<BuyMenuFont, MenuFontSize> kFontSizes{
     nx::EnumArray<BuyMenuFont, MenuFontSize>::Storage{
-        MenuFontSize{.units = 56.0F, .isStrong = true}, MenuFontSize{.units = 32.0F, .isStrong = false},
-        MenuFontSize{.units = 25.0F, .isStrong = true}, MenuFontSize{.units = 21.0F, .isStrong = false},
-        MenuFontSize{.units = 16.0F, .isStrong = false}}};
+        MenuFontSize{.line = MenuUnits{56}, .isStrong = true},
+        MenuFontSize{.line = MenuUnits{32}, .isStrong = false},
+        MenuFontSize{.line = MenuUnits{25}, .isStrong = true},
+        MenuFontSize{.line = MenuUnits{21}, .isStrong = false},
+        MenuFontSize{.line = MenuUnits{16}, .isStrong = false}}};
 
 // What it writes.
 constexpr std::string_view kMenuName = "BUY";
@@ -68,32 +70,32 @@ constexpr nx::Seconds kNoticeLife{2.0F};
 constexpr nx::Seconds kNoticeFade{0.2F};
 
 // In the design's units: what the layout leaves to what draws in it.
-constexpr std::int32_t kAccentBar = 3;
-constexpr std::int32_t kKeyBadge = 25;
-constexpr std::int32_t kInsetLeft = 14;
-constexpr std::int32_t kInsetRight = 10;
-constexpr std::int32_t kCellInset = 16;
-constexpr std::int32_t kTextGap = 12;
-constexpr std::int32_t kBaselineOverTrack = 14;
-constexpr std::int32_t kHeaderTextGap = 18;
-constexpr std::int32_t kTabPictureWide = 72;
-constexpr std::int32_t kTabPictureTall = 40;
-constexpr std::int32_t kDetailInset = 20;
-constexpr std::int32_t kDetailTop = 18;
-constexpr std::int32_t kStatGap = 16;
-constexpr std::int32_t kStatBarGap = 5;
-constexpr std::int32_t kStatBarTall = 3;
-constexpr std::int32_t kSectionGap = 22;
-constexpr std::int32_t kButtonInset = 16;
-constexpr std::int32_t kNoteGap = 10;
-constexpr std::int32_t kTilePictureWide = 96;
-constexpr std::int32_t kTilePictureTall = 60;
-constexpr std::int32_t kHintGap = 16;
-constexpr std::int32_t kBadgeTextGap = 7;
-constexpr std::int32_t kNoticeOverMenu = 54;
-constexpr std::int32_t kNoticeOverGame = 300;
-constexpr std::int32_t kNoticePadX = 18;
-constexpr std::int32_t kNoticePadY = 8;
+constexpr MenuUnits kAccentBar{3};
+constexpr MenuUnits kKeyBadge{25};
+constexpr MenuUnits kInsetLeft{14};
+constexpr MenuUnits kInsetRight{10};
+constexpr MenuUnits kCellInset{16};
+constexpr MenuUnits kTextGap{12};
+constexpr MenuUnits kBaselineOverTrack{14};
+constexpr MenuUnits kHeaderTextGap{18};
+constexpr MenuUnits kTabPictureWide{72};
+constexpr MenuUnits kTabPictureTall{40};
+constexpr MenuUnits kDetailInset{20};
+constexpr MenuUnits kDetailTop{18};
+constexpr MenuUnits kStatGap{16};
+constexpr MenuUnits kStatBarGap{5};
+constexpr MenuUnits kStatBarTall{3};
+constexpr MenuUnits kSectionGap{22};
+constexpr MenuUnits kButtonInset{16};
+constexpr MenuUnits kNoteGap{10};
+constexpr MenuUnits kTilePictureWide{96};
+constexpr MenuUnits kTilePictureTall{60};
+constexpr MenuUnits kHintGap{16};
+constexpr MenuUnits kBadgeTextGap{7};
+constexpr MenuUnits kNoticeOverMenu{54};
+constexpr MenuUnits kNoticeOverGame{300};
+constexpr MenuUnits kNoticePadX{18};
+constexpr MenuUnits kNoticePadY{8};
 /// What the room left is divided by to put a thing halfway into it.
 constexpr std::int32_t kMiddleDivisor = 2;
 /// A padding on each side of the notice: left and right, top and bottom.
@@ -118,7 +120,7 @@ public:
     [[nodiscard]] inline auto accent() const noexcept -> ScreenColor { return teamAccent; }
     [[nodiscard]] inline auto onAccent() const noexcept -> ScreenColor { return onTeamAccent; }
     [[nodiscard]] inline auto layout() const noexcept -> const BuyMenuLayout& { return *design; }
-    [[nodiscard]] inline auto px(std::int32_t units) const noexcept -> nx::Pixels {
+    [[nodiscard]] inline auto px(MenuUnits units) const noexcept -> nx::Pixels {
         return design->pixels(units);
     }
 
