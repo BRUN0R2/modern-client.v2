@@ -20,16 +20,15 @@ constexpr std::int32_t kStrongWeight = 600;
 } // namespace
 
 MenuScale::MenuScale(std::uint32_t screenHeight) noexcept
-    : scale{static_cast<float>(screenHeight) / kMenuDesignHeight} {}
+    : scale{static_cast<float>(screenHeight) / static_cast<float>(kMenuDesignHeight.value())} {}
 
-auto MenuScale::pixels(std::int32_t units) const noexcept -> nx::Pixels {
+auto MenuScale::pixels(MenuUnits units) const noexcept -> nx::Pixels {
     // A part of the design of some size shows, however small the screen.
     constexpr nx::Pixels kLeastShown{1};
-    return units > 0
-               ? std::max(
-                     nx::Pixels{nx::narrow<std::int32_t>(std::lround(static_cast<float>(units) * scale))},
-                     kLeastShown)
-               : nx::Pixels{};
+    return units > MenuUnits{} ? std::max(nx::Pixels{nx::narrow<std::int32_t>(
+                                              std::lround(static_cast<float>(units.value()) * scale))},
+                                          kLeastShown)
+                               : nx::Pixels{};
 }
 
 void paintMenuOutline(nx::ui::PanelPainter& painter, const nx::ui::PixelRect& rect,
@@ -59,7 +58,8 @@ auto makeMenuFace(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen
         return nx::fail(MenuPanelError::NoFont, family);
     }
     const auto cellHeight = static_cast<std::int32_t>(
-        std::lround(size.units * static_cast<float>(screenHeight) / kMenuDesignHeight));
+        std::lround(static_cast<float>(size.line.value()) * static_cast<float>(screenHeight) /
+                    static_cast<float>(kMenuDesignHeight.value())));
     auto opened = fonts.open(*choice, {.cellHeight = std::max(nx::Pixels{cellHeight}, nx::ui::kMinCellHeight),
                                        .smoothing = nx::ui::FontSmoothing::Antialiased});
     if (!opened) {

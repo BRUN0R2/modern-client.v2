@@ -39,7 +39,7 @@ public:
     explicit BuyMenuLayout(nx::rhi::Extent2d size) noexcept;
 
     /// `units` of the design's on this screen (MenuScale::pixels).
-    [[nodiscard]] inline auto pixels(std::int32_t units) const noexcept -> nx::Pixels {
+    [[nodiscard]] inline auto pixels(MenuUnits units) const noexcept -> nx::Pixels {
         return scale.pixels(units);
     }
 

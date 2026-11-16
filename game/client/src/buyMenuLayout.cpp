@@ -13,31 +13,30 @@ namespace cs {
 namespace {
 
 // The design, in its units, the HUD's foot left free under the menu.
-constexpr std::int32_t kMarginUnits = 64;
-constexpr std::int32_t kMostContentUnits = 1792;
-constexpr std::int32_t kTopUnits = 44;
-constexpr std::int32_t kHeaderTallUnits = 96;
-constexpr std::int32_t kTimeBarTallUnits = 2;
-constexpr std::int32_t kUnderHeaderUnits = 20;
-constexpr std::int32_t kMainTallUnits = 680;
-constexpr std::int32_t kUnderMainUnits = 18;
-constexpr std::int32_t kCarriedTallUnits = 88;
-constexpr std::int32_t kRailWideUnits = 288;
-constexpr std::int32_t kDetailWideUnits = 384;
-constexpr std::int32_t kColumnGapUnits = 16;
-constexpr std::int32_t kTabTallUnits = 72;
-constexpr std::int32_t kRowGapUnits = 6;
-constexpr std::int32_t kAmmoGapUnits =
-    13; ///< From the last tab to the first row of ammo, a line in its middle.
-constexpr std::int32_t kAmmoTallUnits = 64;
+constexpr MenuUnits kMarginUnits{64};
+constexpr MenuUnits kMostContentUnits{1792};
+constexpr MenuUnits kTopUnits{44};
+constexpr MenuUnits kHeaderTallUnits{96};
+constexpr MenuUnits kTimeBarTallUnits{2};
+constexpr MenuUnits kUnderHeaderUnits{20};
+constexpr MenuUnits kMainTallUnits{680};
+constexpr MenuUnits kUnderMainUnits{18};
+constexpr MenuUnits kCarriedTallUnits{88};
+constexpr MenuUnits kRailWideUnits{288};
+constexpr MenuUnits kDetailWideUnits{384};
+constexpr MenuUnits kColumnGapUnits{16};
+constexpr MenuUnits kTabTallUnits{72};
+constexpr MenuUnits kRowGapUnits{6};
+constexpr MenuUnits kAmmoGapUnits{13}; ///< From the last tab to the first row of ammo, a line in its middle.
+constexpr MenuUnits kAmmoTallUnits{64};
 constexpr std::size_t kLeastColumns = 3;
-constexpr std::int32_t kCellGapUnits = 12;
-constexpr std::int32_t kMostCellTallUnits = 204;
-constexpr std::int32_t kDetailInsetUnits = 20;
-constexpr std::int32_t kDetailFootUnits = 18;
-constexpr std::int32_t kButtonTallUnits = 56;
-constexpr std::int32_t kTileGapUnits = 12;
-constexpr std::int32_t kKeysWideUnits = 272; ///< What the keys take of the row of what the player carries.
+constexpr MenuUnits kCellGapUnits{12};
+constexpr MenuUnits kMostCellTallUnits{204};
+constexpr MenuUnits kDetailInsetUnits{20};
+constexpr MenuUnits kDetailFootUnits{18};
+constexpr MenuUnits kButtonTallUnits{56};
+constexpr MenuUnits kTileGapUnits{12};
+constexpr MenuUnits kKeysWideUnits{272}; ///< What the keys take of the row of what the player carries.
 constexpr std::int32_t kCarriedTiles = 3;
 
 } // namespace

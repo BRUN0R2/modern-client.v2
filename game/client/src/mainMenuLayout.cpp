@@ -13,31 +13,31 @@ namespace cs {
 namespace {
 
 // The design, in its units.
-constexpr std::int32_t kLeftUnits = 128;
-constexpr std::int32_t kTitleTopUnits = 128;
-constexpr std::int32_t kItemWideUnits = 440;
-constexpr std::int32_t kItemTallUnits = 60;
-constexpr std::int32_t kItemGapUnits = 6;
-constexpr std::int32_t kUnderItemsUnits = 196; ///< From the last item's foot to the screen's.
-constexpr std::int32_t kHintsFootUnits = 96;   ///< From the top of the keys' line to the screen's foot.
+constexpr MenuUnits kLeftUnits{128};
+constexpr MenuUnits kTitleTopUnits{128};
+constexpr MenuUnits kItemWideUnits{440};
+constexpr MenuUnits kItemTallUnits{60};
+constexpr MenuUnits kItemGapUnits{6};
+constexpr MenuUnits kUnderItemsUnits{196}; ///< From the last item's foot to the screen's.
+constexpr MenuUnits kHintsFootUnits{96};   ///< From the top of the keys' line to the screen's foot.
 // The page beside the items.
-constexpr std::int32_t kPageGapUnits = 72; ///< From the items to the page, and from it to the screen's right.
-constexpr std::int32_t kMostPageWideUnits = 720;
-constexpr std::int32_t kPageInsetUnits = 28;
-constexpr std::int32_t kPageTitleTopUnits = 24;
-constexpr std::int32_t kListTopUnits = 104; ///< From the page's top to its list's.
-constexpr std::int32_t kListRowTallUnits = 44;
-constexpr std::int32_t kListFootGapUnits = 20; ///< From the list's foot to the buttons.
-constexpr std::int32_t kThumbWideUnits = 4;
-constexpr std::int32_t kButtonWideUnits = 200;
-constexpr std::int32_t kButtonTallUnits = 56;
-constexpr std::int32_t kButtonGapUnits = 16;
-constexpr std::int32_t kTabsTopUnits = 64; ///< From the page's top to its tabs'.
-constexpr std::int32_t kTabTallUnits = 32;
-constexpr std::int32_t kTabGapUnits = 4;
-constexpr std::int32_t kControlWideUnits = 300;
-constexpr std::int32_t kTrackTallUnits = 6;
-constexpr std::int32_t kValueWideUnits = 76; ///< What a slider's value is written in, after its track.
+constexpr MenuUnits kPageGapUnits{72}; ///< From the items to the page, and from it to the screen's right.
+constexpr MenuUnits kMostPageWideUnits{720};
+constexpr MenuUnits kPageInsetUnits{28};
+constexpr MenuUnits kPageTitleTopUnits{24};
+constexpr MenuUnits kListTopUnits{104}; ///< From the page's top to its list's.
+constexpr MenuUnits kListRowTallUnits{44};
+constexpr MenuUnits kListFootGapUnits{20}; ///< From the list's foot to the buttons.
+constexpr MenuUnits kThumbWideUnits{4};
+constexpr MenuUnits kButtonWideUnits{200};
+constexpr MenuUnits kButtonTallUnits{56};
+constexpr MenuUnits kButtonGapUnits{16};
+constexpr MenuUnits kTabsTopUnits{64}; ///< From the page's top to its tabs'.
+constexpr MenuUnits kTabTallUnits{32};
+constexpr MenuUnits kTabGapUnits{4};
+constexpr MenuUnits kControlWideUnits{300};
+constexpr MenuUnits kTrackTallUnits{6};
+constexpr MenuUnits kValueWideUnits{76}; ///< What a slider's value is written in, after its track.
 /// What the room left is divided by to put a thing halfway into it.
 constexpr std::int32_t kMiddleDivisor = 2;
 /// The sides an inset is left on: left and right.
