@@ -241,6 +241,10 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
   it, the gain of everything heard); `nx::audio::Pitch`, how fast a voice plays its sound, and
   `cs::SoundPitch`, the game's pitch in the original's hundredths; `nx::audio::MixFrames`, the mix's
   clock and what lasts on it. The samples stay `float`, as the sound device takes them.
+- Factors and shares: a factor a quantity is multiplied by, which may pass 1 (a size, a gravity, a
+  damage's range modifier or a back stab's multiplier), is an `nx::Scale`, and the share of an attack's
+  damage a body takes a `cs::DamageShare`; a share of a whole, from 0 to 1 (a probability, an opacity,
+  the share of a speed kept), stays a `float`, as `Quantity / Quantity` gives it.
 
 ### 4.2 Enums
 
