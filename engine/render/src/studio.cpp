@@ -1431,11 +1431,11 @@ void StudioRenderer::placeInstances(const StudioFrame& frame) {
             place.call = solidCallOf(instance);
         } else {
             place.call = narrow<std::uint32_t>(m_modelCalls.size());
-            m_blendedDraws.push_back(BlendedDraw{
-                .distance =
-                    lengthSquared(frame.camera.position - (instance.origin + instance.model.get().m_middle)),
-                .mode = instance.mode,
-                .index = place.call});
+            m_blendedDraws.push_back(
+                BlendedDraw{.distance = SquaredDistance{lengthSquared(
+                                frame.camera.position - (instance.origin + instance.model.get().m_middle))},
+                            .mode = instance.mode,
+                            .index = place.call});
             m_modelCalls.push_back(callOf(instance, blending, m_meshCalls));
         }
         ++m_modelCalls[place.call].instanceCount;
