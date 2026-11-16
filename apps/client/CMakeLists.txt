@@ -55,6 +55,7 @@ nxAddModuleLibrary(appClient
         nx::rhiVulkan
         nx::render
         nx::ui
+        nx::audio
         cs::shared
         cs::server
         cs::client

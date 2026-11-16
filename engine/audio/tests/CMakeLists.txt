@@ -6,9 +6,11 @@ nxAddTest(nxAudioTests
         soundTests.cpp
         libraryTests.cpp
         mixerTests.cpp
+        spatialTests.cpp
         deviceTests.cpp
     DEPENDS
         nx::audio
+        nx::math
         nx::assets
         nx::platform
     # Sound played to no device, in CI and on a developer's desktop alike: SDL's dummy output takes
