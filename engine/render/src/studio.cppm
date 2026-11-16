@@ -260,8 +260,8 @@ struct StudioModelDesc {
 /// A light near a model, which gives it highlights in the enhanced look.
 struct StudioLight {
     Vec3 position{};
-    float reach = 0.0F; ///< How far its light goes, in units.
-    Vec3 color{};       ///< Its light at a unit's distance, in linear light.
+    HammerUnits reach{}; ///< How far its light goes.
+    Vec3 color{};        ///< Its light at a unit's distance, in linear light.
 };
 
 /// A studio model on the GPU, which a StudioRenderer loads and draws.
@@ -336,11 +336,11 @@ struct CrowdBonePose {
 struct CrowdSequence {
     std::span<const CrowdBonePose> poses{};
     std::uint32_t frameCount = 1;
-    float fps = 0.0F;
+    PerSecond fps{}; ///< Its frames a second.
     bool isLooping = false;
-    float reach = 0.0F;  ///< Across, each way.
-    float lowest = 0.0F; ///< Up from the body's origin, less than none below it.
-    float highest = 0.0F;
+    HammerUnits reach{};  ///< Across, each way.
+    HammerUnits lowest{}; ///< Up from the body's origin, less than none below it.
+    HammerUnits highest{};
 };
 
 /// A model for a crowd to be of, and what it plays (StudioRenderer::loadCrowdModel). Its parents go before
@@ -355,13 +355,13 @@ struct CrowdModelDesc {
 /// A body of a crowd as its last move left it, as shaders/crowd.slang reads it.
 struct alignas(16) CrowdBody {
     Vec3 previousOrigin{}; ///< Where its last move started.
-    float yaw = 0.0F;      ///< About its height, in radians.
+    Radians yaw{};         ///< About its height.
     Vec3 origin{};
     std::uint32_t model = 0; ///< As loadCrowdModel numbers them.
     std::uint32_t sequence = 0;
-    float frame = 0.0F;       ///< Where its server left it, in 256ths of the sequence (pev->frame).
-    float advancedAgo = 0.0F; ///< How long before the last tick its server left it there, in seconds.
-    float framerate = 1.0F;
+    float frame = 0.0F;    ///< Where its server left it, in 256ths of the sequence (pev->frame).
+    Seconds advancedAgo{}; ///< How long before the last tick its server left it there.
+    Scale framerate{1.0F}; ///< Times its sequence's own speed (pev->framerate).
     Vec3 lightDirection{.z = -1.0F};
     float ambient = 0.0F;
     Vec3 lightColor{.x = 1.0F, .y = 1.0F, .z = 1.0F};
@@ -382,8 +382,8 @@ struct CrowdRoom {
 struct CrowdFrame {
     std::span<const Plane, kFrustumPlanes> frustum;
     const assets::LeafSet* visibleLeaves = nullptr; ///< None: only the frustum hides a body.
-    float between = 1.0F;       ///< How far the moment shown is from a tick to the next, 0 to 1.
-    float sinceLastTick = 0.0F; ///< How long the moment shown is past the last tick, in seconds.
+    float between = 1.0F;    ///< How far the moment shown is from a tick to the next, 0 to 1.
+    Seconds sinceLastTick{}; ///< How long the moment shown is past the last tick.
 };
 
 /// What a draw shows.

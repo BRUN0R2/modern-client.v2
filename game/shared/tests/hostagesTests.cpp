@@ -151,7 +151,7 @@ TEST(HostagesTest, AHostageIdlesInASequenceDrawnByWeightDroppedToTheFloor) {
         const cs::Animation& animation = *world.get<cs::Animation>(entity);
         ASSERT_LT(animation.sequence.value, drawn.size());
         ++drawn.at(animation.sequence.value);
-        EXPECT_FLOAT_EQ(animation.frame, 0.0F);
+        EXPECT_EQ(animation.frame, cs::EntityFrame{});
         EXPECT_EQ(world.get<cs::Hostage>(entity)->activity, cs::Activity::Idle);
         EXPECT_NEAR(world.get<nx::game::Transform>(entity)->origin.z, kStopDistance, kTolerance);
         EXPECT_NEAR(world.get<cs::Hostage>(entity)->start.z, kStopDistance, kTolerance)
@@ -198,8 +198,8 @@ TEST(HostagesTest, AHostagesFrameAdvancesAsItThinks) {
 
     const cs::Animation& animation = *world.get<cs::Animation>(hostage);
     EXPECT_GT(animation.advancedAt, nx::GameTime{}.after(nx::Seconds{0.4F}, rate));
-    EXPECT_NEAR(animation.frame, animation.advancedAt.since(nx::GameTime{}, rate).count() * cs::kFrameScale,
-                0.01F)
+    EXPECT_NEAR(animation.frame.value(),
+                animation.advancedAt.since(nx::GameTime{}, rate).count() * cs::kFrameScale.value(), 0.01F)
         << "advanced from 0 to its last think at its frame's speed";
 }
 

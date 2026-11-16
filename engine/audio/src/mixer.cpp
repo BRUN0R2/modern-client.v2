@@ -190,7 +190,8 @@ void Mixer::apply(const MixerCommand& command) noexcept {
                        .step = step,
                        .cutoff = step > 1.0 ? static_cast<float>(1.0 / step) : 1.0F,
                        .gains = play->gains,
-                       .loops = play->loops};
+                       .loops = play->loops,
+                       .tag = play->tag};
         m_playing[play->voice.value].store(isPlayable, std::memory_order_release);
     } else if (const auto* stop = std::get_if<StopVoice>(&command)) {
         if (Voice* const voice = voiceOf(stop->voice)) {
@@ -198,7 +199,7 @@ void Mixer::apply(const MixerCommand& command) noexcept {
             m_playing[stop->voice.value].store(false, std::memory_order_release);
         }
     } else if (const auto* gains = std::get_if<SetVoiceGains>(&command)) {
-        if (Voice* const voice = voiceOf(gains->voice)) {
+        if (Voice* const voice = voiceOf(gains->voice); voice != nullptr && voice->tag == gains->tag) {
             voice->gains = gains->gains;
         }
     } else if (const auto* master = std::get_if<SetMasterGain>(&command)) {

@@ -268,6 +268,12 @@ struct CrowdFrameUniform {
     std::uint32_t hasTree = 0;
 };
 
+/// The bytes shaders/crowd.slang's Body takes in its buffer, which the client writes as a CrowdBody: its
+/// typed members (a duration, a scale, an angle) are a float each, as the shader reads them.
+constexpr std::size_t kCrowdBodyBytes = 96;
+static_assert(sizeof(CrowdBody) == kCrowdBodyBytes && std::is_trivially_copyable_v<CrowdBody>,
+              "a crowd body as shaders/crowd.slang reads it");
+
 /// shaders/crowd.slang's Model, Sequence, Node and DrawTemplate.
 struct CrowdModelEntry {
     std::uint32_t firstInstance = 0;
@@ -574,7 +580,7 @@ struct MaterialImages {
         uniform.secondProbeShare = instance.probes->secondShare;
     }
     for (std::size_t index = 0; index < lights.size(); ++index) {
-        uniform.lightPositions.at(index) = extend(lights[index].position, lights[index].reach);
+        uniform.lightPositions.at(index) = extend(lights[index].position, lights[index].reach.value());
         uniform.lightColors.at(index) = extend(lights[index].color, 0.0F);
     }
     const DepthMapping depth = depthMappingOf(instance.depth);
@@ -1042,11 +1048,11 @@ auto StudioRenderer::loadCrowdModel(rhi::CommandList& commands, const CrowdModel
                 "StudioRenderer::loadCrowdModel: each bone of each frame");
         const CrowdSequenceEntry entry{.firstPose = narrow<std::uint32_t>(m_crowdPoseTable.size()),
                                        .frameCount = sequence.frameCount,
-                                       .fps = sequence.fps,
+                                       .fps = sequence.fps.value(),
                                        .isLooping = sequence.isLooping ? 1U : 0U,
-                                       .reach = sequence.reach,
-                                       .lowest = sequence.lowest,
-                                       .highest = sequence.highest};
+                                       .reach = sequence.reach.value(),
+                                       .lowest = sequence.lowest.value(),
+                                       .highest = sequence.highest.value()};
         std::ranges::copy(std::as_bytes(std::span{&entry, 1}), std::back_inserter(m_crowdSequenceTable));
         std::ranges::copy(sequence.poses, std::back_inserter(m_crowdPoseTable));
     }
@@ -1279,7 +1285,7 @@ auto StudioRenderer::recordCrowd(rhi::CommandList& commands, const CrowdFrame& f
     std::ranges::copy(std::as_bytes(std::span{templates}),
                       m_device->mappedBytes(slot.templates.get()).begin());
     CrowdFrameUniform uniform{.between = frame.between,
-                              .sinceLastTick = frame.sinceLastTick,
+                              .sinceLastTick = frame.sinceLastTick.count(),
                               .bodyCount = narrow<std::uint32_t>(bodyCount),
                               .modelCount = narrow<std::uint32_t>(m_crowdModels.size()),
                               .drawCount = narrow<std::uint32_t>(templates.size()),
