@@ -228,7 +228,7 @@ inline constexpr std::int16_t kGaitThigh = 7;
         {.label = "ref_aim_onehanded", .blends = aimBlends()},
         {.label = "crouch_aim_onehanded", .blends = aimBlends()},
         {.label = "ref_shoot_onehanded", .frames = 5, .loops = false, .blends = aimBlends()},
-        {.label = "ref_reload_onehanded", .frames = 5, .loops = false, .blends = aimBlends()},
+        {.label = "ref_reload_onehanded", .frames = 5, .loops = false, .blends = {{0, 0, 20, 0}}},
         {.label = "gut_flinch", .frames = 5, .loops = false, .blends = aimBlends()},
         {.label = "head_flinch", .frames = 5, .loops = false, .blends = aimBlends()},
     };

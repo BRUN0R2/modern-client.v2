@@ -489,8 +489,14 @@ void posePlayerBones(const nx::assets::MdlView& model,
         blendPoses(third, fourth, yawShare);
         blendPoses(pose, third, pitchShare);
     }
-    const bool playsGait = animation.blendCount == kAimBlends && sequence.value < kFirstDeathSequence.value &&
-                           !std::ranges::contains(kSwimSequences, sequence);
+    const bool playsAimGait = animation.blendCount == kAimBlends &&
+                              sequence.value < kFirstDeathSequence.value &&
+                              !std::ranges::contains(kSwimSequences, sequence);
+    const std::string_view label = sequences[sequence.value].label;
+    const auto hasPrefix = [label](std::string_view prefix) {
+        return nx::equalsIgnoringCase(label.substr(0, prefix.size()), prefix);
+    };
+    const bool playsGait = playsAimGait || hasPrefix("ref_reload_") || hasPrefix("crouch_reload_");
     if (playsGait) {
         const nx::assets::SequenceIndex gait =
             query.gaitSequence.value < sequences.size() ? query.gaitSequence : nx::assets::SequenceIndex{};

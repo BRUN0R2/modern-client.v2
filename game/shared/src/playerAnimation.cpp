@@ -282,9 +282,7 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
         animation.activity = ideal;
     } else if (ideal == Activity::Reload) {
         desired = desiredSequence("reload", Posture::AsItIs, context).value_or(nx::assets::SequenceIndex{});
-        if (animation.torso.sequence != desired || !animation.torso.isLooping) {
-            animation.torso.frame = EntityFrame{};
-        }
+        playTorso(animation, desired, context);
         animation.activity = ideal;
     } else if (ideal == Activity::Walk) {
         if (areOneOffsOver(animation)) {
@@ -341,7 +339,7 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
                 sequenceOf(context.speed != nx::UnitsPerSecond{} ? Activity::Crouch : Activity::CrouchIdle,
                            context, random);
         } else if (context.speed > kRunSpeed) {
-            if (!hasFiredLately() && !isFlinching(animation.activity)) {
+            if (!hasFiredLately() && areOneOffsOver(animation) && !isFlinching(animation.activity)) {
                 if (const std::optional<nx::assets::SequenceIndex> run =
                         desiredSequence("run", Posture::Standing, context)) {
                     desired = *run;

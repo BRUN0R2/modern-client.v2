@@ -115,6 +115,29 @@ TEST_F(PlayerModelTest, AShotPlaysFromItsStartAndTheTorsoKeepsItWhileItRuns) {
     EXPECT_EQ(animation.gaitSequence, sequence("run"));
 }
 
+TEST_F(PlayerModelTest, AReloadPlaysToItsEndWhileTheLegsChangeGait) {
+    cs::PlayerAnimation animation;
+    auto context = standing(200.0F);
+    context.weaponAnimation = "onehanded";
+    play(animation, PlayerAction::Reload, context);
+    EXPECT_EQ(animation.activity, Activity::Reload);
+    EXPECT_EQ(animation.torso.sequence, sequence("ref_reload_onehanded"));
+    EXPECT_EQ(animation.gaitSequence, sequence("run"));
+
+    context.speed = nx::UnitsPerSecond{100.0F};
+    play(animation, PlayerAction::Walk, context);
+    EXPECT_EQ(animation.torso.sequence, sequence("ref_reload_onehanded"));
+    EXPECT_EQ(animation.gaitSequence, sequence("walk"));
+    context.speed = nx::UnitsPerSecond{200.0F};
+    play(animation, PlayerAction::Walk, context);
+    EXPECT_EQ(animation.torso.sequence, sequence("ref_reload_onehanded"));
+    EXPECT_EQ(animation.gaitSequence, sequence("run"));
+
+    animation.torso.isFinished = true;
+    play(animation, PlayerAction::Walk, context);
+    EXPECT_EQ(animation.torso.sequence, sequence("ref_aim_onehanded"));
+}
+
 TEST_F(PlayerModelTest, AJumpPlaysTheHopUntilTheGroundIsMet) {
     cs::PlayerAnimation animation;
     play(animation, PlayerAction::Idle, standing());
@@ -327,6 +350,13 @@ TEST_F(PlayerPoseTest, TheLegsBelowTheSpinePlayTheGait) {
         << "the gait's root, not the aim's";
     EXPECT_NEAR(bones.at(std::to_underlying(nx::test::PlayerBone::Thigh)).rows[0].w,
                 nx::test::kGaitRoot + nx::test::kGaitThigh, kTolerance);
+}
+
+TEST_F(PlayerPoseTest, AReloadWithOneBlendKeepsTheGaitBelowTheSpine) {
+    const auto bones = posed("ref_reload_onehanded", 0.0F, 0.0F);
+    EXPECT_NEAR(bones.at(std::to_underlying(nx::test::PlayerBone::Thigh)).rows[0].w,
+                nx::test::kGaitRoot + nx::test::kGaitThigh, kTolerance);
+    EXPECT_NEAR(spineOf("ref_reload_onehanded", 0.0F, 0.0F), 20.0F, kTolerance);
 }
 
 TEST_F(PlayerPoseTest, ASwimmingSequencePlaysNoGait) {

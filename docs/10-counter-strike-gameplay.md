@@ -34,7 +34,8 @@ come with the menus). Its model plays as ReGameDLL_CS's `CBasePlayer` animates i
 (`cs.shared:playerAnimation`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)): its
 torso's sequence by what it does and the weapon it holds (`SetAnimation`, `GetAnimDesired`:
 `ref_aim_<weapon>`, `crouch_shoot_<weapon>`, `ref_reload_<weapon>`, the weapon's `playerAnimation`),
-a shot started from its first frame and kept while the player runs within 4 seconds of it; its legs'
+a shot started from its first frame and kept while the player runs within 4 seconds of it; a reload
+plays on the torso while the legs keep their gait, including on models with a single reload blend; its legs'
 gait sequence by whether it ducks and how fast it moves (idling, walking, running beyond 135 units a
 second, crouching, jumping, swimming and hovering in water); a death of a hit of no group, or
 `crouch_die` ducked, its legs then playing none; and each frame its gait (`StudioProcessGait`): its legs
