@@ -242,9 +242,9 @@ struct PlayerPoseQuery {
 /// nine blends (kAimBlends) by the four of them around the yaw's and the pitch's blends, the yaw's
 /// shares first (0 to 127 between the left and the middle, 128 to 255 between the middle and the right,
 /// as the pitch's between up, the middle and down); another by poseBones's blending, the first the
-/// query's. A sequence of nine blends below kFirstDeathSequence, but the swimming ones, has the bones from
-/// the root to the spine and from each child of the pelvis on (its legs) play the gait sequence
-/// instead.
+/// query's. Reload sequences and nine-blend sequences below kFirstDeathSequence other than swimming
+/// have the bones from the root to the spine and from each child of the pelvis on (its legs) play
+/// the gait sequence instead.
 [[nodiscard]] auto posePlayerBones(const nx::assets::MdlView& model,
                                    std::span<const nx::assets::AnimationFrames> animations,
                                    nx::assets::SequenceIndex sequence, const PlayerPoseQuery& query)
