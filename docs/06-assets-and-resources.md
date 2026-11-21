@@ -94,6 +94,9 @@ models, `cstrike/sprites/hud.txt`, official maps), each found in the mount it na
 the case of its letters. A missing mount yields `ContentError::InstallNotFound`; missing files
 yield `ContentError::MissingEssentialFiles` with the full list.
 
+The game also reads shared UI resources such as `resource/TrackerScheme.res` from the installation's
+`platform/` directory when it exists. This directory has lower priority than `cstrike/` and `valve/`.
+
 ### 2.4 Content sources and profiles
 
 | Profile | Mounted sources | When |

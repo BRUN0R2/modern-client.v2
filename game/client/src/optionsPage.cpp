@@ -95,7 +95,7 @@ auto sliderText(const ShownSlider& slider) -> std::string {
 OptionsPage::OptionsPage(std::vector<OptionRow> listed) noexcept : rows{std::move(listed)} {}
 
 void OptionsPage::open() noexcept {
-    show(OptionCategory::Mouse);
+    show(OptionCategory::Game);
 }
 
 void OptionsPage::show(OptionCategory tab) noexcept {
@@ -271,7 +271,7 @@ auto OptionsPage::handle(const nx::platform::WindowEvent& event, nx::platform::M
 }
 
 auto OptionsPage::click(nx::platform::MousePosition cursor, const MainMenuLayout& layout) -> OptionsOutcome {
-    if (layout.backButton().holds(cursor.x, cursor.y)) {
+    if (layout.confirmButton().holds(cursor.x, cursor.y)) {
         return OptionsOutcome::GoesBack;
     }
     for (const OptionCategory tab : nx::EnumArray<OptionCategory, bool>::keys()) {

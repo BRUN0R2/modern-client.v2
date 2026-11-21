@@ -280,7 +280,7 @@ TEST(MainMenuNewGameTest, TheMouseSelectsAMapAndItsButtonsPlayItOrGoBack) {
     EXPECT_TRUE(menu.isOpen());
 }
 
-TEST(MainMenuNewGameTest, EscapeGoesBackToTheItemsAndAnotherItemLeavesThePage) {
+TEST(MainMenuNewGameTest, EscapeClosesThePageAndTheItemsBehindItDoNotReceiveClicks) {
     const cs::MainMenuLook look = lookOf();
     cs::MainMenu menu = onNewGame(look, kManyMaps);
     EXPECT_EQ(menu.handle(pressed(Key::Escape), kNowhere, kScreen, MenuGame::None), std::nullopt);
@@ -292,8 +292,8 @@ TEST(MainMenuNewGameTest, EscapeGoesBackToTheItemsAndAnotherItemLeavesThePage) {
     EXPECT_EQ(menu.selected(), MainMenuAction::NewGame) << "the item whose page is open stays selected";
     EXPECT_EQ(asked(menu, MouseButtonChanged{.button = MouseButton::Left, .isDown = true}, middleOf(1, 2),
                     kScreen, MenuGame::None),
-              MainMenuAction::Quit);
-    EXPECT_FALSE(menu.showsNewGame());
+              std::nullopt);
+    EXPECT_TRUE(menu.showsNewGame());
 
     menu = onNewGame(look, kManyMaps);
     menu.open(MenuGame::None);
@@ -311,16 +311,16 @@ TEST(MainMenuNewGameTest, WithoutMapsThereIsNothingToPlay) {
     EXPECT_EQ((cs::MainMenuLayout{kScreen, 2}.listThumb(0, 0)), std::nullopt);
 }
 
-TEST(MainMenuLayoutTest, ThePageStandsBesideTheItemsOnAnyScreen) {
+TEST(MainMenuLayoutTest, ThePageIsCenteredOnAnyScreen) {
     for (const nx::rhi::Extent2d size : {nx::rhi::Extent2d{.width = 640, .height = 480}, kScreen,
                                          nx::rhi::Extent2d{.width = 3440, .height = 1440}}) {
         constexpr std::size_t kItems = 4;
         const cs::MainMenuLayout layout{size, kItems};
         const nx::ui::PixelRect& page = layout.page();
-        const nx::ui::PixelRect item = layout.item(kItems - 1);
-        EXPECT_GT(page.x, item.x + item.wide) << size.width;
+        EXPECT_GT(page.x, nx::Pixels{0}) << size.width;
         EXPECT_LT(page.x + page.wide, nx::Pixels{nx::narrow<std::int32_t>(size.width)});
-        EXPECT_EQ(page.y + page.tall, item.y + item.tall) << "its foot the last item's";
+        EXPECT_LE(std::abs(((2 * page.x) + page.wide).value() - nx::narrow<std::int32_t>(size.width)), 1);
+        EXPECT_EQ((2 * page.y) + page.tall, nx::Pixels{nx::narrow<std::int32_t>(size.height)});
         const std::size_t rows = layout.listRows();
         ASSERT_GE(rows, 1U);
         const nx::ui::PixelRect lastRow = layout.listRow(rows - 1);

@@ -91,6 +91,9 @@ constexpr MouseButtonChanged kLeftUp{.button = MouseButton::Left, .isDown = fals
 TEST(OptionsPageTest, OpensOnItsFirstTabWithTheTabsSelected) {
     Settings settings;
     Opened options{settings};
+    EXPECT_EQ(options.shown().category, OptionCategory::Game);
+    std::ignore = options.press(Key::Right);
+    std::ignore = options.press(Key::Right);
     const cs::OptionsFrame frame = options.shown();
     EXPECT_EQ(frame.category, OptionCategory::Mouse);
     EXPECT_EQ(frame.selectedRow, std::nullopt);
@@ -107,9 +110,11 @@ TEST(OptionsPageTest, LeftAndRightChangeTheTabWhileTheTabsAreSelected) {
     Settings settings;
     Opened options{settings};
     EXPECT_EQ(options.press(Key::Left), OptionsOutcome::Stays);
-    EXPECT_EQ(options.shown().category, OptionCategory::Mouse) << "the first stays the first";
+    EXPECT_EQ(options.shown().category, OptionCategory::Game) << "the first stays the first";
     std::ignore = options.press(Key::Right);
     EXPECT_EQ(options.shown().category, OptionCategory::Keyboard);
+    std::ignore = options.press(Key::Right);
+    EXPECT_EQ(options.shown().category, OptionCategory::Mouse);
     std::ignore = options.press(Key::Right);
     const cs::OptionsFrame audio = options.shown();
     EXPECT_EQ(audio.category, OptionCategory::Audio);
@@ -118,7 +123,7 @@ TEST(OptionsPageTest, LeftAndRightChangeTheTabWhileTheTabsAreSelected) {
     for (int press = 0; press < 5; ++press) {
         std::ignore = options.press(Key::Right);
     }
-    EXPECT_EQ(options.shown().category, OptionCategory::Game) << "the last stays the last";
+    EXPECT_EQ(options.shown().category, OptionCategory::Video) << "the last stays the last";
     EXPECT_TRUE(options.shown().rows.empty());
     std::ignore = options.press(Key::Down);
     EXPECT_EQ(options.shown().selectedRow, std::nullopt) << "a tab of no rows selects none";
@@ -128,6 +133,8 @@ TEST(OptionsPageTest, LeftAndRightChangeTheTabWhileTheTabsAreSelected) {
 TEST(OptionsPageTest, TheArrowsSelectARowAndChangeIt) {
     Settings settings;
     Opened options{settings};
+    std::ignore = options.press(Key::Right);
+    std::ignore = options.press(Key::Right);
     std::ignore = options.press(Key::Down);
     EXPECT_EQ(options.shown().selectedRow, 0U);
     std::ignore = options.press(Key::Right);
@@ -164,6 +171,7 @@ TEST(OptionsPageTest, TheMouseShowsATabSwitchesASwitchAndDragsASlider) {
     Settings settings;
     Opened options{settings};
     const cs::MainMenuLayout& layout = options.layout;
+    std::ignore = options.mouse(kLeftDown, middleOf(layout.optionTab(2)));
     EXPECT_EQ(options.mouse(MouseMoved{}, middleOf(layout.listRow(1))), OptionsOutcome::Stays);
     EXPECT_EQ(options.shown().selectedRow, 1U);
     std::ignore = options.mouse(kLeftDown, middleOf(layout.listRow(1)));
@@ -190,7 +198,7 @@ TEST(OptionsPageTest, TheMouseShowsATabSwitchesASwitchAndDragsASlider) {
     std::ignore = options.mouse(kLeftDown, middleOf(layout.listRow(0)));
     EXPECT_FLOAT_EQ(settings.sensitivity, 1.0F) << "pressed on its name, it does not change";
 
-    std::ignore = options.mouse(kLeftDown, middleOf(layout.optionTab(2)));
+    std::ignore = options.mouse(kLeftDown, middleOf(layout.optionTab(3)));
     EXPECT_EQ(options.shown().category, OptionCategory::Audio);
     EXPECT_EQ(options.shown().selectedRow, std::nullopt);
     std::ignore = options.mouse(MouseMoved{}, middleOf(layout.listRow(1)));
@@ -362,7 +370,7 @@ TEST(OptionsPageTest, AListLongerThanThePageScrolls) {
 TEST(OptionsPageTest, AChoiceGoesAroundItsValuesWrittenByTheirTextsOrAsTheyAre) {
     using cs::ChoiceText;
     std::optional<std::size_t> chosen = 1;
-    cs::OptionsPage page{{{.category = OptionCategory::Mouse,
+    cs::OptionsPage page{{{.category = OptionCategory::Game,
                            .name = &OptionsTexts::fidelity,
                            .control = cs::OptionChoice{
                                .values = {ChoiceText{&OptionsTexts::fidelityLegacy},
@@ -409,7 +417,7 @@ TEST(OptionsPageTest, ATextIsTypedSetByEnterOnceItsSettingTakesItAndLeftAsItWasB
     constexpr std::size_t kMostBytes = 8;
     std::string name = "Player";
     cs::OptionsPage page{
-        {{.category = OptionCategory::Mouse,
+        {{.category = OptionCategory::Game,
           .name = &OptionsTexts::playerName,
           .control = cs::OptionText{.text = [&] { return name; },
                                     .accepts =
@@ -466,9 +474,9 @@ TEST(OptionsPageTest, EscapeAndItsButtonGoBack) {
     Opened options{settings};
     EXPECT_EQ(options.press(Key::Escape, true), OptionsOutcome::Stays);
     EXPECT_EQ(options.press(Key::Escape), OptionsOutcome::GoesBack);
-    EXPECT_EQ(options.mouse(kLeftDown, middleOf(options.layout.backButton())), OptionsOutcome::GoesBack);
+    EXPECT_EQ(options.mouse(kLeftDown, middleOf(options.layout.confirmButton())), OptionsOutcome::GoesBack);
     EXPECT_EQ(options.mouse(MouseButtonChanged{.button = MouseButton::Right, .isDown = true},
-                            middleOf(options.layout.backButton())),
+                            middleOf(options.layout.confirmButton())),
               OptionsOutcome::Stays);
 }
 
@@ -498,6 +506,8 @@ TEST(OptionsPageTest, ItsItemOpensItOnTheMenuAndEscapeGoesBackToTheItems) {
     ASSERT_TRUE(menu.frameOf(cs::MenuGame::None, kScreen).options.has_value());
 
     EXPECT_FALSE(menu.takesEveryKey());
+    EXPECT_EQ(send(pressed(Key::Right)), std::nullopt);
+    EXPECT_EQ(send(pressed(Key::Right)), std::nullopt);
     EXPECT_EQ(send(pressed(Key::Down)), std::nullopt);
     EXPECT_EQ(send(pressed(Key::Right)), std::nullopt);
     EXPECT_FLOAT_EQ(settings.sensitivity, 3.5F) << "the keys are the page's";
@@ -514,6 +524,9 @@ TEST(OptionsPageTest, ItsItemOpensItOnTheMenuAndEscapeGoesBackToTheItems) {
 
     std::ignore = send(pressed(Key::Enter));
     ASSERT_TRUE(menu.showsOptions());
+    EXPECT_EQ(send(kLeftDown, middleOf(layout.item(1))), std::nullopt);
+    EXPECT_TRUE(menu.showsOptions()) << "the options panel blocks the items behind it";
+    std::ignore = send(pressed(Key::Escape));
     const auto quit = send(kLeftDown, middleOf(layout.item(1)));
     ASSERT_TRUE(quit.has_value());
     EXPECT_EQ(quit->action, cs::MainMenuAction::Quit) << "another item chosen leaves the page";
@@ -529,7 +542,7 @@ TEST(OptionsPageTest, OnTheMenuATextTypedTakesEveryKeyAndWhatIsTyped) {
     cs::MainMenu menu{
         look,
         {},
-        {{.category = OptionCategory::Mouse,
+        {{.category = OptionCategory::Game,
           .name = &OptionsTexts::playerName,
           .control = cs::OptionText{.text = [&] { return name; },
                                     .accepts = [](std::string_view) { return true; },

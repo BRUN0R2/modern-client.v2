@@ -232,4 +232,29 @@ TEST(MapNamesTest, AreThoseOfTheMapsFilesInTheOrderOfTheAlphabet) {
     EXPECT_TRUE(cs::mapNamesOf(*vfs, 0).empty());
 }
 
+TEST(GameContentTest, ReadsOptionalPlatformResourcesWithoutListingTheirMaps) {
+    const auto data = nx::platform::fromUtf8(NX_DATA_DIRECTORY);
+    const auto text = nx::platform::readTextFile(data / "content/goldsrcCstrike.toml");
+    ASSERT_TRUE(text.has_value()) << nx::describe(text.error());
+    const auto desc = nx::assets::readGoldsrcInstallDesc(*text, "goldsrcCstrike.toml");
+    ASSERT_TRUE(desc.has_value()) << nx::describe(desc.error());
+
+    const nx::test::TemporaryDirectory installation;
+    for (const std::string& file : desc->essentialFiles) {
+        installation.write(file, "");
+    }
+    const auto scheme = nx::assets::VfsPath::parse("resource/TrackerScheme.res");
+    ASSERT_TRUE(scheme.has_value());
+    const auto withoutPlatform = cs::openGameContent(data, installation.path(), std::nullopt);
+    ASSERT_TRUE(withoutPlatform.has_value()) << nx::describe(withoutPlatform.error());
+    EXPECT_FALSE(withoutPlatform->vfs.contains(*scheme));
+
+    installation.write("platform/resource/TrackerScheme.res", "test scheme");
+    installation.write("platform/maps/platform_only.bsp", "");
+    const auto content = cs::openGameContent(data, installation.path(), std::nullopt);
+    ASSERT_TRUE(content.has_value()) << nx::describe(content.error());
+    EXPECT_TRUE(content->vfs.contains(*scheme));
+    EXPECT_EQ(cs::mapNamesOf(content->vfs, content->gameMounts), (std::vector<std::string>{"de_dust2"}));
+}
+
 } // namespace

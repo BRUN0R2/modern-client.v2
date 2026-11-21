@@ -21,19 +21,19 @@ constexpr MenuUnits kItemGapUnits{6};
 constexpr MenuUnits kUnderItemsUnits{196}; ///< From the last item's foot to the screen's.
 constexpr MenuUnits kHintsFootUnits{96};   ///< From the top of the keys' line to the screen's foot.
 // The page beside the items.
-constexpr MenuUnits kPageGapUnits{72}; ///< From the items to the page, and from it to the screen's right.
-constexpr MenuUnits kMostPageWideUnits{720};
+constexpr MenuUnits kPageMarginUnits{52};
+constexpr MenuUnits kMostPageWideUnits{940};
 constexpr MenuUnits kPageInsetUnits{28};
 constexpr MenuUnits kPageTitleTopUnits{24};
-constexpr MenuUnits kListTopUnits{104}; ///< From the page's top to its list's.
+constexpr MenuUnits kListTopUnits{152}; ///< From the page's top to its list's.
 constexpr MenuUnits kListRowTallUnits{44};
 constexpr MenuUnits kListFootGapUnits{20}; ///< From the list's foot to the buttons.
 constexpr MenuUnits kThumbWideUnits{4};
 constexpr MenuUnits kButtonWideUnits{200};
 constexpr MenuUnits kButtonTallUnits{56};
 constexpr MenuUnits kButtonGapUnits{16};
-constexpr MenuUnits kTabsTopUnits{64}; ///< From the page's top to its tabs'.
-constexpr MenuUnits kTabTallUnits{32};
+constexpr MenuUnits kTabsTopUnits{67}; ///< From the page's top to its tabs'.
+constexpr MenuUnits kTabTallUnits{38};
 constexpr MenuUnits kTabGapUnits{4};
 constexpr MenuUnits kControlWideUnits{300};
 constexpr MenuUnits kTrackTallUnits{6};
@@ -60,11 +60,12 @@ MainMenuLayout::MainMenuLayout(nx::rhi::Extent2d size, std::size_t items) noexce
                  .wide = pixels(kItemWideUnits),
                  .tall = itemTall};
     hintsPoint = {.x = left, .y = tall - pixels(kHintsFootUnits)};
-    const nx::Pixels pageX = left + firstItem.wide + pixels(kPageGapUnits);
-    pageRect = {.x = pageX,
-                .y = titlePoint.y,
-                .wide = std::min(pixels(kMostPageWideUnits), wide - pageX - pixels(kPageGapUnits)),
-                .tall = tall - pixels(kUnderItemsUnits) - titlePoint.y};
+    const nx::Pixels margin = pixels(kPageMarginUnits);
+    const nx::Pixels pageWide = std::min(pixels(kMostPageWideUnits), wide - (kBothSides * margin));
+    pageRect = {.x = (wide - pageWide) / kMiddleDivisor,
+                .y = margin,
+                .wide = pageWide,
+                .tall = tall - (kBothSides * margin)};
 }
 
 auto MainMenuLayout::pageTitle() const noexcept -> nx::ui::PixelPoint {

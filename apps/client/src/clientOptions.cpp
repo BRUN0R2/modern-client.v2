@@ -40,6 +40,10 @@ using FidelityTexts = nx::EnumArray<nx::settings::Fidelity, std::string OptionsT
 constexpr FidelityTexts kFidelityTexts{
     FidelityTexts::Storage{&OptionsTexts::fidelityLegacy, &OptionsTexts::fidelityEnhanced}};
 
+using WindowModeTexts = nx::EnumArray<nx::platform::WindowMode, std::string OptionsTexts::*>;
+constexpr WindowModeTexts kWindowModeTexts{
+    WindowModeTexts::Storage{&OptionsTexts::windowed, &OptionsTexts::borderless, &OptionsTexts::fullscreen}};
+
 /// The text of the options' that writes each size of the crosshair (cl_crosshair_size).
 using CrosshairSizeTexts = nx::EnumArray<cs::CrosshairSize, std::string OptionsTexts::*>;
 constexpr CrosshairSizeTexts kCrosshairSizeTexts{
@@ -132,13 +136,22 @@ template <class Value>
                 .set = [name](std::string text) { name.setAccepted(std::move(text)); }}};
 }
 
-/// The choice of the language (`language`, cl_language) among `languages`, each written by its tag.
+/// The choice of the language (`language`, cl_language) among `languages`.
 [[nodiscard]] auto languageOf(Cvar<std::string> language, std::span<const std::string> languages)
     -> cs::OptionRow {
+    auto written = languages | std::views::transform([](const std::string& tag) -> cs::ChoiceText {
+                       if (tag == "en") {
+                           return &OptionsTexts::languageEnglish;
+                       }
+                       if (tag == "pt-BR") {
+                           return &OptionsTexts::languagePortuguese;
+                       }
+                       return tag;
+                   }) |
+                   std::ranges::to<std::vector>();
     return {.category = OptionCategory::Game,
             .name = &OptionsTexts::language,
-            .control = choiceOf(language, languages | std::ranges::to<std::vector>(),
-                                languages | std::ranges::to<std::vector<cs::ChoiceText>>())};
+            .control = choiceOf(language, languages | std::ranges::to<std::vector>(), std::move(written))};
 }
 
 /// The choice of the crosshair's size (`size`, cl_crosshair_size), each written by its text.
@@ -203,9 +216,6 @@ constexpr auto kKeyActions = std::to_array<KeyAction>({
     {.name = &OptionsTexts::noclip, .command = "noclip"},
 });
 
-/// What stands between the names of an action's keys.
-constexpr std::string_view kKeySeparator = "  ";
-
 /// The names of the keys of `bindings` that run `command`, as the options write them: as `bind` names
 /// them, in capitals.
 [[nodiscard]] auto keyNamesOf(const nx::settings::KeyBindings& bindings, std::string_view command)
@@ -213,7 +223,7 @@ constexpr std::string_view kKeySeparator = "  ";
     std::string names;
     for (const nx::console::KeyId key : bindings.keysOf(command)) {
         const std::string_view name = nx::settings::nameOf(key).value_or("");
-        names += names.empty() ? "" : kKeySeparator;
+        names += names.empty() ? "" : cs::kOptionKeySeparator;
         names.append_range(name | std::views::transform(nx::toUpperAscii));
     }
     return names;
@@ -267,8 +277,24 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(sliderOf(OptionCategory::Audio, &OptionsTexts::volume, client.audio.volume, 0.0F,
                             kMostVolume, kVolumeStep, OptionValueStyle::Percent));
     rows.push_back(switchOf(OptionCategory::Audio, &OptionsTexts::playUnfocused, client.audio.playUnfocused));
-    rows.push_back(sliderOf(OptionCategory::Video, &OptionsTexts::maxFps, client.video.fpsMax, kLeastMaxFps,
-                            nx::settings::kMostFpsWithoutOverride, kMaxFpsStep, OptionValueStyle::Whole));
+    rows.push_back({.category = OptionCategory::Video,
+                    .name = &OptionsTexts::windowMode,
+                    .control = choiceOf(client.video.windowMode,
+                                        WindowModeTexts::keys() | std::ranges::to<std::vector>(),
+                                        kWindowModeTexts | std::ranges::to<std::vector<cs::ChoiceText>>())});
+    auto maxFps = sliderOf(OptionCategory::Video, &OptionsTexts::maxFps, client.video.fpsMax, kLeastMaxFps,
+                           nx::settings::kMostFps, kMaxFpsStep, OptionValueStyle::Whole);
+    auto& fpsSlider = std::get<cs::OptionSlider>(maxFps.control);
+    fpsSlider.value = [fpsMax = client.video.fpsMax] {
+        return std::min(fpsMax.value(), nx::settings::kMostFps);
+    };
+    fpsSlider.set = [video = client.video](float value) {
+        if (value > nx::settings::kMostFpsWithoutOverride) {
+            video.fpsOverride.setAccepted(true);
+        }
+        video.fpsMax.setAccepted(value);
+    };
+    rows.push_back(std::move(maxFps));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::vsync, client.video.vsync));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::showFps, client.video.showFps));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::drawHud, client.video.hudDraw));

@@ -437,20 +437,20 @@ the console's command does, queued as a bind queues its own (`app.client:mainMen
 fonts it writes in are the project's own; a client that cannot have them does not start. What it writes is in
 the player's language ([§7](#7-localization)), but the game's name.
 
-An item that has more to ask opens a page beside the items, where the original opens a window: as tall as from the
-game's name to the last item's foot, with what it is for on a button at its foot and another that goes back. **A
+An item that has more to ask opens a centered panel and dims the menu behind it. **A
 new game** lists the game's maps, the `maps/<name>.bsp` of its own folders (`cs::mapNamesOf`: the user's content
 and the installation's `cstrike/`, not those of its base, `valve/`), in the order of the alphabet: Up, Down, Page Up, Page Down, Home and End select one, the list following it; the wheel scrolls the list,
 three rows a notch, and a thumb down its right shows how far; the mouse selects the map it is pressed on. Enter, or
 `START`, plays the map selected by the console's `map <name>`, a map the console could not be told of left out;
-Escape, or `BACK`, goes back to the items, and another item chosen leaves the page.
+Escape, or `BACK`, goes back to the items.
 
 **The options** (`cs.client:optionsPage`) list the player's settings by what they set, each on a tab: the
-mouse, the keys, the audio, the video and the game. A row names a setting and has what changes it: a slider, its
+multiplayer settings, keyboard, mouse, audio and video. A row names a setting and has what changes it: a slider, its
 value written after its track; a switch, which says whether it is on; a choice among a few values, which
 writes the one chosen; the keys of an action; or a button. Today: `sensitivity` and the mouse reversed
 (`m_pitch` below zero, as the original's option sets it); `volume` and the sound while the window is not focused
-(`s_play_unfocused`); the most frames a second (`fps_max`, to the 100 it gives without `fps_override`),
+(`s_play_unfocused`); the windowed, borderless and exclusive fullscreen modes (`vid_mode`), and the frame
+limit (`fps_max`, up to 1000 FPS, enabling `fps_override` above 100),
 `gl_vsync`, `cl_showfps`, `hud_draw`, how the picture is made (`r_fidelity`), `gamma` and `brightness`;
 the player's name (`name`), `_cl_autowepswitch`, `cl_righthand`, the language (`cl_language`, among those
 the game's data has) and the crosshair: its size (`cl_crosshair_size`), whether it is translucent (`cl_crosshair_translucent`), and its color
@@ -460,7 +460,8 @@ for being observed in the original before they are offered. A setting is set as 
 `config.cfg` as every archived cvar is: there is nothing to apply or to cancel, where the original has `OK`, `Cancel` and `Apply`. Each takes effect at once, the picture
 (§5.1) and the language (§7) among them. A choice writes its values as the menu draws, by a text of the
 options' or as they are (`cs::ChoiceText`), so that the page is written in the language chosen from the
-frame after. The language is written by its tag (`en`, `pt-BR`); set from the console to one the game's data
+frame after. The menu names Brazilian Portuguese and English in the active language and shows other languages
+by tag. Brazilian Portuguese is the default. Set from the console to one the game's data
 does not have, the row shows none chosen. The player's name is typed (`cs::OptionText`): Enter, or the left
 button, has it typed, the keys typing text then (the platform's `TextEntered`, `Client::typeAsNeeded`); what is
 typed goes in at its cursor, as much as `name` takes (`Cvar::accepts`), the keys edit it as a line of text
