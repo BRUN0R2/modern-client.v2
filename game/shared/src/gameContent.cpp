@@ -123,6 +123,11 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     // The game's own: the user's content, and the first of the installation's folders, over its base.
     const std::size_t gameMounts = mounts.size() + std::min<std::size_t>(installation->mounts().size(), 1);
     std::ranges::copy(installation->mounts(), std::back_inserter(mounts));
+    // Steam keeps shared UI resources such as TrackerScheme.res in this optional folder.
+    const auto platformFolder = installation->folder() / "platform";
+    if (std::error_code error; std::filesystem::is_directory(platformFolder, error)) {
+        mounts.push_back(platformFolder);
+    }
     auto vfs = nx::assets::Vfs::create(mounts);
     if (!vfs) {
         return nx::fail(GameContentError::Unavailable, std::move(vfs.error()));

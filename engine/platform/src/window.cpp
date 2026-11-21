@@ -173,6 +173,50 @@ auto Window::isShown() const noexcept -> bool {
     return (SDL_GetWindowFlags(windowOf(m_window)) & SDL_WINDOW_HIDDEN) == 0;
 }
 
+auto Window::mode() const noexcept -> WindowMode {
+    SDL_Window* window = windowOf(m_window);
+    if ((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) == 0) {
+        return WindowMode::Windowed;
+    }
+    return SDL_GetWindowFullscreenMode(window) == nullptr ? WindowMode::Borderless : WindowMode::Fullscreen;
+}
+
+auto Window::setMode(WindowMode requested) -> Result<void, WindowError> {
+    if (mode() == requested) {
+        return {};
+    }
+    SDL_Window* window = windowOf(m_window);
+    if (requested == WindowMode::Windowed) {
+        if (!SDL_SetWindowFullscreen(window, false)) {
+            return fail(WindowError::ModeUnavailable, std::format("SDL_SetWindowFullscreen: {}", sdlError()));
+        }
+    } else {
+        SDL_DisplayMode displayMode{};
+        const SDL_DisplayMode* exclusive = nullptr;
+        if (requested == WindowMode::Fullscreen) {
+            const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+            const SDL_DisplayMode* desktop = SDL_GetDesktopDisplayMode(display);
+            if (desktop == nullptr ||
+                !SDL_GetClosestFullscreenDisplayMode(display, desktop->w, desktop->h, desktop->refresh_rate,
+                                                     true, &displayMode)) {
+                return fail(WindowError::ModeUnavailable,
+                            std::format("fullscreen display mode: {}", sdlError()));
+            }
+            exclusive = &displayMode;
+        }
+        if (!SDL_SetWindowFullscreenMode(window, exclusive) || !SDL_SetWindowFullscreen(window, true)) {
+            return fail(WindowError::ModeUnavailable, std::format("fullscreen transition: {}", sdlError()));
+        }
+    }
+    if (!SDL_SyncWindow(window)) {
+        return fail(WindowError::ModeUnavailable, std::format("SDL_SyncWindow: {}", sdlError()));
+    }
+    if (mode() != requested) {
+        return fail(WindowError::ModeUnavailable, "the windowing system did not apply the requested mode");
+    }
+    return {};
+}
+
 auto Window::mousePosition() const noexcept -> MousePosition {
     MousePosition position;
     // SDL tells it in the window's own units, which a desktop's scaling makes fewer than its pixels.

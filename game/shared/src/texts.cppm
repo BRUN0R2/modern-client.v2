@@ -54,11 +54,19 @@ struct OptionsTexts {
     std::string audio{};
     std::string video{};
     std::string game{};
+    std::string action{};
+    std::string keys{};
+    std::string alternateKey{};
+    std::string done{};
     std::string sensitivity{};
     std::string reverseMouse{};
     std::string volume{};
     std::string playUnfocused{};
     std::string maxFps{};
+    std::string windowMode{};
+    std::string windowed{};
+    std::string borderless{};
+    std::string fullscreen{};
     std::string vsync{};
     std::string gamma{};
     std::string brightness{};
@@ -66,6 +74,8 @@ struct OptionsTexts {
     std::string fidelityLegacy{};
     std::string fidelityEnhanced{};
     std::string language{};
+    std::string languageEnglish{};
+    std::string languagePortuguese{};
     std::string playerName{};
     std::string crosshairSize{};
     std::string crosshairAuto{};
@@ -209,11 +219,19 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::audio>("audio"),
         nx::meta::field<&cs::OptionsTexts::video>("video"),
         nx::meta::field<&cs::OptionsTexts::game>("game"),
+        nx::meta::field<&cs::OptionsTexts::action>("action"),
+        nx::meta::field<&cs::OptionsTexts::keys>("keys"),
+        nx::meta::field<&cs::OptionsTexts::alternateKey>("alternateKey"),
+        nx::meta::field<&cs::OptionsTexts::done>("done"),
         nx::meta::field<&cs::OptionsTexts::sensitivity>("sensitivity"),
         nx::meta::field<&cs::OptionsTexts::reverseMouse>("reverseMouse"),
         nx::meta::field<&cs::OptionsTexts::volume>("volume"),
         nx::meta::field<&cs::OptionsTexts::playUnfocused>("playUnfocused"),
         nx::meta::field<&cs::OptionsTexts::maxFps>("maxFps"),
+        nx::meta::field<&cs::OptionsTexts::windowMode>("windowMode"),
+        nx::meta::field<&cs::OptionsTexts::windowed>("windowed"),
+        nx::meta::field<&cs::OptionsTexts::borderless>("borderless"),
+        nx::meta::field<&cs::OptionsTexts::fullscreen>("fullscreen"),
         nx::meta::field<&cs::OptionsTexts::vsync>("vsync"),
         nx::meta::field<&cs::OptionsTexts::gamma>("gamma"),
         nx::meta::field<&cs::OptionsTexts::brightness>("brightness"),
@@ -221,6 +239,8 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::fidelityLegacy>("fidelityLegacy"),
         nx::meta::field<&cs::OptionsTexts::fidelityEnhanced>("fidelityEnhanced"),
         nx::meta::field<&cs::OptionsTexts::language>("language"),
+        nx::meta::field<&cs::OptionsTexts::languageEnglish>("languageEnglish"),
+        nx::meta::field<&cs::OptionsTexts::languagePortuguese>("languagePortuguese"),
         nx::meta::field<&cs::OptionsTexts::playerName>("playerName"),
         nx::meta::field<&cs::OptionsTexts::crosshairSize>("crosshairSize"),
         nx::meta::field<&cs::OptionsTexts::crosshairAuto>("crosshairAuto"),

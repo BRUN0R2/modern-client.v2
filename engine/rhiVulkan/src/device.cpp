@@ -21,6 +21,8 @@ constexpr log::Category kLog{"rhi"};
 constexpr std::uint32_t kRequiredApiVersion = VK_API_VERSION_1_3;
 constexpr std::string_view kValidationLayer = "VK_LAYER_KHRONOS_validation";
 constexpr std::uint64_t kNoTimeout = std::numeric_limits<std::uint64_t>::max();
+// An occluded window may stop making images available while the main thread still needs to pump events.
+constexpr std::uint64_t kAcquireTimeoutNs = 50'000'000;
 /// The color attachments a render pass may have: what DirectX 11 allows.
 constexpr std::size_t kMaxColorAttachments = 8;
 /// The first word of every SPIR-V module.
@@ -1114,6 +1116,9 @@ private:
 /// surface lets the swapchain choose (a current extent of 0xFFFFFFFF).
 [[nodiscard]] auto extentFor(const VkSurfaceCapabilitiesKHR& capabilities, Extent2d requested) noexcept
     -> Extent2d {
+    if (requested.width == 0 || requested.height == 0) {
+        return {};
+    }
     if (capabilities.currentExtent.width != std::numeric_limits<std::uint32_t>::max()) {
         return Extent2d{.width = capabilities.currentExtent.width,
                         .height = capabilities.currentExtent.height};
@@ -3487,8 +3492,11 @@ auto VulkanSwapchain::acquireNow() -> Result<std::optional<HeldImage>, RhiError>
     }
     const VkSemaphore semaphore = m_acquired.at(m_nextAcquired);
     std::uint32_t index = 0;
-    const VkResult result =
-        vkAcquireNextImageKHR(m_device->handle(), m_swapchain, kNoTimeout, semaphore, VK_NULL_HANDLE, &index);
+    const VkResult result = vkAcquireNextImageKHR(m_device->handle(), m_swapchain, kAcquireTimeoutNs,
+                                                  semaphore, VK_NULL_HANDLE, &index);
+    if (result == VK_TIMEOUT || result == VK_NOT_READY) {
+        return std::nullopt;
+    }
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         m_isOutOfDate.store(true, std::memory_order_release);
         return std::nullopt;

@@ -28,7 +28,10 @@ using cs::TextsError;
         "\"t\"\nkeyDelete = \"u\"\nclear = \"v\"\n"
         "[options]\n"
         "mouse = \"a\"\naudio = \"b\"\nvideo = \"c\"\ngame = \"d\"\nsensitivity = \"e\"\n"
+        "action = \"x\"\nkeys = \"x\"\nalternateKey = \"x\"\ndone = \"x\"\n"
+        "languageEnglish = \"x\"\nlanguagePortuguese = \"x\"\n"
         "reverseMouse = \"f\"\nvolume = \"g\"\nplayUnfocused = \"h\"\nmaxFps = \"i\"\n"
+        "windowMode = \"x\"\nwindowed = \"x\"\nborderless = \"x\"\nfullscreen = \"x\"\n"
         "showFps = \"j\"\ndrawHud = \"k\"\nautoSwitch = \"l\"\nrightHand = \"m\"\non = \"n\"\n"
         "off = \"o\"\nkeyboard = \"p\"\npressAKey = \"q\"\nnoKey = \"r\"\n"
         "vsync = \"x\"\ngamma = \"x\"\nbrightness = \"x\"\nfidelity = \"x\"\n"
@@ -67,7 +70,7 @@ using cs::TextsError;
 }
 
 TEST(TextsTest, EveryLanguageOfTheRepositoryWritesEveryText) {
-    const std::filesystem::path data{NX_DATA_DIRECTORY};
+    const auto data = nx::platform::fromUtf8(NX_DATA_DIRECTORY);
     const auto languages = cs::languagesOf(data);
     ASSERT_TRUE(languages.has_value()) << (languages ? "" : nx::describe(languages.error()));
     EXPECT_EQ(*languages, (std::vector<std::string>{"en", "pt-BR"}));
@@ -78,7 +81,7 @@ TEST(TextsTest, EveryLanguageOfTheRepositoryWritesEveryText) {
 }
 
 TEST(TextsTest, ALanguageWritesItsOwnTexts) {
-    const std::filesystem::path data{NX_DATA_DIRECTORY};
+    const auto data = nx::platform::fromUtf8(NX_DATA_DIRECTORY);
     const auto english = cs::openTexts(data, "en");
     const auto portuguese = cs::openTexts(data, "pt-BR");
     ASSERT_TRUE(english.has_value());

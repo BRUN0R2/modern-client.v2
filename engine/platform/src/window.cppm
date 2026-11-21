@@ -21,6 +21,15 @@ enum class WindowError : std::uint8_t {
     SizeUnavailable,          ///< The video driver did not tell the size of the window.
     TextInputUnavailable,     ///< Text input could not be turned on or off.
     ShowFailed,               ///< The window could not be shown.
+    ModeUnavailable,          ///< The requested window or display mode could not be applied.
+};
+
+/// How the window occupies its display.
+enum class WindowMode : std::uint8_t {
+    Windowed,
+    Borderless, ///< Fullscreen at the desktop's display mode.
+    Fullscreen, ///< Exclusive fullscreen in a supported display mode.
+    Count,
 };
 
 /// How the mouse reports itself to the window.
@@ -291,6 +300,10 @@ public:
     [[nodiscard]] auto show() -> Result<void, WindowError>;
     /// Whether the window is shown.
     [[nodiscard]] auto isShown() const noexcept -> bool;
+
+    [[nodiscard]] auto mode() const noexcept -> WindowMode;
+    /// Changes the display mode of a visible window. Errors: ModeUnavailable.
+    [[nodiscard]] auto setMode(WindowMode mode) -> Result<void, WindowError>;
 
     /// Puts the mouse in `mode`. Errors: RelativeMouseUnavailable.
     [[nodiscard]] auto setMouseMode(MouseMode mode) -> Result<void, WindowError>;

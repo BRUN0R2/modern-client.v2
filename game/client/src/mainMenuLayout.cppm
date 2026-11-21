@@ -4,7 +4,7 @@
 /// Where the main menu's parts go on a screen (docs/12-ui-hud-and-console.md, section 4): what its mouse
 /// reaches and what draws it read one layout, the menus' design (cs.client:menuDesign) on the screen, the
 /// game's name at its top left and the items down its left, the last a fixed way over its foot, where the
-/// original lists its menu's; and beside them the page an item opens, where the original opens a window.
+/// original lists its menu's; and the centered panel an item opens.
 export module cs.client:mainMenuLayout;
 
 import std;
@@ -41,8 +41,7 @@ public:
     /// Where the keys are told: their line's top left.
     [[nodiscard]] inline auto hints() const noexcept -> const nx::ui::PixelPoint& { return hintsPoint; }
 
-    /// The page an item opens, beside the items: as tall as from the game's name to the last item's foot,
-    /// no wider than the screen leaves it.
+    /// The page an item opens, centered on the screen.
     [[nodiscard]] inline auto page() const noexcept -> const nx::ui::PixelRect& { return pageRect; }
     /// Where the page's name is written: its line's top left.
     [[nodiscard]] auto pageTitle() const noexcept -> nx::ui::PixelPoint;

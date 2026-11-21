@@ -20,11 +20,11 @@ export namespace cs {
 
 /// What the options set, each on a tab of its own.
 enum class OptionCategory : std::uint8_t {
-    Mouse,
+    Game,
     Keyboard,
+    Mouse,
     Audio,
     Video,
-    Game,
     Count,
 };
 
@@ -60,6 +60,9 @@ struct OptionKeys {
     std::function<bool(const nx::platform::WindowEvent&)> bind;
     std::function<void()> clear;
 };
+
+/// Separates the names shown for the bindings of one action.
+inline constexpr std::string_view kOptionKeySeparator = "  ";
 
 /// How a value of a choice is written: by a text of the options', in the player's language, or as it is
 /// (a language's tag).
@@ -251,7 +254,7 @@ private:
         -> OptionsOutcome;
 
     std::vector<OptionRow> rows;
-    OptionCategory category = OptionCategory::Mouse;
+    OptionCategory category = OptionCategory::Game;
     std::optional<std::size_t> selected;   ///< Of the tab's settings; none while the tabs are selected.
     std::size_t firstShown = 0;            ///< The setting on the list's first row.
     std::optional<std::size_t> draggedRow; ///< The slider the mouse holds, by its setting.

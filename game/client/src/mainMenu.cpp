@@ -46,8 +46,7 @@ auto MainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mous
                       nx::rhi::Extent2d size, MenuGame game) -> std::optional<MainMenuRequest> {
     const std::vector<MainMenuAction> items = mainMenuItemsOf(*look, game);
     const MainMenuLayout layout{size, items.size()};
-    if (isTyping()) {
-        // Every event is the options' while a text of theirs is typed, what is typed among them.
+    if (page == Page::Options) {
         leaveOptionsIf(options.handle(event, cursor, layout));
         return std::nullopt;
     }
@@ -57,15 +56,9 @@ auto MainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mous
             item && page == Page::Items) {
             selection = items[*item];
         }
-        if (page == Page::Options) {
-            leaveOptionsIf(options.handle(event, cursor, layout));
-        }
         return std::nullopt;
     }
     if (const auto* const wheel = std::get_if<nx::platform::MouseWheelMoved>(&event)) {
-        if (page == Page::Options) {
-            leaveOptionsIf(options.handle(event, cursor, layout));
-        }
         if (page == Page::NewGame) {
             // Away from the user scrolls up, as a list does.
             scrollMaps(-static_cast<std::ptrdiff_t>(std::lround(wheel->dy * kRowsANotch)), layout.listRows());
@@ -73,30 +66,15 @@ auto MainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mous
         return std::nullopt;
     }
     if (const auto* const button = std::get_if<nx::platform::MouseButtonChanged>(&event)) {
-        const bool isPress = button->isDown && button->button == nx::platform::MouseButton::Left;
-        if (isPress && layout.itemAt(cursor.x, cursor.y) && !takesEveryKey()) {
-            return click(cursor, layout, items);
-        }
-        if (page == Page::Options) {
-            leaveOptionsIf(options.handle(event, cursor, layout)); // what comes up lets go of its slider
-            return std::nullopt;
-        }
-        return isPress ? click(cursor, layout, items) : std::nullopt;
+        return button->isDown && button->button == nx::platform::MouseButton::Left
+                   ? click(cursor, layout, items)
+                   : std::nullopt;
     }
     const auto* const key = std::get_if<nx::platform::KeyChanged>(&event);
     if (key == nullptr || !key->isDown) {
         return std::nullopt;
     }
-    switch (page) {
-    case Page::NewGame:
-        return pressOnNewGame(*key, layout.listRows());
-    case Page::Options:
-        leaveOptionsIf(options.handle(event, cursor, layout));
-        return std::nullopt;
-    case Page::Items:
-        break;
-    }
-    return pressOnItems(*key, items);
+    return page == Page::NewGame ? pressOnNewGame(*key, layout.listRows()) : pressOnItems(*key, items);
 }
 
 void MainMenu::leaveOptionsIf(OptionsOutcome outcome) noexcept {
@@ -123,11 +101,9 @@ auto MainMenu::choose(MainMenuAction action) -> std::optional<MainMenuRequest> {
 
 auto MainMenu::click(nx::platform::MousePosition cursor, const MainMenuLayout& layout,
                      std::span<const MainMenuAction> items) -> std::optional<MainMenuRequest> {
-    if (const std::optional<std::size_t> item = layout.itemAt(cursor.x, cursor.y)) {
-        return choose(items[*item]);
-    }
     if (page != Page::NewGame) {
-        return std::nullopt;
+        const auto item = layout.itemAt(cursor.x, cursor.y);
+        return item ? choose(items[*item]) : std::nullopt;
     }
     if (const std::optional<std::size_t> row = layout.listRowAt(cursor.x, cursor.y)) {
         if (const std::size_t pressed = firstMapShownOf(layout.listRows()) + *row; pressed < maps.size()) {

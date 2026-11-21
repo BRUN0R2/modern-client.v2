@@ -135,6 +135,7 @@ public:
 
 private:
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
+    void followWindowMode();
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     /// Loads the map asked for, once a frame told that it is loading (MapChange::loadAsked); one that cannot
@@ -268,6 +269,9 @@ private:
     nx::platform::Instant m_frameStart = nx::platform::MonotonicClock::now();
     bool m_isRunning = true;
     bool m_isFocused = true; ///< The window is, as it opens.
+    bool m_isMinimized = false;
+    bool m_needsSurfaceRefresh = false;
+    nx::platform::WindowMode m_appliedWindowMode = nx::platform::WindowMode::Windowed;
 };
 
 /// The installation `options` name (`-basedir`), else the content configuration's
@@ -632,6 +636,7 @@ void Client::handleInMainMenu(const nx::platform::WindowEvent& event) {
 
 auto Client::run() -> nx::Result<void, ClientError> {
     while (m_isRunning) {
+        followWindowMode();
         // fps_max: the limiter waits before the input is read, so that the frame shows the latest
         // (docs/05-rendering.md, section 12). The local game is one of more than one player, as a
         // Counter-Strike server's.
@@ -708,21 +713,58 @@ void Client::followLanguage() {
     }
 }
 
+void Client::followWindowMode() {
+    auto& video = *m_video;
+    const auto setting = settings->client.video.windowMode;
+    const auto requested = setting.value();
+    if (requested == m_appliedWindowMode || m_isMinimized || !video.window.isShown()) {
+        return;
+    }
+    video.device->waitIdle();
+    if (const auto applied = video.window.setMode(requested); !applied) {
+        nx::log::warning(kLog, "vid_mode {}: {}", nx::enumName(requested), nx::describe(applied.error()));
+        if (const auto restored = video.window.setMode(m_appliedWindowMode); !restored) {
+            nx::log::warning(kLog, "restoring the window mode: {}", nx::describe(restored.error()));
+        }
+        setting.setAccepted(video.window.mode());
+    } else {
+        nx::log::info(kLog, "window mode: {}", nx::enumName(requested));
+    }
+    m_appliedWindowMode = setting.value();
+    m_needsSurfaceRefresh = true;
+}
+
 auto Client::readInput() -> nx::Result<void, ClientError> {
     m_events.clear();
     m_video->window.pollEvents(m_events);
+    bool refreshSurface = std::exchange(m_needsSurfaceRefresh, false);
     for (const nx::platform::WindowEvent& event : m_events) {
         if (const auto* focus = std::get_if<nx::platform::FocusChanged>(&event)) {
             m_isFocused = focus->isFocused;
+            refreshSurface = refreshSurface || m_isFocused;
         }
         if (std::holds_alternative<nx::platform::CloseRequested>(event)) {
             m_isRunning = false;
-        } else if (const auto* resized = std::get_if<nx::platform::Resized>(&event)) {
-            if (auto recreated = m_video->swapchain->resize(extentOf(resized->size)); !recreated) {
-                return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
-            }
+        } else if (const auto* minimized = std::get_if<nx::platform::Minimized>(&event)) {
+            m_isMinimized = minimized->isMinimized;
+            refreshSurface = true;
+        } else if (std::holds_alternative<nx::platform::Resized>(event)) {
+            refreshSurface = true;
         } else {
             handleInput(event);
+        }
+    }
+    if (refreshSurface && m_isRunning) {
+        nx::platform::PixelSize size{};
+        if (!m_isMinimized) {
+            auto current = m_video->window.pixelSize();
+            if (!current) {
+                return nx::fail(ClientError::WindowUnavailable, std::move(current.error()));
+            }
+            size = *current;
+        }
+        if (auto recreated = m_video->swapchain->resize(extentOf(size)); !recreated) {
+            return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
         }
     }
     return {};

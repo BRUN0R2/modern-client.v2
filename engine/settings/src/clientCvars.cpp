@@ -66,7 +66,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                              .defaultValue = kFpsMax,
                                              .description = "The most frames a second: 0.5 at least (20 with "
                                                             "more than one player), 100 at most without "
-                                                            "fps_override.",
+                                                            "fps_override, 1000 with it.",
                                              .flags = kArchived,
                                              .minimum = 0.0F});
     auto fpsOverride = console.registerCvar(
@@ -80,6 +80,14 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                             .defaultValue = false,
                                             .description = "Whether frames wait for the display's refresh.",
                                             .flags = kArchived});
+    auto windowMode = console.registerCvar(CvarDesc<platform::WindowMode>{
+        .name = "vid_mode",
+        .defaultValue = platform::WindowMode::Windowed,
+        .description = "Display mode: windowed, borderless or exclusive fullscreen.",
+        .flags = kArchived});
+    if (!windowMode) {
+        return std::unexpected{std::move(windowMode.error())};
+    }
     auto gamma =
         console.registerCvar(CvarDesc<float>{.name = "gamma",
                                              .defaultValue = kGamma,
@@ -193,6 +201,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
         .video = {.fpsMax = *fpsMax,
                   .fpsOverride = *fpsOverride,
                   .vsync = *vsync,
+                  .windowMode = *windowMode,
                   .gamma = *gamma,
                   .brightness = *brightness,
                   .textureGamma = *textureGamma,
@@ -218,7 +227,7 @@ auto frameIntervalOf(const VideoCvars& video, GamePlayers players) -> Seconds {
     if (video.vsync.value() && !isOverridden) {
         fps = kMostFpsWithoutOverride; // the display's refresh paces it
     }
-    return Seconds{1.0F / (fps + kFpsMargin)};
+    return Seconds{1.0F / std::min(fps + kFpsMargin, kMostFps)};
 }
 
 auto enterMultiplayerGame(const VideoCvars& video) -> Result<void, console::CvarError> {

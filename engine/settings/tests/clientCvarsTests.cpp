@@ -10,6 +10,7 @@
 import std;
 import nx.core;
 import nx.console;
+import nx.platform;
 import nx.settings;
 
 namespace {
@@ -44,6 +45,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_FLOAT_EQ(cvars->video.fpsMax.value(), 100.0F);
     EXPECT_FALSE(cvars->video.fpsOverride.value());
     EXPECT_FALSE(cvars->video.vsync.value()) << "off, where the original starts it on";
+    EXPECT_EQ(cvars->video.windowMode.value(), nx::platform::WindowMode::Windowed);
     EXPECT_FLOAT_EQ(cvars->video.gamma.value(), 2.5F);
     EXPECT_FLOAT_EQ(cvars->video.brightness.value(), 1.0F);
     EXPECT_FLOAT_EQ(cvars->video.textureGamma.value(), 2.0F);
@@ -54,7 +56,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_EQ(cvars->video.multiplayerDecals.value(), 300);
     EXPECT_TRUE(cvars->player.autoWeaponSwitch.value());
     EXPECT_EQ(cvars->player.name.value(), "Player") << "the engine's, which Steam replaces";
-    EXPECT_EQ(cvars->player.language.value(), "en");
+    EXPECT_EQ(cvars->player.language.value(), "pt-BR");
     EXPECT_EQ(cvars->player.language.name(), "cl_language");
     EXPECT_FLOAT_EQ(cvars->audio.volume.value(), 0.7F);
     EXPECT_EQ(cvars->audio.device.value(), "") << "the system's default output";
@@ -64,14 +66,38 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
 
     // What config.cfg keeps: what the original archives, not texgamma nor lightgamma.
     const std::string archived = console.archivedCvars();
-    for (const std::string_view name :
-         {"sensitivity", "m_yaw", "m_pitch", "fps_max", "fps_override", "gl_vsync", "gamma", "brightness",
-          "hud_draw", "cl_showfps", "r_decals", "mp_decals", "_cl_autowepswitch", "name", "volume",
-          "s_device", "s_play_unfocused", "in_keymap", "cl_language"}) {
+    for (const std::string_view name : {"sensitivity",  "m_yaw",
+                                        "m_pitch",      "fps_max",
+                                        "fps_override", "gl_vsync",
+                                        "vid_mode",     "gamma",
+                                        "brightness",   "hud_draw",
+                                        "cl_showfps",   "r_decals",
+                                        "mp_decals",    "_cl_autowepswitch",
+                                        "name",         "volume",
+                                        "s_device",     "s_play_unfocused",
+                                        "in_keymap",    "cl_language"}) {
         EXPECT_NE(archived.find(std::format("{} \"", name)), std::string::npos) << name;
     }
     EXPECT_EQ(archived.find("texgamma"), std::string::npos);
     EXPECT_EQ(archived.find("lightgamma"), std::string::npos);
+}
+
+TEST(ClientCvarsTest, TheWindowModeAcceptsOnlySupportedChoices) {
+    SilentOutput output;
+    NoFiles files;
+    nx::console::Console console{output, files};
+    const auto cvars = nx::settings::registerClientCvars(console);
+    ASSERT_TRUE(cvars.has_value());
+
+    using nx::platform::WindowMode;
+    ASSERT_TRUE(console.setCvar("vid_mode", "Borderless").has_value());
+    EXPECT_EQ(cvars->video.windowMode.value(), WindowMode::Borderless);
+    ASSERT_TRUE(console.setCvar("vid_mode", "Fullscreen").has_value());
+    EXPECT_EQ(cvars->video.windowMode.value(), WindowMode::Fullscreen);
+    EXPECT_FALSE(console.setCvar("vid_mode", "3").has_value());
+    EXPECT_EQ(cvars->video.windowMode.value(), WindowMode::Fullscreen);
+    ASSERT_TRUE(console.setCvar("vid_mode", "0").has_value());
+    EXPECT_EQ(cvars->video.windowMode.value(), WindowMode::Windowed);
 }
 
 TEST(ClientCvarsTest, KeyboardMappingIsTypedArchivedAndChangesExplicitly) {
@@ -148,6 +174,10 @@ TEST(ClientCvarsTest, FpsMaxPacesTheFramesAsTheOriginalsHostFilterTime) {
     ASSERT_TRUE(console.setCvar("fps_max", "10").has_value());
     EXPECT_FLOAT_EQ(paced(One), 10.5F);
     EXPECT_FLOAT_EQ(paced(MoreThanOne), 20.5F);
+    ASSERT_TRUE(console.setCvar("fps_max", "1000").has_value());
+    EXPECT_FLOAT_EQ(paced(One), 1000.0F);
+    ASSERT_TRUE(console.setCvar("fps_max", "1200").has_value());
+    EXPECT_FLOAT_EQ(paced(MoreThanOne), 1000.0F);
 }
 
 TEST(ClientCvarsTest, AGameOfMorePlayersHoldsDecalsToMpDecals) {
