@@ -3,7 +3,7 @@
 
 /// What the project's own menus share of their look (docs/12-ui-hud-and-console.md, section 4): a design
 /// 1080 lines tall made as large as the screen, the sizes of text made of the project's fonts for it, and
-/// the colors: warm white text and gold over dark glass.
+/// the colors: warm text and brass accents over olive panels.
 export module cs.client:menuDesign;
 
 import std;
@@ -28,9 +28,10 @@ inline constexpr MenuUnits kMenuDesignHeight{1080};
 
 /// Why a menu cannot be drawn.
 enum class MenuPanelError : std::uint8_t {
-    NoFont,    ///< A family of the look's is among no fonts; the detail names it.
-    Unusable,  ///< A face does not open at its size, or its glyphs cannot be drawn (cause).
-    GpuFailed, ///< The GPU refused a picture or an atlas (cause).
+    ImageUnavailable, ///< The project's menu image could not be read or decoded (cause).
+    NoFont,           ///< A family of the look's is among no fonts; the detail names it.
+    Unusable,         ///< A face does not open at its size, or its glyphs cannot be drawn (cause).
+    GpuFailed,        ///< The GPU refused a picture or an atlas (cause).
 };
 
 /// The menus' design on a screen: how many of its pixels each unit of the design takes.
@@ -78,19 +79,19 @@ inline constexpr nx::Pixels kMenuLineThick{1};
 void paintMenuOutline(nx::ui::PanelPainter& painter, const nx::ui::PixelRect& rect,
                       nx::render::ScreenColor color);
 
-// The colors: warm white text, dark glass over the scene, and the gold that stands out.
-inline constexpr nx::render::ScreenColor kMenuInk{.red = 244, .green = 240, .blue = 231};
-inline constexpr nx::render::ScreenColor kMenuInkSoft{.red = 244, .green = 240, .blue = 231, .alpha = 168};
-inline constexpr nx::render::ScreenColor kMenuInkFaint{.red = 244, .green = 240, .blue = 231, .alpha = 102};
-inline constexpr nx::render::ScreenColor kMenuLine{.red = 255, .green = 255, .blue = 255, .alpha = 31};
-inline constexpr nx::render::ScreenColor kMenuCell{.red = 255, .green = 255, .blue = 255, .alpha = 13};
-inline constexpr nx::render::ScreenColor kMenuCellLit{.red = 255, .green = 255, .blue = 255, .alpha = 28};
+// The colors: warm text, olive surfaces and brass accents.
+inline constexpr nx::render::ScreenColor kMenuInk{.red = 245, .green = 242, .blue = 224};
+inline constexpr nx::render::ScreenColor kMenuInkSoft{.red = 225, .green = 224, .blue = 204};
+inline constexpr nx::render::ScreenColor kMenuInkFaint{.red = 174, .green = 180, .blue = 151};
+inline constexpr nx::render::ScreenColor kMenuLine{.red = 112, .green = 122, .blue = 92};
+inline constexpr nx::render::ScreenColor kMenuCell{.red = 193, .green = 208, .blue = 159, .alpha = 29};
+inline constexpr nx::render::ScreenColor kMenuCellLit{.red = 183, .green = 202, .blue = 141, .alpha = 63};
 /// What a panel of a menu is filled with, over the scene or the menu's ground.
-inline constexpr nx::render::ScreenColor kMenuGlass{.red = 13, .green = 14, .blue = 16, .alpha = 199};
+inline constexpr nx::render::ScreenColor kMenuGlass{.red = 36, .green = 44, .blue = 30, .alpha = 232};
 /// What darkens the scene under a menu.
-inline constexpr nx::render::ScreenColor kMenuBackdrop{.red = 6, .green = 7, .blue = 9, .alpha = 184};
-inline constexpr nx::render::ScreenColor kMenuGold{.red = 242, .green = 179, .blue = 61};
+inline constexpr nx::render::ScreenColor kMenuBackdrop{.red = 12, .green = 16, .blue = 10, .alpha = 168};
+inline constexpr nx::render::ScreenColor kMenuGold{.red = 221, .green = 189, .blue = 118};
 /// What is written on the gold.
-inline constexpr nx::render::ScreenColor kOnMenuGold{.red = 27, .green = 19, .blue = 5};
+inline constexpr nx::render::ScreenColor kOnMenuGold{.red = 33, .green = 30, .blue = 16};
 
 } // namespace cs

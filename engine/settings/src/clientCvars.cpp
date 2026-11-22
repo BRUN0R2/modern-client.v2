@@ -14,6 +14,10 @@ namespace {
 using console::CvarDesc;
 using console::CvarFlag;
 
+/// Keep parsed dimensions in the range supported by the engine's window and UI.
+constexpr std::uint32_t kMaxResolutionSide = std::numeric_limits<std::int16_t>::max();
+constexpr platform::PixelSize kMinResolution{.width = 320, .height = 240};
+
 constexpr console::CvarFlags kArchived{CvarFlag::Archive};
 
 // The values Counter-Strike 1.6 starts with (its config.cfg; the engine's defaults for those the
@@ -34,6 +38,28 @@ constexpr float kLeastMultiplayerFps = 20.0F;
 constexpr float kFpsMargin = 0.5F;
 
 } // namespace
+
+auto resolutionOf(std::string_view text) noexcept -> std::optional<platform::PixelSize> {
+    const auto separator = text.find('x');
+    if (separator == 0 || separator == std::string_view::npos || separator + 1 == text.size()) {
+        return std::nullopt;
+    }
+    const auto dimension = [](std::string_view digits) -> std::optional<std::uint32_t> {
+        std::uint32_t value = 0;
+        const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), value);
+        if (error != std::errc{} || end != digits.data() + digits.size() || value == 0 ||
+            value > kMaxResolutionSide) {
+            return std::nullopt;
+        }
+        return value;
+    };
+    const auto width = dimension(text.substr(0, separator));
+    const auto height = dimension(text.substr(separator + 1));
+    if (!width || !height || *width < kMinResolution.width || *height < kMinResolution.height) {
+        return std::nullopt;
+    }
+    return platform::PixelSize{.width = *width, .height = *height};
+}
 
 auto registerClientCvars(console::Console& console) -> Result<ClientCvars, console::CvarError> {
     auto keymap = console.registerCvar(CvarDesc<KeyMapping>{
@@ -66,7 +92,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                              .defaultValue = kFpsMax,
                                              .description = "The most frames a second: 0.5 at least (20 with "
                                                             "more than one player), 100 at most without "
-                                                            "fps_override.",
+                                                            "fps_override, 1000 with it.",
                                              .flags = kArchived,
                                              .minimum = 0.0F});
     auto fpsOverride = console.registerCvar(
@@ -80,6 +106,25 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                             .defaultValue = false,
                                             .description = "Whether frames wait for the display's refresh.",
                                             .flags = kArchived});
+    auto windowMode = console.registerCvar(CvarDesc<platform::WindowMode>{
+        .name = "vid_mode",
+        .defaultValue = platform::WindowMode::Windowed,
+        .description = "Display mode: windowed, borderless or exclusive fullscreen.",
+        .flags = kArchived});
+    if (!windowMode) {
+        return std::unexpected{std::move(windowMode.error())};
+    }
+    auto resolution = console.registerCvar(CvarDesc<std::string>{
+        .name = "vid_resolution",
+        .defaultValue = "auto",
+        .description = "Display resolution: auto or WIDTHxHEIGHT.",
+        .flags = kArchived,
+        .rule = {.expectation = "auto or WIDTHxHEIGHT", .accepts = [](std::string_view text) noexcept {
+                     return text == "auto" || resolutionOf(text).has_value();
+                 }}});
+    if (!resolution) {
+        return std::unexpected{std::move(resolution.error())};
+    }
     auto gamma =
         console.registerCvar(CvarDesc<float>{.name = "gamma",
                                              .defaultValue = kGamma,
@@ -193,6 +238,8 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
         .video = {.fpsMax = *fpsMax,
                   .fpsOverride = *fpsOverride,
                   .vsync = *vsync,
+                  .windowMode = *windowMode,
+                  .resolution = *resolution,
                   .gamma = *gamma,
                   .brightness = *brightness,
                   .textureGamma = *textureGamma,
@@ -218,7 +265,7 @@ auto frameIntervalOf(const VideoCvars& video, GamePlayers players) -> Seconds {
     if (video.vsync.value() && !isOverridden) {
         fps = kMostFpsWithoutOverride; // the display's refresh paces it
     }
-    return Seconds{1.0F / (fps + kFpsMargin)};
+    return Seconds{1.0F / std::min(fps + kFpsMargin, kMostFps)};
 }
 
 auto enterMultiplayerGame(const VideoCvars& video) -> Result<void, console::CvarError> {

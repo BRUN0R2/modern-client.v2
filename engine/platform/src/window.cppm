@@ -17,16 +17,27 @@ enum class WindowError : std::uint8_t {
     VideoUnavailable,         ///< The video subsystem did not start (no display, no driver).
     CreateFailed,             ///< The window could not be created.
     NoNativeWindow,           ///< The video driver has no window a GPU can draw to (offscreen).
-    RelativeMouseUnavailable, ///< The mouse could not be captured for relative motion.
+    RelativeMouseUnavailable, ///< Relative mouse motion could not be switched on or off.
+    CursorUnavailable,        ///< The cursor could not be shown.
     SizeUnavailable,          ///< The video driver did not tell the size of the window.
     TextInputUnavailable,     ///< Text input could not be turned on or off.
     ShowFailed,               ///< The window could not be shown.
+    ModeUnavailable,          ///< The requested window or display mode could not be applied.
+};
+
+/// How the window occupies its display.
+enum class WindowMode : std::uint8_t {
+    Windowed,
+    Borderless, ///< Fullscreen at the desktop's display mode.
+    Fullscreen, ///< Exclusive fullscreen in a supported display mode.
+    Count,
 };
 
 /// How the mouse reports itself to the window.
 enum class MouseMode : std::uint8_t {
-    Absolute, ///< The cursor shows and leaves the window.
-    Relative, ///< The cursor hides and stays in the window, which gets its raw motion (MouseMoved).
+    Absolute,       ///< The native cursor shows and can leave the window.
+    AbsoluteHidden, ///< Absolute coordinates for a cursor drawn by the client.
+    Relative,       ///< The cursor hides and stays in the window, which gets its raw motion (MouseMoved).
 };
 
 /// Whether the keys type text (TextEntered): while the console or a text entry is used.
@@ -292,8 +303,19 @@ public:
     /// Whether the window is shown.
     [[nodiscard]] auto isShown() const noexcept -> bool;
 
-    /// Puts the mouse in `mode`. Errors: RelativeMouseUnavailable.
-    [[nodiscard]] auto setMouseMode(MouseMode mode) -> Result<void, WindowError>;
+    [[nodiscard]] auto mode() const noexcept -> WindowMode;
+    /// The distinct fullscreen resolutions advertised by the window's display, smallest first.
+    [[nodiscard]] auto displayResolutions() const -> std::vector<PixelSize>;
+    /// Changes the mode of a visible window. An explicit resolution is in drawable pixels.
+    /// Borderless always uses the desktop. With no resolution, windowed uses its default size and
+    /// exclusive fullscreen uses the display's desktop mode. Errors: ModeUnavailable.
+    [[nodiscard]] auto setMode(WindowMode mode, std::optional<PixelSize> resolution = {})
+        -> Result<void, WindowError>;
+
+    /// Puts the mouse in `mode`. `redrawCursor` reasserts a visible native cursor after a window
+    /// or focus transition.
+    /// Errors: RelativeMouseUnavailable, CursorUnavailable.
+    [[nodiscard]] auto setMouseMode(MouseMode mode, bool redrawCursor = false) -> Result<void, WindowError>;
     /// Where the mouse's cursor is now, as a menu asks what is under it.
     [[nodiscard]] auto mousePosition() const noexcept -> MousePosition;
 

@@ -20,7 +20,6 @@ export namespace cs {
 
 /// The sizes of text the menu writes in.
 enum class MainMenuFont : std::uint8_t {
-    Title,
     Item,
     Row,
     Hint,
@@ -44,13 +43,15 @@ public:
         return facesHeight == screenHeight;
     }
 
-    /// Puts on the GPU with `screen`, its uploads recorded in `commands`, the fonts for a screen
+    /// Puts on the GPU with `screen`, its uploads recorded in `commands`, the logo from
+    /// `logoPath` and the fonts for a screen
     /// `screenHeight` pixels tall, more than none, of the look's families among `fonts`; and, the first
     /// time, the picture behind the menu, read from `vfs` (readMenuBackground): one that cannot be read is
     /// logged, and the menu shows without it, as in a content that has none. Errors: every MenuPanelError.
     [[nodiscard]] auto load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
                             nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,
-                            std::uint32_t screenHeight) -> nx::Result<void, MenuPanelError>;
+                            const std::filesystem::path& logoPath, std::uint32_t screenHeight)
+        -> nx::Result<void, MenuPanelError>;
 
     /// Appends to `quads` the menu showing `frame` on a screen of `size`, the one its fonts were loaded for:
     /// over the scene darkened while a map is played, else over its background, covering the whole screen
@@ -59,8 +60,8 @@ public:
                 nx::rhi::Extent2d size);
 
     /// Appends to `quads` what tells that the map `map` is loading, on a screen of `size`, the one its fonts
-    /// were loaded for: over the menu's background, covering the whole screen, the game's name where the
-    /// menu writes it and the map's where its items stand.
+    /// were loaded for: over the menu's background, covering the whole screen, the project's logo where the
+    /// menu shows it and the map's where its items stand.
     void appendLoading(std::vector<nx::render::ScreenQuad>& quads, std::string_view map,
                        nx::rhi::Extent2d size);
 
@@ -85,6 +86,7 @@ private:
     std::uint32_t facesHeight = 0; ///< The screen's height the fonts are made for; 0 before they are.
     nx::EnumArray<MainMenuFont, std::optional<MenuFace>> faces;
     bool isBackgroundRead = false; ///< Whether load looked for the picture behind the menu.
+    std::optional<nx::render::ScreenImage> logo;
     std::optional<nx::render::ScreenImage> background; ///< None for one that could not be read.
     nx::render::RetainedQuads<Shown> shown;
     nx::render::RetainedQuads<ShownLoading> shownLoading;

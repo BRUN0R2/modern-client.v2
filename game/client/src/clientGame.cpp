@@ -73,6 +73,7 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
     std::ranges::move(snapshot.sounds, std::back_inserter(m_sounds));
     std::ranges::move(snapshot.playerSounds, std::back_inserter(playerSounds));
     std::ranges::move(snapshot.impacts, std::back_inserter(m_impacts));
+    std::ranges::move(snapshot.bulletTracers, std::back_inserter(bulletTracers));
     std::ranges::move(snapshot.bloodMarks, std::back_inserter(bloodMarks));
     std::ranges::move(snapshot.bloodSprays, std::back_inserter(bloodSprays));
     std::ranges::move(snapshot.bloodStreams, std::back_inserter(bloodStreams));
@@ -101,6 +102,15 @@ auto ClientGame::eye() const noexcept -> nx::Vec3 {
 
 auto ClientGame::shownTime() const -> nx::GameTime {
     return m_last.time.after(m_pending - kCommandInterval, m_last.rate);
+}
+
+auto ClientGame::walkingSpeed() const noexcept -> nx::UnitsPerSecond {
+    const MovementState& player = m_last.player;
+    if (!player.isOnGround || player.isDead || player.moveType != MoveType::Walk || player.isOnLadder ||
+        player.waterLevel >= WaterLevel::Waist) {
+        return {};
+    }
+    return nx::UnitsPerSecond{std::hypot(player.velocity.x, player.velocity.y)};
 }
 
 auto ClientGame::viewModel() const -> std::optional<ViewModelPose> {

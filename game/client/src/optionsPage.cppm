@@ -15,16 +15,18 @@ import nx.platform;
 import nx.ui;
 import cs.shared;
 import :mainMenuLayout;
+import :hud;
 
 export namespace cs {
 
 /// What the options set, each on a tab of its own.
 enum class OptionCategory : std::uint8_t {
-    Mouse,
+    Game,
     Keyboard,
+    Mouse,
     Audio,
     Video,
-    Game,
+    Crosshair,
     Count,
 };
 
@@ -61,6 +63,9 @@ struct OptionKeys {
     std::function<void()> clear;
 };
 
+/// Separates the names shown for the bindings of one action.
+inline constexpr std::string_view kOptionKeySeparator = "  ";
+
 /// How a value of a choice is written: by a text of the options', in the player's language, or as it is
 /// (a language's tag).
 using ChoiceText = std::variant<std::string OptionsTexts::*, std::string>;
@@ -72,6 +77,9 @@ struct OptionChoice {
     std::vector<ChoiceText> values;
     std::function<std::optional<std::size_t>()> chosen;
     std::function<void(std::size_t)> choose;
+    /// A display value when the setting is fixed by another setting.
+    std::function<std::optional<ChoiceText>()> fixedValue{};
+    bool opensMenu = false;
 };
 
 /// A setting that is a line of text the player types: what it is now; whether it would take a text, so that
@@ -130,8 +138,20 @@ struct ShownKeys {
 /// A choice as it shows: how the value chosen is written; none while it is set to another.
 struct ShownChoice {
     std::optional<ChoiceText> chosen{};
+    bool isAdjustable = true;
+    bool opensMenu = false;
 
     [[nodiscard]] inline auto operator==(const ShownChoice&) const noexcept -> bool = default;
+};
+
+struct ShownChoiceMenu {
+    std::vector<ChoiceText> values;
+    std::optional<std::size_t> chosen;
+    std::size_t row = 0;
+    std::size_t first = 0;
+    std::size_t highlighted = 0;
+
+    [[nodiscard]] inline auto operator==(const ShownChoiceMenu&) const noexcept -> bool = default;
 };
 
 /// A text as it shows: what it is, as typed while it is; and, while it is typed, how many of its bytes are
@@ -173,6 +193,9 @@ struct OptionsFrame {
     std::optional<std::size_t> selectedRow{};
     std::size_t first = 0;
     std::size_t count = 0;
+    std::optional<CrosshairStyle> crosshairPreview{};
+    bool canApplyCrosshair = false;
+    std::optional<ShownChoiceMenu> choiceMenu{};
 
     [[nodiscard]] inline auto operator==(const OptionsFrame&) const noexcept -> bool = default;
 };
@@ -186,15 +209,22 @@ enum class OptionsOutcome : std::uint8_t {
     GoesBack, ///< To the menu's items.
 };
 
+/// Shares the draft with the option rows and reads or applies the active settings.
+struct CrosshairEditor {
+    std::shared_ptr<CrosshairStyle> draft{};
+    std::function<CrosshairStyle()> read;
+    std::function<void(const CrosshairStyle&)> apply;
+};
+
 /// The options' state, as the keys and the mouse change it: the tab shown, the setting selected and how far
 /// the list is scrolled, the slider the mouse holds, and the action that waits for a key.
 class OptionsPage {
 public:
     /// The options of `listed`, in the order each tab lists its own.
-    explicit OptionsPage(std::vector<OptionRow> listed) noexcept;
+    explicit OptionsPage(std::vector<OptionRow> listed, CrosshairEditor crosshair = {}) noexcept;
 
     /// Shows the first tab, the tabs selected.
-    void open() noexcept;
+    void open();
 
     /// Whether an action waits for its key: every key and button is then the page's, the one that opens
     /// the console among them.
@@ -207,16 +237,16 @@ public:
     /// Right change the tab while the tabs are selected, else the setting selected: a slider by a step, a
     /// switch over, a choice to the value before or after it, going around past either end. Up and Down
     /// select the setting before and the one after, the tabs above the first, the list following it; the
-    /// wheel scrolls the list. Enter switches a switch over, takes a choice to its next value, has an action
-    /// wait for its key, has a text typed, and presses a button; Delete and Backspace take an action's keys
-    /// from it. The mouse selects the row it is over; its left button shows the tab it is pressed on, does to
-    /// a row what Enter does, and sets a slider to where it is pressed on its track, and on as it moves until
-    /// it comes up.
-    /// While an action waits, the next key, button or notch of the wheel is given to it, and Escape leaves
-    /// it as it was. While a text is typed, the text typed goes in it at its cursor, as much as its setting
-    /// would take, the keys edit it (nx::ui::TextLine), Enter sets it, when its setting takes it, and Escape
-    /// leaves it as it was; the mouse does nothing then. Else Escape, and the page's button, go back to the
-    /// menu's items.
+    /// wheel scrolls the list. Enter switches a switch over, opens a selection menu or cycles a choice, has
+    /// an action wait for its key, has a text typed, and presses a button; Delete and Backspace take an
+    /// action's keys from it. The mouse selects the row it is over; its left button shows the tab it is
+    /// pressed on, does to a row what Enter does, and sets a slider to where it is pressed on its track, and
+    /// on as it moves until it comes up. A selection menu uses Up, Down, the wheel or the mouse to browse its
+    /// values, Enter or a click to pick one, and Escape or a click outside to dismiss it. While an action
+    /// waits, the next key, button or notch of the wheel is given to it, and Escape leaves it as it was.
+    /// While a text is typed, the text typed goes in it at its cursor, as much as its setting would take.
+    /// Enter, Tab or clicking elsewhere finishes the edit and saves valid text. Escape cancels the edit.
+    /// Outside an edit, Escape and the page's button go back to the menu's items.
     [[nodiscard]] auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                               const MainMenuLayout& layout) -> OptionsOutcome;
 
@@ -237,27 +267,37 @@ private:
     /// Changes the setting selected by a step: a slider or a choice down or up as `steps` says, a switch
     /// over.
     void change(std::int32_t steps);
-    /// What Enter, or the left button, does to the setting selected: a switch over, a choice to its next
-    /// value, an action waits, a text is typed, a button is pressed.
+    /// What Enter or the left button does to the setting selected.
     void activate();
+    void handleChoiceMenu(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
+                          const MainMenuLayout& layout);
     /// Sets `slider` to where the cursor's `x` is on `track`.
     static void drag(const OptionSlider& slider, const nx::ui::PixelRect& track, float x);
     /// What `event` does while an action waits for its key.
     void giveKey(const nx::platform::WindowEvent& event);
     /// What `event` does while a text is typed.
     void type(const nx::platform::WindowEvent& event);
+    /// Saves the draft when accepted and releases the text field.
+    void finishTyping();
     [[nodiscard]] auto press(const nx::platform::KeyChanged& key, std::size_t listRows) -> OptionsOutcome;
     [[nodiscard]] auto click(nx::platform::MousePosition cursor, const MainMenuLayout& layout)
         -> OptionsOutcome;
 
+    [[nodiscard]] auto editsCrosshair() const noexcept -> bool;
+    void applyCrosshair();
+
     std::vector<OptionRow> rows;
-    OptionCategory category = OptionCategory::Mouse;
+    CrosshairEditor crosshair;
+    OptionCategory category = OptionCategory::Game;
     std::optional<std::size_t> selected;   ///< Of the tab's settings; none while the tabs are selected.
     std::size_t firstShown = 0;            ///< The setting on the list's first row.
     std::optional<std::size_t> draggedRow; ///< The slider the mouse holds, by its setting.
     std::optional<std::size_t> waitingRow; ///< The action that waits for its key, by its setting.
     std::optional<std::size_t> typingRow;  ///< The text typed, by its setting.
     nx::ui::TextLine typed;                ///< What is typed of it, while it is.
+    std::optional<std::size_t>
+        highlightedChoice; ///< The highlighted value while the selected row's menu is open.
+    std::size_t firstChoice = 0;
 };
 
 } // namespace cs

@@ -81,6 +81,7 @@ struct Player {
 /// What a tick made, which every client is told of after it.
 struct TickEvents {
     std::vector<Impact> impacts{};
+    std::vector<BulletTracer> bulletTracers{};
     std::vector<EntityStep> entitySteps{};
     std::vector<BloodMark> bloodMarks{};
     std::vector<BloodSpray> bloodSprays{};

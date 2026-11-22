@@ -199,6 +199,16 @@ TEST_F(BuyMenuTest, ATabSellsItsPlayersTeamWhatHasAPlaceOnIt) {
     EXPECT_EQ(forCounterTerrorists.front().item, cs::BuyItem{kM4});
 }
 
+TEST_F(BuyMenuTest, UsesTheTeamsOwnShortcutForASharedWeapon) {
+    ASSERT_TRUE(weapons.setVar(kGlock, "purchase.menu.counterTerroristKey", "3").has_value());
+    EXPECT_EQ(cs::buyEntriesOf(BuyTab::Pistols, content(), view()).front().key, 1U);
+    team = cs::Team::CounterTerrorists;
+    ASSERT_TRUE(menu.toggle(view()).has_value());
+    menu.pressSlot(1, view());
+    menu.pressSlot(3, view());
+    EXPECT_EQ(boughtWeapons, (std::vector{kGlock}));
+}
+
 TEST_F(BuyMenuTest, TabsWithNothingForThePlayerAreNotListed) {
     EXPECT_EQ(cs::buyTabsOf(content(), view()),
               (std::vector{BuyTab::Pistols, BuyTab::Rifles, BuyTab::Equipment}));

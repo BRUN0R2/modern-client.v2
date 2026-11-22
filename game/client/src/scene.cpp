@@ -283,7 +283,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
             : nullptr;
     std::vector<nx::Mat3x4> bones;
     if (viewModel != nullptr && weaponModel != nullptr) {
-        bones = viewModel->pose(view.camera, view.viewModel->sequence, view.viewModel->intoIt, view.hand);
+        bones = viewModel->pose(view.camera, view.viewModel->sequence, view.viewModel->intoIt, view.hand,
+                                view.viewModelOffset);
     }
     const std::optional<WeaponIndex> inHand =
         bones.empty() ? std::nullopt : std::optional{view.viewModel->weapon};
@@ -339,8 +340,19 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         }
     }
     std::vector<nx::render::StreakInstance> streaks;
+    std::vector<nx::render::StreakInstance> tracers;
     streaks.reserve(view.streaks.size());
     for (const Streak& streak : view.streaks) {
+        if (streak.tracer) {
+            const auto& firing = streak.tracer->view;
+            const auto muzzle = firing && inHand == firing->weapon
+                                    ? viewModel->muzzleAt(bones, firing->sequence)
+                                    : std::nullopt;
+            if (const auto tracer = tracerOf(streak, muzzle, view.time)) {
+                tracers.push_back(*tracer);
+            }
+            continue;
+        }
         streaks.push_back(nx::render::StreakInstance{.start = streak.origin,
                                                      .end = endOf(streak, view.time),
                                                      .halfWidth = kStreakHalfWidth,
@@ -351,6 +363,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                                                   .aspect = view.aspect,
                                                   .particles = particles,
                                                   .streaks = streaks,
+                                                  .tracers = tracers,
                                                   .fog = view.fog});
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the particles", std::move(prepared.error()));

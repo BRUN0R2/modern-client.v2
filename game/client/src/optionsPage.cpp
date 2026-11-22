@@ -57,11 +57,20 @@ constexpr float kRowsANotch = 3.0F;
         return {.name = row.name, .control = ShownKeys{.keys = keys->keys(), .isWaited = isWaited}};
     }
     if (const auto* const choice = std::get_if<OptionChoice>(&row.control)) {
+        if (choice->fixedValue) {
+            if (auto fixed = choice->fixedValue()) {
+                return {.name = row.name,
+                        .control = ShownChoice{.chosen = std::move(*fixed),
+                                               .isAdjustable = false,
+                                               .opensMenu = choice->opensMenu}};
+            }
+        }
         const std::optional<std::size_t> chosen = choice->chosen();
         nx::expects(!chosen || *chosen < choice->values.size(), "OptionChoice: one of its values chosen");
         return {.name = row.name,
-                .control = ShownChoice{.chosen = chosen.transform(
-                                           [choice](std::size_t index) { return choice->values[index]; })}};
+                .control = ShownChoice{
+                    .chosen = chosen.transform([choice](std::size_t index) { return choice->values[index]; }),
+                    .opensMenu = choice->opensMenu}};
     }
     if (const auto* const field = std::get_if<OptionText>(&row.control)) {
         return {.name = row.name,
@@ -92,10 +101,24 @@ auto sliderText(const ShownSlider& slider) -> std::string {
     return std::format("{:.1f}", slider.value);
 }
 
-OptionsPage::OptionsPage(std::vector<OptionRow> listed) noexcept : rows{std::move(listed)} {}
+OptionsPage::OptionsPage(std::vector<OptionRow> listed, CrosshairEditor editor) noexcept
+    : rows{std::move(listed)}, crosshair{std::move(editor)} {}
 
-void OptionsPage::open() noexcept {
-    show(OptionCategory::Mouse);
+void OptionsPage::open() {
+    if (crosshair.draft) {
+        *crosshair.draft = crosshair.read();
+    }
+    show(OptionCategory::Game);
+}
+
+auto OptionsPage::editsCrosshair() const noexcept -> bool {
+    return category == OptionCategory::Crosshair && crosshair.draft != nullptr;
+}
+
+void OptionsPage::applyCrosshair() {
+    if (*crosshair.draft != crosshair.read()) {
+        crosshair.apply(*crosshair.draft);
+    }
 }
 
 void OptionsPage::show(OptionCategory tab) noexcept {
@@ -105,6 +128,7 @@ void OptionsPage::show(OptionCategory tab) noexcept {
     draggedRow.reset();
     waitingRow.reset();
     typingRow.reset();
+    highlightedChoice.reset();
 }
 
 auto OptionsPage::shownRows() const -> std::vector<const OptionRow*> {
@@ -127,6 +151,15 @@ auto OptionsPage::frame(std::size_t listRows) const -> OptionsFrame {
     }
     if (selected && *selected >= first && *selected < first + shown.rows.size()) {
         shown.selectedRow = *selected - first;
+        if (highlightedChoice) {
+            const auto& choice = std::get<OptionChoice>(all[*selected]->control);
+            shown.choiceMenu.emplace(choice.values, choice.chosen(), *shown.selectedRow, firstChoice,
+                                     *highlightedChoice);
+        }
+    }
+    if (editsCrosshair()) {
+        shown.crosshairPreview = *crosshair.draft;
+        shown.canApplyCrosshair = *crosshair.draft != crosshair.read();
     }
     return shown;
 }
@@ -151,7 +184,9 @@ void OptionsPage::change(std::int32_t steps) {
     } else if (const auto* const toggled = std::get_if<OptionSwitch>(&row.control)) {
         toggled->set(!toggled->isOn());
     } else if (const auto* const choice = std::get_if<OptionChoice>(&row.control)) {
-        choice->choose(steppedChoiceOf(*choice, steps));
+        if (!choice->opensMenu && (!choice->fixedValue || !choice->fixedValue())) {
+            choice->choose(steppedChoiceOf(*choice, steps));
+        }
     }
 }
 
@@ -168,9 +203,77 @@ void OptionsPage::activate() {
         typed.setText(field->text());
     } else if (const auto* const button = std::get_if<OptionButton>(&control)) {
         button->press();
+    } else if (const auto* const choice = std::get_if<OptionChoice>(&control);
+               choice != nullptr && choice->opensMenu) {
+        if (!choice->values.empty() && (!choice->fixedValue || !choice->fixedValue())) {
+            highlightedChoice = choice->chosen().value_or(0);
+            firstChoice = *highlightedChoice;
+        }
     } else if (std::holds_alternative<OptionSwitch>(control) ||
                std::holds_alternative<OptionChoice>(control)) {
         change(1);
+    }
+}
+
+void OptionsPage::handleChoiceMenu(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
+                                   const MainMenuLayout& layout) {
+    const auto& choice = std::get<OptionChoice>(shownRows()[*selected]->control);
+    const std::size_t listRows = layout.listRows();
+    const std::size_t first = firstShownOf(listRows);
+    const auto* focus = std::get_if<nx::platform::FocusChanged>(&event);
+    if (*selected < first || *selected - first >= listRows || (choice.fixedValue && choice.fixedValue()) ||
+        (focus != nullptr && !focus->isFocused)) {
+        highlightedChoice.reset();
+        return;
+    }
+    const auto menu = layout.choiceMenu(*selected - first, choice.values.size());
+    if (menu.rows == 0 || std::holds_alternative<nx::platform::Resized>(event)) {
+        highlightedChoice.reset();
+        return;
+    }
+    const std::size_t lastFirst = choice.values.size() - menu.rows;
+    firstChoice = std::min(firstChoice, lastFirst);
+    const auto itemAtCursor = [&]() -> std::optional<std::size_t> {
+        for (std::size_t item = 0; item < menu.rows; ++item) {
+            if (menu.item(item).holds(cursor.x, cursor.y)) {
+                return firstChoice + item;
+            }
+        }
+        return std::nullopt;
+    };
+    if (const auto* button = std::get_if<nx::platform::MouseButtonChanged>(&event);
+        button != nullptr && button->button == nx::platform::MouseButton::Left && button->isDown) {
+        highlightedChoice.reset();
+        if (const auto item = itemAtCursor()) {
+            choice.choose(*item);
+        }
+    } else if (std::holds_alternative<nx::platform::MouseMoved>(event)) {
+        if (const auto item = itemAtCursor()) {
+            highlightedChoice = item;
+        }
+    } else if (const auto* wheel = std::get_if<nx::platform::MouseWheelMoved>(&event)) {
+        const auto by = -static_cast<std::ptrdiff_t>(std::lround(wheel->dy * kRowsANotch));
+        firstChoice =
+            static_cast<std::size_t>(std::clamp(static_cast<std::ptrdiff_t>(firstChoice) + by,
+                                                std::ptrdiff_t{0}, static_cast<std::ptrdiff_t>(lastFirst)));
+        highlightedChoice =
+            itemAtCursor().value_or(std::clamp(*highlightedChoice, firstChoice, firstChoice + menu.rows - 1));
+    } else if (const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
+               key != nullptr && key->isDown) {
+        using nx::platform::Key;
+        if (key->key == Key::Up || key->key == Key::Down) {
+            const auto item = *highlightedChoice;
+            highlightedChoice = key->key == Key::Up ? item - std::min<std::size_t>(item, 1)
+                                                    : std::min(item + 1, choice.values.size() - 1);
+            const auto low = *highlightedChoice + 1 - std::min(*highlightedChoice + 1, menu.rows);
+            firstChoice = std::clamp(firstChoice, low, *highlightedChoice);
+        } else if (!key->isRepeat && (key->key == Key::Enter || key->key == Key::KeypadEnter)) {
+            const auto item = *highlightedChoice;
+            highlightedChoice.reset();
+            choice.choose(item);
+        } else if (!key->isRepeat && (key->key == Key::Escape || key->key == Key::Tab)) {
+            highlightedChoice.reset();
+        }
     }
 }
 
@@ -217,26 +320,58 @@ void OptionsPage::type(const nx::platform::WindowEvent& event) {
         return;
     }
     if (typed.pressKey(key->key) == nx::ui::TextEntryAction::Submitted && !key->isRepeat) {
-        // What its keys removed may leave a text its setting refuses: it is typed on then.
-        if (const std::string text = typed.text(); field.accepts(text)) {
-            field.set(text);
-            typingRow.reset();
-        }
+        finishTyping();
     }
 }
 
+void OptionsPage::finishTyping() {
+    const std::vector<const OptionRow*> all = shownRows();
+    if (*typingRow < all.size()) {
+        const auto& field = std::get<OptionText>(all[*typingRow]->control);
+        if (const std::string text = typed.text(); field.accepts(text)) {
+            field.set(text);
+        }
+    }
+    typingRow.reset();
+}
+
 auto OptionsPage::handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
-                         const MainMenuLayout& layout) -> OptionsOutcome {
+                         const MainMenuLayout& pageLayout) -> OptionsOutcome {
+    const MainMenuLayout layout = editsCrosshair() ? pageLayout.withCrosshairPreview() : pageLayout;
+    if (highlightedChoice) {
+        handleChoiceMenu(event, cursor, layout);
+        return OptionsOutcome::Stays;
+    }
     if (waitingRow) {
         giveKey(event);
         return OptionsOutcome::Stays;
     }
+    const std::size_t listRows = layout.listRows();
     if (typingRow) {
-        type(event);
+        const auto* button = std::get_if<nx::platform::MouseButtonChanged>(&event);
+        if (button != nullptr && button->button == nx::platform::MouseButton::Left && button->isDown) {
+            const auto row = layout.listRowAt(cursor.x, cursor.y);
+            if (row && firstShownOf(listRows) + *row == *typingRow) {
+                return OptionsOutcome::Stays;
+            }
+            finishTyping();
+            return click(cursor, layout);
+        }
+        const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
+        if (key != nullptr && key->key == nx::platform::Key::Tab && key->isDown && !key->isRepeat) {
+            const std::size_t next = *typingRow + 1;
+            finishTyping();
+            if (next < shownRows().size()) {
+                select(next, listRows);
+            } else {
+                selected.reset();
+            }
+        } else {
+            type(event);
+        }
         return OptionsOutcome::Stays;
     }
     const std::vector<const OptionRow*> all = shownRows();
-    const std::size_t listRows = layout.listRows();
     const std::size_t first = firstShownOf(listRows);
     if (std::holds_alternative<nx::platform::MouseMoved>(event)) {
         if (draggedRow && *draggedRow >= first && *draggedRow < all.size()) {
@@ -271,7 +406,14 @@ auto OptionsPage::handle(const nx::platform::WindowEvent& event, nx::platform::M
 }
 
 auto OptionsPage::click(nx::platform::MousePosition cursor, const MainMenuLayout& layout) -> OptionsOutcome {
-    if (layout.backButton().holds(cursor.x, cursor.y)) {
+    if (layout.confirmButton().holds(cursor.x, cursor.y)) {
+        if (editsCrosshair()) {
+            applyCrosshair();
+            return OptionsOutcome::Stays;
+        }
+        return OptionsOutcome::GoesBack;
+    }
+    if (editsCrosshair() && layout.backButton().holds(cursor.x, cursor.y)) {
         return OptionsOutcome::GoesBack;
     }
     for (const OptionCategory tab : nx::EnumArray<OptionCategory, bool>::keys()) {
@@ -293,7 +435,9 @@ auto OptionsPage::click(nx::platform::MousePosition cursor, const MainMenuLayout
             drag(*slider, track, cursor.x);
             draggedRow = selected;
         }
-    } else {
+    } else if (const auto* choice = std::get_if<OptionChoice>(&all[*selected]->control);
+               choice == nullptr || !choice->opensMenu ||
+               layout.optionField(*row).holds(cursor.x, cursor.y)) {
         activate();
     }
     return OptionsOutcome::Stays;
@@ -335,7 +479,14 @@ auto OptionsPage::press(const nx::platform::KeyChanged& key, std::size_t listRow
     case Key::Enter:
     case Key::KeypadEnter:
         if (!key.isRepeat) {
-            activate();
+            if (!selected && editsCrosshair()) {
+                applyCrosshair();
+            } else {
+                activate();
+                if (highlightedChoice) {
+                    select(*selected, listRows);
+                }
+            }
         }
         break;
     case Key::Delete:
@@ -344,6 +495,11 @@ auto OptionsPage::press(const nx::platform::KeyChanged& key, std::size_t listRow
             if (const auto* const keys = std::get_if<OptionKeys>(&all[*selected]->control)) {
                 keys->clear();
             }
+        }
+        break;
+    case Key::Space:
+        if (editsCrosshair() && !key.isRepeat) {
+            applyCrosshair();
         }
         break;
     case Key::Escape:

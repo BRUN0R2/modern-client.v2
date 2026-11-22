@@ -5,8 +5,10 @@ module cs.client;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.rhi;
 import nx.assets;
+import nx.platform;
 import nx.render;
 import nx.ui;
 import cs.shared;
@@ -19,21 +21,30 @@ using nx::render::ScreenColor;
 using TextFaces = nx::EnumArray<MainMenuFont, nx::ui::TextFace>;
 
 constexpr nx::log::Category kLog{"client"};
+constexpr float kHalf = 0.5F;
+constexpr ScreenColor kCrosshairIdleGround{.red = 43, .green = 50, .blue = 48};
+constexpr ScreenColor kCrosshairFiringGround{.red = 107, .green = 99, .blue = 82};
+constexpr nx::EulerAngles kCrosshairIdlePunch{};
+constexpr nx::EulerAngles kCrosshairFiringPunch{.pitch = nx::Degrees{-4.0F}, .yaw = nx::Degrees{1.25F}};
 
 /// What the menu covers the whole screen with while no map is played, under its background.
-constexpr ScreenColor kGround{.red = 13, .green = 14, .blue = 16};
+constexpr ScreenColor kGround{.red = 23, .green = 28, .blue = 21};
 /// What darkens the background, so that what the menu writes over it reads.
-constexpr ScreenColor kBackgroundVeil{.red = 6, .green = 7, .blue = 9, .alpha = 150};
+constexpr ScreenColor kBackgroundVeil{.red = 20, .green = 26, .blue = 15, .alpha = 108};
+constexpr ScreenColor kDialogSurface{.red = 55, .green = 64, .blue = 44};
+constexpr ScreenColor kDialogInset{.red = 34, .green = 42, .blue = 29};
+constexpr ScreenColor kDialogHeader{.red = 66, .green = 77, .blue = 52};
+constexpr ScreenColor kEdgeLight{.red = 135, .green = 148, .blue = 107};
+constexpr ScreenColor kEdgeShadow{.red = 23, .green = 30, .blue = 19};
+constexpr ScreenColor kControlSurface{.red = 72, .green = 84, .blue = 58};
+constexpr ScreenColor kSelectedSurface{.red = 97, .green = 109, .blue = 73};
 
 constexpr nx::EnumArray<MainMenuFont, MenuFontSize> kFontSizes{
     nx::EnumArray<MainMenuFont, MenuFontSize>::Storage{
-        MenuFontSize{.line = MenuUnits{84}, .isStrong = true},
-        MenuFontSize{.line = MenuUnits{34}, .isStrong = true},
+        MenuFontSize{.line = MenuUnits{31}, .isStrong = true},
         MenuFontSize{.line = MenuUnits{26}, .isStrong = false},
         MenuFontSize{.line = MenuUnits{18}, .isStrong = false}}};
 
-/// The game's name, the same in every language.
-constexpr std::string_view kGameName = "COUNTER-STRIKE";
 /// The text of the menu's that names each item.
 constexpr nx::EnumArray<MainMenuAction, std::string MainMenuTexts::*> kItemTexts{
     nx::EnumArray<MainMenuAction, std::string MainMenuTexts::*>::Storage{
@@ -43,8 +54,8 @@ constexpr nx::EnumArray<MainMenuAction, std::string MainMenuTexts::*> kItemTexts
 /// The text of the options' that names each tab.
 constexpr nx::EnumArray<OptionCategory, std::string OptionsTexts::*> kTabTexts{
     nx::EnumArray<OptionCategory, std::string OptionsTexts::*>::Storage{
-        &OptionsTexts::mouse, &OptionsTexts::keyboard, &OptionsTexts::audio, &OptionsTexts::video,
-        &OptionsTexts::game}};
+        &OptionsTexts::game, &OptionsTexts::keyboard, &OptionsTexts::mouse, &OptionsTexts::audio,
+        &OptionsTexts::video, &OptionsTexts::crosshairTab}};
 
 /// How `text`, a value of a choice, is written in the language of `texts`.
 [[nodiscard]] auto writtenOf(const ChoiceText& text, const OptionsTexts& texts) noexcept -> std::string_view {
@@ -61,18 +72,21 @@ constexpr nx::EnumArray<OptionCategory, std::string OptionsTexts::*> kTabTexts{
 }
 
 // In the design's units: what the layout leaves to what draws in it.
-constexpr MenuUnits kRuleGap{14};
-constexpr MenuUnits kRuleWide{72};
-constexpr MenuUnits kRuleTall{4};
+constexpr MenuUnits kDialogHeaderTall{59};
+constexpr MenuUnits kLogoWidth{322};
+constexpr MenuUnits kTextShadowOffset{2};
+constexpr ScreenColor kTextShadow{.red = 12, .green = 15, .blue = 9, .alpha = 225};
 constexpr MenuUnits kAccentBar{4};
-constexpr MenuUnits kItemInset{24};
 constexpr MenuUnits kHintKeyGap{8};
 constexpr MenuUnits kHintGap{28};
 constexpr MenuUnits kRowInset{16};
 constexpr MenuUnits kTabRule{2};         ///< Under the tab shown.
 constexpr MenuUnits kMapsNameGap{6};     ///< From the name of the list to its first row.
 constexpr MenuUnits kRowButtonInset{16}; ///< From a row's button's sides to its text.
-constexpr MenuUnits kRowButtonMargin{6}; ///< From a row's top and foot to its button's.
+constexpr MenuUnits kFieldPadding{10};
+constexpr MenuUnits kSliderThumbWide{12};
+constexpr MenuUnits kSliderThumbTall{19};
+constexpr MenuUnits kCheckWide{18};
 /// What the room left is divided by to put a thing halfway into it.
 constexpr std::int32_t kMiddleDivisor = 2;
 /// The sides an inset or a margin is left on: left and right, or top and foot.
@@ -109,7 +123,7 @@ void paintTypedText(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face,
             ? nx::ui::widthOf(*face.atlas, std::string_view{line.text}.substr(0, *line.cursorBytes))
             : wide;
     const nx::Pixels room = rect.wide - nx::ui::kTextCursorWidth;
-    const nx::Pixels start = wide <= room ? room - wide : -nx::ui::scrollToShow(pen, rect.wide);
+    const nx::Pixels start = wide <= room ? nx::Pixels{0} : -nx::ui::scrollToShow(pen, rect.wide);
     const nx::Pixels lineTall = face.atlas->lineHeight();
     const nx::Pixels top = (rect.tall - lineTall) / kMiddleDivisor;
     std::ignore =
@@ -120,6 +134,42 @@ void paintTypedText(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face,
     }
 }
 
+void paintBevel(nx::ui::PanelPainter& painter, const nx::ui::PixelRect& rect, bool recessed = false) {
+    const auto leading = recessed ? kEdgeShadow : kEdgeLight;
+    const auto trailing = recessed ? kEdgeLight : kEdgeShadow;
+    painter.fill({.x = rect.x, .y = rect.y, .wide = rect.wide, .tall = kMenuLineThick}, leading);
+    painter.fill(
+        {.x = rect.x + rect.wide - kMenuLineThick, .y = rect.y, .wide = kMenuLineThick, .tall = rect.tall},
+        trailing);
+    painter.fill({.x = rect.x, .y = rect.y, .wide = kMenuLineThick, .tall = rect.tall}, leading);
+    painter.fill(
+        {.x = rect.x, .y = rect.y + rect.tall - kMenuLineThick, .wide = rect.wide, .tall = kMenuLineThick},
+        trailing);
+}
+
+void paintDialog(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const nx::ui::TextFace& face,
+                 std::string_view title) {
+    const auto& page = layout.page();
+    painter.fill(page, kDialogSurface);
+    const nx::Pixels headerTall = layout.pixels(kDialogHeaderTall);
+    painter.fill({.x = page.x, .y = page.y, .wide = page.wide, .tall = headerTall}, kDialogHeader);
+    painter.fill({.x = page.x, .y = page.y + headerTall, .wide = page.wide, .tall = kMenuLineThick},
+                 kEdgeShadow);
+    paintBevel(painter, page);
+    std::ignore = painter.text(face, title, layout.pageTitle(), kMenuInk);
+}
+
+enum class MenuButtonLook : std::uint8_t { Secondary, Primary, Disabled };
+
+void paintButton(nx::ui::PanelPainter& painter, const nx::ui::TextFace& face, std::string_view label,
+                 const nx::ui::PixelRect& rect, MenuButtonLook look) {
+    const bool primary = look == MenuButtonLook::Primary;
+    const bool enabled = look != MenuButtonLook::Disabled;
+    painter.fill(rect, primary ? kMenuGold : enabled ? kControlSurface : kDialogInset);
+    paintBevel(painter, rect, !enabled);
+    writeInMiddle(painter, face, label, rect, primary ? kOnMenuGold : enabled ? kMenuInk : kMenuInkFaint);
+}
+
 /// Draws `control`, what changes the setting on the list's row `row` by `layout`, with `painter`, in `face`,
 /// writing `texts`.
 void paintOptionControl(nx::ui::PanelPainter& painter, const MainMenuLayout& layout,
@@ -127,69 +177,235 @@ void paintOptionControl(nx::ui::PanelPainter& painter, const MainMenuLayout& lay
                         std::size_t row) {
     const nx::ui::PixelRect rect = layout.optionControl(row);
     const nx::Pixels end = rect.x + rect.wide;
+    const nx::Pixels padding = layout.pixels(kFieldPadding);
+    const nx::ui::PixelRect field = layout.optionField(row);
     if (const auto* const slider = std::get_if<ShownSlider>(&control)) {
         const nx::ui::PixelRect track = layout.optionTrack(row);
-        painter.fill(track, kMenuLine);
-        painter.fill({.x = track.x,
-                      .y = track.y,
-                      .wide = nx::Pixels{static_cast<std::int32_t>(
-                          std::lround(static_cast<float>(track.wide.value()) * slider->share))},
-                      .tall = track.tall},
-                     kMenuGold);
-        writeEnding(painter, face, sliderText(*slider), end, rect, kMenuInk);
+        const nx::Pixels fill{
+            static_cast<std::int32_t>(std::lround(static_cast<float>(track.wide.value()) * slider->share))};
+        const nx::Pixels thumbWide = layout.pixels(kSliderThumbWide);
+        const nx::Pixels thumbTall = layout.pixels(kSliderThumbTall);
+        painter.fill(track, kEdgeShadow);
+        painter.fill({.x = track.x, .y = track.y, .wide = fill, .tall = track.tall}, kMenuGold);
+        const nx::ui::PixelRect thumb{.x = track.x + fill - (thumbWide / kMiddleDivisor),
+                                      .y = track.y + ((track.tall - thumbTall) / kMiddleDivisor),
+                                      .wide = thumbWide,
+                                      .tall = thumbTall};
+        painter.fill(thumb, kControlSurface);
+        paintBevel(painter, thumb);
+        const nx::Pixels valueX = track.x + track.wide + padding;
+        const nx::ui::PixelRect value{.x = valueX, .y = field.y, .wide = end - valueX, .tall = field.tall};
+        painter.fill(value, kDialogInset);
+        paintBevel(painter, value, true);
+        writeInMiddle(painter, face, sliderText(*slider), value, kMenuInk);
     } else if (const auto* const line = std::get_if<ShownText>(&control)) {
-        paintTypedText(painter, face, *line, rect);
+        painter.fill(field, kDialogInset);
+        paintBevel(painter, field, true);
+        if (line->cursorBytes) {
+            paintMenuOutline(painter, field, kMenuGold);
+        }
+        paintTypedText(painter, face, *line,
+                       {.x = field.x + padding,
+                        .y = field.y,
+                        .wide = field.wide - (kBothSides * padding),
+                        .tall = field.tall});
     } else if (const auto* const choice = std::get_if<ShownChoice>(&control)) {
+        painter.fill(field, choice->isAdjustable ? kControlSurface : kDialogInset);
+        paintBevel(painter, field, !choice->isAdjustable);
         if (choice->chosen) {
-            writeEnding(painter, face, writtenOf(*choice->chosen, texts), end, rect, kMenuInk);
+            writeInMiddle(painter, face, writtenOf(*choice->chosen, texts), field,
+                          choice->isAdjustable ? kMenuInk : kMenuInkFaint);
+        }
+        if (choice->isAdjustable) {
+            writeEnding(painter, face, choice->opensMenu ? "v" : ">", end - padding, rect, kMenuGold);
         }
     } else if (const auto* const keys = std::get_if<ShownKeys>(&control)) {
         // Waited for, it asks for its key; else its keys, or that it has none.
         if (keys->isWaited) {
             writeEnding(painter, face, texts.pressAKey, end, rect, kMenuGold);
         } else if (keys->keys.empty()) {
-            writeEnding(painter, face, texts.noKey, end, rect, kMenuInkFaint);
+            writeEnding(painter, face, texts.noKey, rect.x + rect.wide / kMiddleDivisor, rect, kMenuInkFaint);
         } else {
-            writeEnding(painter, face, keys->keys, end, rect, kMenuInk);
+            const std::string_view names = keys->keys;
+            const auto split = names.find(kOptionKeySeparator);
+            writeEnding(painter, face, names.substr(0, split), rect.x + rect.wide / kMiddleDivisor, rect,
+                        kMenuInk);
+            if (split != std::string_view::npos) {
+                writeEnding(painter, face, names.substr(split + kOptionKeySeparator.size()), end, rect,
+                            kMenuInk);
+            }
         }
     } else if (const auto* const button = std::get_if<ShownButton>(&control)) {
         // Outlined as the page's buttons are, ending where the row's control ends.
         const std::string_view label = texts.*button->label;
-        const nx::Pixels margin = layout.pixels(kRowButtonMargin);
         const nx::Pixels wide =
             nx::ui::widthOf(*face.atlas, label) + (kBothSides * layout.pixels(kRowButtonInset));
-        const nx::ui::PixelRect box{
-            .x = end - wide, .y = rect.y + margin, .wide = wide, .tall = rect.tall - (kBothSides * margin)};
-        paintMenuOutline(painter, box, kMenuLine);
-        writeInMiddle(painter, face, label, box, kMenuInk);
+        const nx::ui::PixelRect box{.x = end - wide, .y = field.y, .wide = wide, .tall = field.tall};
+        paintButton(painter, face, label, box, MenuButtonLook::Secondary);
     } else {
         const bool isOn = std::get<ShownSwitch>(control).isOn;
-        writeEnding(painter, face, isOn ? texts.on : texts.off, end, rect, isOn ? kMenuGold : kMenuInkFaint);
+        const auto label = std::string_view{isOn ? texts.on : texts.off};
+        const nx::Pixels checkWide = layout.pixels(kCheckWide);
+        const nx::ui::PixelRect check{.x = end - nx::ui::widthOf(*face.atlas, label) - padding - checkWide,
+                                      .y = rect.y + ((rect.tall - checkWide) / kMiddleDivisor),
+                                      .wide = checkWide,
+                                      .tall = checkWide};
+        painter.fill(check, isOn ? kMenuGold : kDialogInset);
+        paintBevel(painter, check, !isOn);
+        if (isOn) {
+            const nx::Pixels inset = checkWide / 3;
+            painter.fill({.x = check.x + inset,
+                          .y = check.y + inset,
+                          .wide = check.wide - (kBothSides * inset),
+                          .tall = check.tall - (kBothSides * inset)},
+                         kOnMenuGold);
+        }
+        writeEnding(painter, face, label, end, rect, isOn ? kMenuGold : kMenuInkSoft);
+    }
+}
+
+void paintCrosshairSample(std::vector<nx::render::ScreenQuad>& quads, nx::ui::PanelPainter& painter,
+                          const nx::ui::PixelRect& area, nx::rhi::Extent2d extent,
+                          const CrosshairStyle& style, nx::EulerAngles punch, ScreenColor ground) {
+    painter.fill(area, ground);
+    const nx::rhi::Rect clip = painter.inside(area).clip();
+    const float originX = static_cast<float>(extent.width) * kHalf;
+    const float originY = static_cast<float>(extent.height) * kHalf;
+    const float halfWide = static_cast<float>(area.wide.value()) * kHalf;
+    const float halfTall = static_cast<float>(area.tall.value()) * kHalf;
+    const float centerX = static_cast<float>(area.x.value()) + halfWide;
+    const float centerY = static_cast<float>(area.y.value()) + halfTall;
+    const std::size_t first = quads.size();
+    const nx::render::ScreenPoint offset = style.followsRecoil
+                                               ? crosshairRecoilOffset({.angles = punch}, punch, extent)
+                                               : nx::render::ScreenPoint{};
+    appendCrosshair(quads, style, crosshairDistanceOf(style, punch), extent, offset);
+    auto marks = std::span{quads}.subspan(first);
+    float reachX = 1.0F;
+    float reachY = 1.0F;
+    for (auto& mark : marks) {
+        auto& rect = mark.target;
+        rect.x -= originX;
+        rect.y -= originY;
+        reachX = std::max({reachX, std::abs(rect.x), std::abs(rect.x + rect.width)});
+        reachY = std::max({reachY, std::abs(rect.y), std::abs(rect.y + rect.height)});
+    }
+    // The reticle normally stays at gameplay size. Fit it inside the preview at very wide resolutions.
+    const float scale = std::min({1.0F, halfWide * 0.9F / reachX, halfTall * 0.9F / reachY});
+    for (auto& mark : marks) {
+        auto& rect = mark.target;
+        rect.x = centerX + rect.x * scale;
+        rect.y = centerY + rect.y * scale;
+        rect.width *= scale;
+        rect.height *= scale;
+        mark.clip = clip;
+    }
+}
+
+void paintCrosshairPreview(std::vector<nx::render::ScreenQuad>& quads, nx::ui::PanelPainter& painter,
+                           const MainMenuLayout& layout, const nx::ui::TextFace& face,
+                           const OptionsTexts& texts, const CrosshairStyle& style, nx::rhi::Extent2d extent) {
+    const auto preview = layout.crosshairPreview();
+    const nx::Pixels headingHeight = layout.pixels(MenuUnits{36});
+    const nx::Pixels inset = layout.pixels(MenuUnits{10});
+    const nx::Pixels sampleHeight = (preview.tall - (2 * inset) - headingHeight) / 2;
+    const nx::Pixels labelHeight = layout.pixels(MenuUnits{28});
+    painter.fill(preview, kDialogInset);
+    paintBevel(painter, preview, true);
+    writeInMiddle(painter, face, texts.crosshairPreview,
+                  {.x = preview.x, .y = preview.y, .wide = preview.wide, .tall = headingHeight}, kMenuInk);
+    const auto sample = [&](nx::Pixels top, std::string_view label, nx::EulerAngles punch,
+                            ScreenColor ground) {
+        const nx::ui::PixelRect labelRect{
+            .x = preview.x + inset, .y = top, .wide = preview.wide - (2 * inset), .tall = labelHeight};
+        writeInMiddle(painter, face, label, labelRect, kMenuInkSoft);
+        paintCrosshairSample(quads, painter,
+                             {.x = labelRect.x,
+                              .y = top + labelHeight,
+                              .wide = labelRect.wide,
+                              .tall = sampleHeight - labelHeight},
+                             extent, style, punch, ground);
+    };
+    const nx::Pixels top = preview.y + headingHeight;
+    sample(top, texts.crosshairIdle, kCrosshairIdlePunch, kCrosshairIdleGround);
+    sample(top + sampleHeight + inset, texts.crosshairFiring, kCrosshairFiringPunch, kCrosshairFiringGround);
+}
+
+void paintChoiceMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout,
+                     const nx::ui::TextFace& face, const OptionsTexts& texts, const ShownChoiceMenu& shown) {
+    const auto menu = layout.choiceMenu(shown.row, shown.values.size());
+    if (menu.rows == 0) {
+        return;
+    }
+    const std::size_t first = std::min(shown.first, shown.values.size() - menu.rows);
+    painter.fill(menu.bounds, kDialogInset);
+    for (std::size_t item = 0; item < menu.rows; ++item) {
+        const std::size_t index = first + item;
+        const auto rect = menu.item(item);
+        if (index == shown.highlighted) {
+            painter.fill(rect, kSelectedSurface);
+        }
+        writeInMiddle(painter, face, writtenOf(shown.values[index], texts), rect,
+                      index == shown.chosen ? kMenuGold : kMenuInk);
+    }
+    paintBevel(painter, menu.bounds);
+    if (menu.rows < shown.values.size()) {
+        const nx::Pixels width = layout.pixels(kTabRule);
+        const auto total = nx::narrow<std::int32_t>(shown.values.size());
+        painter.fill({.x = menu.bounds.x + menu.bounds.wide - width,
+                      .y = menu.bounds.y + menu.bounds.tall * nx::narrow<std::int32_t>(first) / total,
+                      .wide = width,
+                      .tall = menu.bounds.tall * nx::narrow<std::int32_t>(menu.rows) / total},
+                     kMenuInkFaint);
     }
 }
 
 /// Draws the options showing `shown` by `layout` with `painter`, in `faces`, writing `texts`.
-void paintOptions(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
-                  const Texts& texts, const OptionsFrame& shown) {
-    painter.fill(layout.page(), kMenuGlass);
-    paintMenuOutline(painter, layout.page(), kMenuLine);
-    std::ignore =
-        painter.text(faces[MainMenuFont::Item], texts.mainMenu.options, layout.pageTitle(), kMenuInk);
+void paintOptions(std::vector<nx::render::ScreenQuad>& quads, nx::ui::PanelPainter& painter,
+                  const MainMenuLayout& pageLayout, const TextFaces& faces, const Texts& texts,
+                  const OptionsFrame& shown, nx::rhi::Extent2d extent) {
+    const MainMenuLayout layout = shown.crosshairPreview ? pageLayout.withCrosshairPreview() : pageLayout;
+    paintDialog(painter, layout, faces[MainMenuFont::Item], texts.mainMenu.options);
 
     const nx::ui::TextFace& hintFace = faces[MainMenuFont::Hint];
     const nx::ui::TextFace& rowFace = faces[MainMenuFont::Row];
     for (const OptionCategory tab : nx::EnumArray<OptionCategory, bool>::keys()) {
         const nx::ui::PixelRect rect = layout.optionTab(static_cast<std::size_t>(std::to_underlying(tab)));
         const bool isShown = tab == shown.category;
-        painter.fill(rect, isShown ? kMenuCellLit : kMenuCell);
+        painter.fill(rect, isShown ? kSelectedSurface : kControlSurface);
+        paintBevel(painter, rect, isShown);
         if (isShown) {
             const nx::Pixels rule = layout.pixels(kTabRule);
             painter.fill({.x = rect.x, .y = rect.y + rect.tall - rule, .wide = rect.wide, .tall = rule},
                          kMenuGold);
         }
         // The tabs take the keys while no row is selected.
-        writeInMiddle(painter, hintFace, texts.options.*kTabTexts[tab], rect,
-                      isShown && !shown.selectedRow ? kMenuInk : kMenuInkSoft);
+        writeInMiddle(painter, rowFace, texts.options.*kTabTexts[tab], rect, isShown ? kMenuGold : kMenuInk);
+    }
+
+    const auto top = layout.listRow(0);
+    const auto last = layout.listRow(layout.listRows() - 1);
+    const nx::Pixels headerHeight =
+        shown.category == OptionCategory::Keyboard ? layout.pixels(MenuUnits{36}) : nx::Pixels{};
+    const nx::ui::PixelRect table{.x = top.x,
+                                  .y = top.y - headerHeight,
+                                  .wide = top.wide,
+                                  .tall = last.y + last.tall - top.y + headerHeight};
+    painter.fill(table, kDialogInset);
+    paintBevel(painter, table, true);
+    if (shown.category == OptionCategory::Keyboard) {
+        const nx::ui::PixelRect header{.x = table.x, .y = table.y, .wide = table.wide, .tall = headerHeight};
+        const nx::Pixels inset = layout.pixels(kRowInset);
+        std::ignore =
+            painter.text(hintFace, texts.options.action,
+                         {.x = header.x + inset,
+                          .y = header.y + ((header.tall - hintFace.atlas->lineHeight()) / kMiddleDivisor)},
+                         kMenuGold);
+        const auto control = layout.optionControl(0);
+        writeEnding(painter, hintFace, texts.options.keys, control.x + control.wide / kMiddleDivisor, header,
+                    kMenuGold);
+        writeEnding(painter, hintFace, texts.options.alternateKey, control.x + control.wide, header,
+                    kMenuGold);
     }
 
     for (const auto& [index, option] : std::views::enumerate(shown.rows)) {
@@ -212,16 +428,24 @@ void paintOptions(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
         painter.fill(*thumb, kMenuInkFaint);
     }
 
-    paintMenuOutline(painter, layout.backButton(), kMenuLine);
-    writeInMiddle(painter, rowFace, texts.mainMenu.back, layout.backButton(), kMenuInkSoft);
+    if (shown.crosshairPreview) {
+        paintCrosshairPreview(quads, painter, layout, hintFace, texts.options, *shown.crosshairPreview,
+                              extent);
+        paintButton(painter, rowFace, texts.mainMenu.goBack, layout.backButton(), MenuButtonLook::Secondary);
+        paintButton(painter, rowFace, texts.options.apply, layout.confirmButton(),
+                    shown.canApplyCrosshair ? MenuButtonLook::Primary : MenuButtonLook::Disabled);
+    } else {
+        paintButton(painter, rowFace, texts.options.done, layout.confirmButton(), MenuButtonLook::Primary);
+    }
+    if (shown.choiceMenu) {
+        paintChoiceMenu(painter, layout, rowFace, texts.options, *shown.choiceMenu);
+    }
 }
 
 /// Draws the page of a new game showing `page` by `layout` with `painter`, in `faces`, writing `texts`.
 void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
                   const MainMenuTexts& texts, const NewGamePage& page) {
-    painter.fill(layout.page(), kMenuGlass);
-    paintMenuOutline(painter, layout.page(), kMenuLine);
-    std::ignore = painter.text(faces[MainMenuFont::Item], texts.newGame, layout.pageTitle(), kMenuInk);
+    paintDialog(painter, layout, faces[MainMenuFont::Item], texts.newGame);
 
     const nx::ui::TextFace& hintFace = faces[MainMenuFont::Hint];
     const nx::ui::TextFace& rowFace = faces[MainMenuFont::Row];
@@ -254,50 +478,40 @@ void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
         painter.fill(*thumb, kMenuInkFaint);
     }
 
-    paintMenuOutline(painter, layout.backButton(), kMenuLine);
-    writeInMiddle(painter, rowFace, texts.back, layout.backButton(), kMenuInkSoft);
-    const bool canStart = !page.rows.empty();
-    painter.fill(layout.confirmButton(), canStart ? kMenuGold : kMenuCell);
-    writeInMiddle(painter, rowFace, texts.start, layout.confirmButton(),
-                  canStart ? kOnMenuGold : kMenuInkFaint);
+    paintButton(painter, rowFace, texts.goBack, layout.backButton(), MenuButtonLook::Secondary);
+    paintButton(painter, rowFace, texts.start, layout.confirmButton(),
+                page.rows.empty() ? MenuButtonLook::Disabled : MenuButtonLook::Primary);
 }
 
-/// Writes the game's name where `layout` puts it, over its rule.
-void paintGameName(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces) {
-    const nx::ui::TextFace& titleFace = faces[MainMenuFont::Title];
-    const nx::ui::PixelPoint& title = layout.title();
-    std::ignore = painter.text(titleFace, kGameName, title, kMenuInk);
-    painter.fill({.x = title.x,
-                  .y = title.y + titleFace.atlas->lineHeight() + layout.pixels(kRuleGap),
-                  .wide = layout.pixels(kRuleWide),
-                  .tall = layout.pixels(kRuleTall)},
-                 kMenuGold);
+/// Draws the project's logo over the navigation, retaining the image's aspect ratio.
+void paintLogo(std::vector<nx::render::ScreenQuad>& quads, const MainMenuLayout& layout,
+               const nx::render::ScreenImage& logo) {
+    const auto wide = static_cast<float>(layout.pixels(kLogoWidth).value());
+    const auto tall = wide * static_cast<float>(logo.height()) / static_cast<float>(logo.width());
+    const auto& top = layout.title();
+    quads.push_back({.image = &logo,
+                     .source = {.width = logo.width(), .height = logo.height()},
+                     .target = {.x = static_cast<float>(top.x.value()),
+                                .y = static_cast<float>(top.y.value()),
+                                .width = wide,
+                                .height = tall},
+                     .filter = nx::render::ScreenFilter::Linear});
 }
 
-/// A row of the items' column in `rect`: `text` in `face`, lit with the gold bar on its left when `isLit`.
+/// A row of the items' column, with gold text for the selected row.
 void paintItemRow(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const nx::ui::TextFace& face,
                   const nx::ui::PixelRect& rect, std::string_view text, bool isLit) {
-    if (isLit) {
-        painter.fill(rect, kMenuCellLit);
-        painter.fill({.x = rect.x, .y = rect.y, .wide = layout.pixels(kAccentBar), .tall = rect.tall},
-                     kMenuGold);
-    }
-    std::ignore = painter.text(face, text,
-                               {.x = rect.x + layout.pixels(kItemInset),
-                                .y = rect.y + ((rect.tall - face.atlas->lineHeight()) / kMiddleDivisor)},
-                               isLit ? kMenuInk : kMenuInkSoft);
+    const nx::Pixels top = rect.y + ((rect.tall - face.atlas->lineHeight()) / kMiddleDivisor);
+    const nx::Pixels shadow = layout.pixels(kTextShadowOffset);
+    std::ignore = painter.text(face, text, {.x = rect.x + shadow, .y = top + shadow}, kTextShadow);
+    std::ignore = painter.text(face, text, {.x = rect.x, .y = top}, isLit ? kMenuGold : kMenuInk);
 }
 
 /// Draws the menu showing `frame` by `layout` with `painter`, in `faces`, writing those of `written`.
-void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, const TextFaces& faces,
-               const Texts& written, const MainMenuFrame& frame) {
+void paintMenu(std::vector<nx::render::ScreenQuad>& quads, nx::ui::PanelPainter& painter,
+               const MainMenuLayout& layout, const TextFaces& faces, const Texts& written,
+               const MainMenuFrame& frame, nx::rhi::Extent2d extent, const nx::render::ScreenImage& logo) {
     const MainMenuTexts& texts = written.mainMenu;
-    paintGameName(painter, layout, faces);
-    for (const auto& [index, action] : std::views::enumerate(frame.items)) {
-        paintItemRow(painter, layout, faces[MainMenuFont::Item], layout.item(nx::narrow<std::size_t>(index)),
-                     itemNameOf(texts, action), frame.selected == action);
-    }
-
     // A key and what it does, one after the other along the menu's foot.
     const nx::ui::TextFace& hintFace = faces[MainMenuFont::Hint];
     nx::ui::PixelPoint pen = layout.hints();
@@ -305,24 +519,38 @@ void paintMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, cons
         pen.x = painter.text(hintFace, key, pen, kMenuInkSoft) + layout.pixels(kHintKeyGap);
         pen.x = painter.text(hintFace, what, pen, kMenuInkFaint) + layout.pixels(kHintGap);
     };
-    tell(texts.keyUpDown, texts.select);
     if (frame.options) {
+        paintOptions(quads, painter, layout, faces, written, *frame.options, extent);
+        const auto button = layout.confirmButton();
+        pen = {.x = layout.pageTitle().x,
+               .y = button.y + ((button.tall - hintFace.atlas->lineHeight()) / kMiddleDivisor)};
+        if (frame.options->crosshairPreview) {
+            tell(written.options.applyKey, written.options.apply);
+            return;
+        }
+        tell(texts.keyUpDown, texts.select);
         if (frame.options->category == OptionCategory::Keyboard) {
             tell(texts.keyEnter, texts.change);
             tell(texts.keyDelete, texts.clear);
         } else {
+            if (frame.options->category == OptionCategory::Video) {
+                tell(texts.keyEnter, texts.choose);
+            }
             tell(texts.keyLeftRight, texts.change);
         }
-        tell(texts.keyEscape, texts.goBack);
-        paintOptions(painter, layout, faces, written, *frame.options);
         return;
     }
     if (frame.newGame) {
-        tell(texts.keyEnter, texts.play);
-        tell(texts.keyEscape, texts.goBack);
         paintNewGame(painter, layout, faces, texts, *frame.newGame);
         return;
     }
+    paintLogo(quads, layout, logo);
+    for (const auto& [index, action] : std::views::enumerate(frame.items)) {
+        paintItemRow(painter, layout, faces[MainMenuFont::Item], layout.item(nx::narrow<std::size_t>(index)),
+                     itemNameOf(texts, action), frame.selected == action);
+    }
+
+    tell(texts.keyUpDown, texts.select);
     tell(texts.keyEnter, texts.choose);
     if (std::ranges::contains(frame.items, MainMenuAction::ResumeGame)) {
         tell(texts.keyEscape, texts.resume);
@@ -342,8 +570,26 @@ void MainMenuPanel::writeIn(const Texts& written) noexcept {
 
 auto MainMenuPanel::load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
                          nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,
-                         std::uint32_t screenHeight) -> nx::Result<void, MenuPanelError> {
+                         const std::filesystem::path& logoPath, std::uint32_t screenHeight)
+    -> nx::Result<void, MenuPanelError> {
     nx::expects(screenHeight > 0, "MainMenuPanel::load: a screen of some height");
+    if (!logo) {
+        const std::string label = nx::platform::toUtf8(logoPath);
+        auto bytes = nx::platform::readFile(logoPath);
+        if (!bytes) {
+            return nx::fail(MenuPanelError::ImageUnavailable, label, std::move(bytes.error()));
+        }
+        auto picture = nx::assets::readTga(*bytes);
+        if (!picture) {
+            return nx::fail(MenuPanelError::ImageUnavailable, label, std::move(picture.error()));
+        }
+        auto loaded =
+            screen.loadImage(commands, picture->pixels, picture->width, picture->height, "mainMenu.logo");
+        if (!loaded) {
+            return nx::fail(MenuPanelError::GpuFailed, label, std::move(loaded.error()));
+        }
+        logo.emplace(std::move(*loaded));
+    }
     if (!std::exchange(isBackgroundRead, true)) {
         if (const auto picture = readMenuBackground(vfs, look->background); !picture) {
             nx::log::warning(kLog, "the main menu shows no background: {}", nx::describe(picture.error()));
@@ -380,7 +626,7 @@ void MainMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const Mai
                          appendGround(laidOut, size);
                      }
                      nx::ui::PanelPainter painter{laidOut, size};
-                     paintMenu(painter, layout, textFaces(), *texts, frame);
+                     paintMenu(laidOut, painter, layout, textFaces(), *texts, frame, size, *logo);
                  });
 }
 
@@ -395,7 +641,7 @@ void MainMenuPanel::appendLoading(std::vector<nx::render::ScreenQuad>& quads, st
                             const TextFaces shownFaces = textFaces();
                             appendGround(laidOut, size);
                             nx::ui::PanelPainter painter{laidOut, size};
-                            paintGameName(painter, layout, shownFaces);
+                            paintLogo(laidOut, layout, *logo);
                             paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(0),
                                          texts->mainMenu.loading, true);
                             paintItemRow(painter, layout, shownFaces[MainMenuFont::Item], layout.item(1), map,

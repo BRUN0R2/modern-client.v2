@@ -97,6 +97,7 @@ auto snapshotFor(GameState& game, PlayerIndex index) -> PlayerSnapshot {
                           .sounds = player.sounds,
                           .playerSounds = std::move(heard),
                           .impacts = game.events.impacts,
+                          .bulletTracers = game.events.bulletTracers,
                           .bloodMarks = game.events.bloodMarks,
                           .bloodSprays = game.events.bloodSprays,
                           .bloodStreams = game.events.bloodStreams,

@@ -431,9 +431,18 @@ firing or a reload without a magazine, a shoot or reload sequence, a cycle, or o
 no limit of weapons nor of kinds of ammo, where the original has 32 of each (its `m_rgAmmo` and
 the bits of `pev->weapons`), nor messages that number them in a byte.
 
+To load local weapons, put one `<id>.toml` per weapon in `addons/cstrike/weapons/` under the user
+folder. Matching an existing id replaces its full definition. Each new weapon needs its own
+classname and a free position in its inventory slot. Put additional ammo types in the addon's
+`ammo.toml`. Keep models and sounds under the addon's `models/` and `sound/`, using the paths in
+the weapon definition and the model's sound events. The client also looks beside a model for its
+external animation group files. In `purchase`, `buyers` controls the eligible teams. In
+`purchase.menu`, `terroristKey` and `counterTerroristKey` optionally override `key` for each team.
+
 What a player of each team spawns with is `data/cstrike/loadouts.toml` (`cs::Loadouts`, the
 original's `GiveDefaultItems`): the terrorists a knife, a Glock 18 and 40 rounds of 9mm, the
 counter-terrorists a knife, a USP and 24 rounds of 45ACP, each weapon with a clip's worth.
+An addon's `loadouts.toml` can replace both teams' spawn loadouts, using ids in the combined catalog.
 
 **Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1, how the guns fire and are
 reloaded, their silencers and burst, the knife's attacks, and the loadouts. Each next part of the

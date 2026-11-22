@@ -50,7 +50,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
 /// Where a shot from `shooter` goes, strayed by `spread` at random from the stream of `seed`, along
 /// the view the punch turns: each way the sum of two even draws (FireBullets3).
 [[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, nx::HammerUnits reach,
-                            const ShotRound& round, std::uint32_t seed) -> Shot {
+                            const ShotRound& round, std::uint32_t seed, const ViewAnimation& animation)
+    -> Shot {
     const nx::AngleVectors axes =
         nx::angleVectors(nx::EulerAngles{.pitch = shooter.view.pitch + shooter.punch.pitch,
                                          .yaw = shooter.view.yaw + shooter.punch.yaw,
@@ -65,7 +66,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
                 .direction = axes.forward + (axes.right * (right * spread)) + (axes.up * (up * spread)),
                 .spread = spread,
                 .reach = reach,
-                .round = round};
+                .round = round,
+                .animation = animation};
 }
 
 /// The round a shot of `firing`, of a weapon whose ammo is `ammo`, fires, at `rangeModifier`.
@@ -443,8 +445,8 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = sequence, .start = time.now};
 
     // The shot goes along the view the kick turned so far; then the kick.
-    const Shot shot =
-        shotFrom(shooter, spread, firing.reach, roundOf(firing, ammoOf(weapon), firing.rangeModifier), seed);
+    const Shot shot = shotFrom(shooter, spread, firing.reach,
+                               roundOf(firing, ammoOf(weapon), firing.rangeModifier), seed, *m_animation);
     if (firing.recoil.kicks) {
         kickBack(kickOf(*firing.recoil.kicks, shooter), owned.shotsFired, owned.kicksLeft, shooter.punch,
                  random);
@@ -466,8 +468,9 @@ auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Sho
     --owned.clip;
     --owned.followUpsLeft;
     makeSound(firing->sound, time);
+    nx::invariant(m_animation.has_value(), "a follow-up shot has its burst's view animation");
     return shotFrom(shooter, firing->followUps->spread, firing->reach,
-                    roundOf(*firing, ammoOf(weapon), firing->followUps->rangeModifier), seed);
+                    roundOf(*firing, ammoOf(weapon), firing->followUps->rangeModifier), seed, *m_animation);
 }
 
 auto Inventory::ammoOf(const Weapon& weapon) const noexcept -> const AmmoType* {

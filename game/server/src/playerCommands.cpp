@@ -218,7 +218,16 @@ void postThink(GameState& game, Player& player, const UserCommand& command, cons
     for (const Shot& shot : attacks.shots) {
         // What its round meets, as FireBullets3 follows it: a mark on the world or a brush entity
         // (DecalGunshot), none on a hostage; and its damage to what takes it.
-        for (const BulletHit& hit : followRound(shot, tracer, materialOf)) {
+        const std::vector<BulletHit> hits = followRound(shot, tracer, materialOf);
+        const nx::Vec3 end =
+            hits.empty() ? shot.origin + (shot.direction * shot.reach.value()) : hits.front().trace.end;
+        game.events.bulletTracers.push_back(
+            BulletTracer{.origin = shot.origin,
+                         .end = end,
+                         .color = game.cvars.bulletTracerColor(),
+                         .shooter = game.world.get<PlayerBody>(player.body)->player,
+                         .animation = shot.animation});
+        for (const BulletHit& hit : hits) {
             if (hit.isBrushModel) {
                 game.events.impacts.push_back(
                     Impact{.position = hit.trace.end, .on = stampTargetOf(game.world, hit.entity)});

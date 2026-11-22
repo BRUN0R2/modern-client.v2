@@ -69,6 +69,7 @@ struct SceneView {
     std::span<const ShownEntity> entities{};    ///< The entity bodies' corpses.
     ShownCrowd crowd{};                         ///< The entity bodies, those alive for the GPU to show.
     std::optional<ViewModelPose> viewModel{};   ///< None without a weapon in hand.
+    ViewModelOffset viewModelOffset{};          ///< Camera-space shift of the held weapon.
     std::span<const TempEntity> tempEntities{}; ///< The client's (TempEntities::shown).
     std::span<const Particle> particles{};      ///< The client's (Particles::shown).
     std::span<const Streak> streaks{};          ///< The client's (Particles::shownStreaks).

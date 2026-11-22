@@ -8,6 +8,7 @@ export module nx.settings:clientCvars;
 import std;
 import nx.core;
 import nx.console;
+import nx.platform;
 import :keys;
 
 export namespace nx::settings {
@@ -40,6 +41,8 @@ struct VideoCvars {
     console::Cvar<float> fpsMax;     ///< `fps_max`: the most frames a second, as frameIntervalOf holds it.
     console::Cvar<bool> fpsOverride; ///< `fps_override`: lifts frameIntervalOf's ceiling of 100.
     console::Cvar<bool> vsync;       ///< `gl_vsync`: frames wait for the display's refresh.
+    console::Cvar<platform::WindowMode> windowMode; ///< `vid_mode`.
+    console::Cvar<std::string> resolution;          ///< `vid_resolution`, auto or WIDTHxHEIGHT.
     console::Cvar<float> gamma;
     console::Cvar<float> brightness;
     console::Cvar<float> textureGamma; ///< `texgamma`.
@@ -53,6 +56,9 @@ struct VideoCvars {
     console::Cvar<std::int32_t> multiplayerDecals;
 };
 
+/// The pixel size of a validated resolution string. The automatic selection has no explicit size.
+[[nodiscard]] auto resolutionOf(std::string_view text) noexcept -> std::optional<platform::PixelSize>;
+
 /// The ranges the original holds the picture's cvars to (V_CheckGamma): `gamma`, `texgamma` and
 /// `lightgamma` from 1.8 to 3, `brightness` from 0 to 3.
 inline constexpr float kLeastGamma = 1.8F;
@@ -62,6 +68,7 @@ inline constexpr float kMostBrightness = 3.0F;
 
 /// The most frames a second `fps_max` gives without `fps_override` (frameIntervalOf).
 inline constexpr float kMostFpsWithoutOverride = 100.0F;
+inline constexpr float kMostFps = 1000.0F;
 
 /// The values `r_decals` and `mp_decals` start with: the original's.
 inline constexpr std::int32_t kDefaultDecals = 4096;
@@ -83,14 +90,14 @@ enum class GamePlayers : std::uint8_t {
 /// The least time from a frame's start to the next's that `video` allows in a game of `players`, as
 /// the original's Host_FilterTime paces its client (ReHLDS, GPL, consulted: docs/20 section 3):
 /// `fps_max` frames a second, at least 0.5 (20 with more than one player) and at most 100 unless
-/// `fps_override` (100 whenever `gl_vsync` is on without it), and half a frame more.
+/// `fps_override` (100 whenever `gl_vsync` is on without it). The half-frame margin cannot exceed 1000 FPS.
 [[nodiscard]] auto frameIntervalOf(const VideoCvars& video, GamePlayers players) -> Seconds;
 
 /// `name`'s default: the engine's name for a player, which Steam replaces with its persona's.
 inline constexpr std::string_view kDefaultPlayerName = "Player";
-/// The language a player who chose none is written to in (`cl_language`): English, the one the game's own
+/// The default language of the client (`cl_language`): Brazilian Portuguese, the one the game's own
 /// texts are written in first.
-inline constexpr std::string_view kDefaultLanguage = "en";
+inline constexpr std::string_view kDefaultLanguage = "pt-BR";
 
 /// The player's own settings, which the game reads.
 struct PlayerCvars {

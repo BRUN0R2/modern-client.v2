@@ -41,20 +41,16 @@ template <class Read>
     return std::move(*made);
 }
 
-/// The game's weapons, from `data`, the project's data/ folder: cstrike/ammo.toml and each
-/// cstrike/weapons/<id>.toml, which must hold the weapon `id`. Errors: Unavailable.
-[[nodiscard]] auto readWeaponCatalog(const std::filesystem::path& data)
-    -> nx::Result<WeaponCatalog, GameContentError> {
-    auto ammo = readDataFile(gameDataOf(data) / "ammo.toml", readAmmoTypes);
-    if (!ammo) {
-        return std::unexpected{std::move(ammo.error())};
-    }
-    const std::filesystem::path folder = gameDataOf(data) / "weapons";
+/// Read definitions from one folder. A local definition can replace one with the same id.
+[[nodiscard]] auto readWeapons(const std::filesystem::path& folder, std::vector<Weapon>& weapons,
+                               bool optional) -> nx::Result<void, GameContentError> {
     auto files = nx::platform::listFiles(folder);
     if (!files) {
+        if (optional && files.error().code == nx::platform::FileError::NotFound) {
+            return {};
+        }
         return nx::fail(GameContentError::Unavailable, std::move(files.error()));
     }
-    std::vector<Weapon> weapons;
     for (const std::filesystem::path& file : *files) {
         if (file.has_parent_path() || file.extension() != kDataExtension) {
             continue;
@@ -69,7 +65,43 @@ template <class Read>
                             std::format("{}: the weapon {:?}, in a file not named after it",
                                         nx::platform::toUtf8(path), weapon->id));
         }
-        weapons.push_back(std::move(*weapon));
+        const auto existing = std::ranges::find(weapons, weapon->id, &Weapon::id);
+        if (existing == weapons.end()) {
+            weapons.push_back(std::move(*weapon));
+        } else {
+            *existing = std::move(*weapon);
+        }
+    }
+    return {};
+}
+
+[[nodiscard]] auto readWeaponCatalog(const std::filesystem::path& data,
+                                     const std::optional<std::filesystem::path>& addons)
+    -> nx::Result<WeaponCatalog, GameContentError> {
+    auto ammo = readDataFile(gameDataOf(data) / "ammo.toml", readAmmoTypes);
+    if (!ammo) {
+        return std::unexpected{std::move(ammo.error())};
+    }
+    const auto folder = gameDataOf(data) / "weapons";
+    std::vector<Weapon> weapons;
+    if (auto read = readWeapons(folder, weapons, false); !read) {
+        return std::unexpected{std::move(read.error())};
+    }
+    if (addons) {
+        const auto ammoFile = *addons / "ammo.toml";
+        auto text = nx::platform::readTextFile(ammoFile);
+        if (text) {
+            auto extra = readAmmoTypes(*text, nx::platform::toUtf8(ammoFile));
+            if (!extra) {
+                return nx::fail(GameContentError::Unavailable, std::move(extra.error()));
+            }
+            std::ranges::move(extra->ammo, std::back_inserter(ammo->ammo));
+        } else if (text.error().code != nx::platform::FileError::NotFound) {
+            return nx::fail(GameContentError::Unavailable, std::move(text.error()));
+        }
+        if (auto read = readWeapons(*addons / "weapons", weapons, true); !read) {
+            return std::unexpected{std::move(read.error())};
+        }
     }
     auto catalog = WeaponCatalog::make(std::move(*ammo), std::move(weapons));
     if (!catalog) {
@@ -123,31 +155,44 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     // The game's own: the user's content, and the first of the installation's folders, over its base.
     const std::size_t gameMounts = mounts.size() + std::min<std::size_t>(installation->mounts().size(), 1);
     std::ranges::copy(installation->mounts(), std::back_inserter(mounts));
+    // Steam keeps shared UI resources such as TrackerScheme.res in this optional folder.
+    const auto platformFolder = installation->folder() / "platform";
+    if (std::error_code error; std::filesystem::is_directory(platformFolder, error)) {
+        mounts.push_back(platformFolder);
+    }
     auto vfs = nx::assets::Vfs::create(mounts);
     if (!vfs) {
         return nx::fail(GameContentError::Unavailable, std::move(vfs.error()));
     }
-    auto content = readGameContent(data, std::move(*vfs));
+    auto content = readGameContent(data, std::move(*vfs), addons);
     if (content) {
         content->gameMounts = gameMounts;
     }
     return content;
 }
 
-auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
+auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs,
+                     const std::optional<std::filesystem::path>& addons)
     -> nx::Result<GameContent, GameContentError> {
     auto classes = readDataFile(gameDataOf(data) / "entities.toml", nx::game::readEntityClasses);
     if (!classes) {
         return std::unexpected{std::move(classes.error())};
     }
-    auto weapons = readWeaponCatalog(data);
+    auto weapons = readWeaponCatalog(data, addons);
     if (!weapons) {
         return std::unexpected{std::move(weapons.error())};
     }
-    auto loadouts = readDataFile(gameDataOf(data) / "loadouts.toml",
-                                 [&weapons](std::string_view text, std::string_view sourceName) {
-                                     return readLoadouts(text, sourceName, *weapons);
-                                 });
+    auto loadoutFile = gameDataOf(data) / "loadouts.toml";
+    if (addons) {
+        const auto localLoadouts = *addons / "loadouts.toml";
+        std::error_code error;
+        if (std::filesystem::exists(localLoadouts, error) || error) {
+            loadoutFile = localLoadouts;
+        }
+    }
+    auto loadouts = readDataFile(loadoutFile, [&weapons](std::string_view text, std::string_view sourceName) {
+        return readLoadouts(text, sourceName, *weapons);
+    });
     if (!loadouts) {
         return std::unexpected{std::move(loadouts.error())};
     }

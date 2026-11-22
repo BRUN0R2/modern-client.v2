@@ -13,29 +13,34 @@ namespace cs {
 namespace {
 
 // The design, in its units.
-constexpr MenuUnits kLeftUnits{128};
-constexpr MenuUnits kTitleTopUnits{128};
-constexpr MenuUnits kItemWideUnits{440};
-constexpr MenuUnits kItemTallUnits{60};
-constexpr MenuUnits kItemGapUnits{6};
-constexpr MenuUnits kUnderItemsUnits{196}; ///< From the last item's foot to the screen's.
-constexpr MenuUnits kHintsFootUnits{96};   ///< From the top of the keys' line to the screen's foot.
+constexpr MenuUnits kLeftUnits{84};
+constexpr MenuUnits kLogoAboveItems{102};
+constexpr MenuUnits kItemWideUnits{320};
+constexpr MenuUnits kItemTallUnits{42};
+constexpr MenuUnits kItemGapUnits{2};
+constexpr MenuUnits kUnderItemsUnits{122}; ///< From the last item's foot to the screen's.
+constexpr MenuUnits kHintsFootUnits{74};   ///< From the top of the keys' line to the screen's foot.
 // The page beside the items.
-constexpr MenuUnits kPageGapUnits{72}; ///< From the items to the page, and from it to the screen's right.
-constexpr MenuUnits kMostPageWideUnits{720};
+constexpr MenuUnits kPageMarginUnits{52};
+constexpr MenuUnits kMostPageWideUnits{940};
 constexpr MenuUnits kPageInsetUnits{28};
 constexpr MenuUnits kPageTitleTopUnits{24};
-constexpr MenuUnits kListTopUnits{104}; ///< From the page's top to its list's.
+constexpr MenuUnits kListTopUnits{152}; ///< From the page's top to its list's.
 constexpr MenuUnits kListRowTallUnits{44};
 constexpr MenuUnits kListFootGapUnits{20}; ///< From the list's foot to the buttons.
 constexpr MenuUnits kThumbWideUnits{4};
 constexpr MenuUnits kButtonWideUnits{200};
 constexpr MenuUnits kButtonTallUnits{56};
 constexpr MenuUnits kButtonGapUnits{16};
-constexpr MenuUnits kTabsTopUnits{64}; ///< From the page's top to its tabs'.
-constexpr MenuUnits kTabTallUnits{32};
+constexpr MenuUnits kTabsTopUnits{67}; ///< From the page's top to its tabs'.
+constexpr MenuUnits kTabTallUnits{38};
 constexpr MenuUnits kTabGapUnits{4};
+constexpr MenuUnits kPreviewWideUnits{280};
+constexpr MenuUnits kPreviewGapUnits{12};
+constexpr std::int32_t kPreviewRowWidthDivisor = 3;
 constexpr MenuUnits kControlWideUnits{300};
+constexpr MenuUnits kFieldMargin{6};
+constexpr std::size_t kMostChoiceRows = 6;
 constexpr MenuUnits kTrackTallUnits{6};
 constexpr MenuUnits kValueWideUnits{76}; ///< What a slider's value is written in, after its track.
 /// What the room left is divided by to put a thing halfway into it.
@@ -54,17 +59,18 @@ MainMenuLayout::MainMenuLayout(nx::rhi::Extent2d size, std::size_t items) noexce
     const nx::Pixels itemTall = pixels(kItemTallUnits);
     const nx::Pixels itemsTall = (count * itemTall) + (std::max(count - 1, 0) * pixels(kItemGapUnits));
     screenRect = {.wide = wide, .tall = tall};
-    titlePoint = {.x = left, .y = pixels(kTitleTopUnits)};
     firstItem = {.x = left,
                  .y = tall - pixels(kUnderItemsUnits) - itemsTall,
                  .wide = pixels(kItemWideUnits),
                  .tall = itemTall};
+    titlePoint = {.x = left, .y = firstItem.y - pixels(kLogoAboveItems)};
     hintsPoint = {.x = left, .y = tall - pixels(kHintsFootUnits)};
-    const nx::Pixels pageX = left + firstItem.wide + pixels(kPageGapUnits);
-    pageRect = {.x = pageX,
-                .y = titlePoint.y,
-                .wide = std::min(pixels(kMostPageWideUnits), wide - pageX - pixels(kPageGapUnits)),
-                .tall = tall - pixels(kUnderItemsUnits) - titlePoint.y};
+    const nx::Pixels margin = pixels(kPageMarginUnits);
+    const nx::Pixels pageWide = std::min(pixels(kMostPageWideUnits), wide - (kBothSides * margin));
+    pageRect = {.x = (wide - pageWide) / kMiddleDivisor,
+                .y = margin,
+                .wide = pageWide,
+                .tall = tall - (kBothSides * margin)};
 }
 
 auto MainMenuLayout::pageTitle() const noexcept -> nx::ui::PixelPoint {
@@ -77,12 +83,28 @@ auto MainMenuLayout::listRows() const noexcept -> std::size_t {
     return nx::narrow<std::size_t>(std::max(room / pixels(kListRowTallUnits), 1));
 }
 
+auto MainMenuLayout::withCrosshairPreview() const noexcept -> MainMenuLayout {
+    MainMenuLayout layout = *this;
+    layout.previewSpace = std::min(pixels(kPreviewWideUnits), listRow(0).wide / kPreviewRowWidthDivisor);
+    return layout;
+}
+
+auto MainMenuLayout::crosshairPreview() const noexcept -> nx::ui::PixelRect {
+    const nx::ui::PixelRect first = listRow(0);
+    const nx::ui::PixelRect last = listRow(listRows() - 1);
+    const nx::Pixels gap = pixels(kPreviewGapUnits);
+    return {.x = first.x + first.wide + gap,
+            .y = first.y,
+            .wide = previewSpace - gap,
+            .tall = last.y + last.tall - first.y};
+}
+
 auto MainMenuLayout::listRow(std::size_t row) const noexcept -> nx::ui::PixelRect {
     const nx::Pixels inset = pixels(kPageInsetUnits);
     const nx::Pixels rowTall = pixels(kListRowTallUnits);
     return {.x = pageRect.x + inset,
             .y = pageRect.y + pixels(kListTopUnits) + (nx::narrow<std::int32_t>(row) * rowTall),
-            .wide = pageRect.wide - (kBothSides * inset),
+            .wide = pageRect.wide - (kBothSides * inset) - previewSpace,
             .tall = rowTall};
 }
 
@@ -128,6 +150,36 @@ auto MainMenuLayout::optionControl(std::size_t row) const noexcept -> nx::ui::Pi
     control.x += control.wide - controlWide - pixels(kPageInsetUnits) / kMiddleDivisor;
     control.wide = controlWide;
     return control;
+}
+
+auto MainMenuLayout::optionField(std::size_t row) const noexcept -> nx::ui::PixelRect {
+    nx::ui::PixelRect field = optionControl(row);
+    const nx::Pixels margin = pixels(kFieldMargin);
+    field.y += margin;
+    field.tall -= kBothSides * margin;
+    return field;
+}
+
+auto MainMenuLayout::choiceMenu(std::size_t row, std::size_t count) const noexcept -> ChoiceMenuLayout {
+    const nx::ui::PixelRect field = optionField(row);
+    const nx::Pixels rowTall = listRow(row).tall;
+    const nx::Pixels bottom = field.y + field.tall;
+    const auto below = nx::narrow<std::size_t>(std::max((screenRect.tall - bottom) / rowTall, 0));
+    const auto above = nx::narrow<std::size_t>(std::max(field.y / rowTall, 0));
+    const std::size_t wanted = std::min(count, kMostChoiceRows);
+    const bool opensDown = below >= wanted || below >= above;
+    const std::size_t rows = std::min(wanted, opensDown ? below : above);
+    const nx::Pixels tall = nx::narrow<std::int32_t>(rows) * rowTall;
+    return {
+        .bounds = {.x = field.x, .y = opensDown ? bottom : field.y - tall, .wide = field.wide, .tall = tall},
+        .rows = rows};
+}
+
+auto ChoiceMenuLayout::item(std::size_t index) const noexcept -> nx::ui::PixelRect {
+    nx::ui::PixelRect rect = bounds;
+    rect.tall /= nx::narrow<std::int32_t>(rows);
+    rect.y += nx::narrow<std::int32_t>(index) * rect.tall;
+    return rect;
 }
 
 auto MainMenuLayout::optionTrack(std::size_t row) const noexcept -> nx::ui::PixelRect {

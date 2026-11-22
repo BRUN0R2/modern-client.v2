@@ -26,6 +26,7 @@ constexpr std::uint32_t kImageBinding = 0;
 constexpr std::uint32_t kImageSamplerBinding = 1;
 
 constexpr float kChannelTop = 255.0F;
+constexpr std::uint8_t kChannelByteTop = std::numeric_limits<std::uint8_t>::max();
 /// The vertices of a quad: two triangles.
 constexpr std::uint32_t kQuadVertices = 6;
 /// The room a frame starts with, which grows as the frames need, in quads.
@@ -46,6 +47,8 @@ constexpr float kStreakImageLength = 0.8F;
 constexpr std::uint32_t kDotSide = 8;
 constexpr std::uint32_t kDotWidth = 4;
 constexpr std::size_t kTexelBytes = 4;
+constexpr std::size_t kAlphaOffset = kTexelBytes - 1;
+constexpr rhi::Extent2d kTracerSpriteSize{.width = 16, .height = 64};
 
 /// A corner of a particle's quad: where it is, its texture coordinates, and its color and opacity.
 struct ParticleVertex {
@@ -91,6 +94,28 @@ struct FrameUniform {
     return texels;
 }
 
+/// A white tracer sprite with a bright core, soft sides and a tail that narrows and fades.
+[[nodiscard]] auto tracerTexels() -> std::vector<std::byte> {
+    constexpr float kTailStart = 0.35F;
+    constexpr float kTailWidth = 0.3F;
+    const auto [wide, tall] = kTracerSpriteSize;
+    std::vector<std::byte> texels(std::size_t{wide} * tall * kTexelBytes, std::byte{kChannelByteTop});
+    for (std::uint32_t y = 0; y < tall; ++y) {
+        const float along = static_cast<float>(y) / static_cast<float>(tall - 1);
+        const float tail = std::max(along - kTailStart, 0.0F) / (1.0F - kTailStart);
+        const float width = std::lerp(1.0F, kTailWidth, tail);
+        for (std::uint32_t x = 0; x < wide; ++x) {
+            const float across =
+                std::abs((2.0F * static_cast<float>(x) / static_cast<float>(wide - 1)) - 1.0F);
+            const float profile = std::max(1.0F - (across / width), 0.0F);
+            const float opacity = (1.0F - tail) * profile * profile;
+            const std::size_t at = ((std::size_t{y} * wide) + x) * kTexelBytes;
+            texels.at(at + kAlphaOffset) = std::byte{static_cast<std::uint8_t>(opacity * kChannelTop)};
+        }
+    }
+    return texels;
+}
+
 /// The vertex color of `color`, as opaque as `amount`.
 [[nodiscard]] auto vertexColorOf(RenderColor color, std::uint8_t amount) noexcept -> Vec4 {
     return Vec4{.x = static_cast<float>(color.red) / kChannelTop,
@@ -123,7 +148,8 @@ void addQuad(std::vector<ParticleVertex>& vertices, const ParticleInstance& part
 /// `aspect` (CL_DrawTracers): along its line, twice its half width across the line it makes on the
 /// screen. Whether it was appended: not behind the view, nor seen end on.
 [[nodiscard]] auto addStreak(std::vector<ParticleVertex>& vertices, const StreakInstance& streak,
-                             const Mat4& toClip, float aspect, const AngleVectors& view) -> bool {
+                             const Mat4& toClip, float aspect, const AngleVectors& view, float imageLength)
+    -> bool {
     const Vec4 start = toClip * extend(streak.start, 1.0F);
     const Vec4 end = toClip * extend(streak.end, 1.0F);
     if (start.w <= 0.0F || end.w <= 0.0F) {
@@ -138,13 +164,11 @@ void addQuad(std::vector<ParticleVertex>& vertices, const ParticleInstance& part
     }
     const Vec3 side = ((view.right * -upward) + (view.up * across)) * (streak.halfWidth.value() / length);
     const Vec4 color = vertexColorOf(streak.color, streak.amount);
-    // The original's corners and texture coordinates: the sprite across the line, 0.8 of it along it.
+    // The sprite spans the line's width and runs along it from start to end.
     const ParticleVertex startLeft{.position = streak.start - side, .u = 0.0F, .v = 0.0F, .color = color};
     const ParticleVertex startRight{.position = streak.start + side, .u = 1.0F, .v = 0.0F, .color = color};
-    const ParticleVertex endLeft{
-        .position = streak.end - side, .u = 0.0F, .v = kStreakImageLength, .color = color};
-    const ParticleVertex endRight{
-        .position = streak.end + side, .u = 1.0F, .v = kStreakImageLength, .color = color};
+    const ParticleVertex endLeft{.position = streak.end - side, .u = 0.0F, .v = imageLength, .color = color};
+    const ParticleVertex endRight{.position = streak.end + side, .u = 1.0F, .v = imageLength, .color = color};
     vertices.insert(vertices.end(), {endLeft, endRight, startRight, endLeft, startRight, startLeft});
     return true;
 }
@@ -159,7 +183,14 @@ auto ParticleRenderer::create(rhi::Device& device, rhi::CommandList& commands,
     if (auto made = renderer.createPipeline(desc.shaderCode, desc.colorFormat); !made) {
         return fail(ParticleError::GpuFailed, std::move(made.error()));
     }
-    if (auto made = renderer.createDot(commands); !made) {
+    if (auto made = renderer.createMask(commands, "particle.dot", {.width = kDotSide, .height = kDotSide},
+                                        dotTexels(), renderer.m_dot, renderer.m_dotGroup);
+        !made) {
+        return fail(ParticleError::GpuFailed, std::move(made.error()));
+    }
+    if (auto made = renderer.createMask(commands, "particle.tracer", kTracerSpriteSize, tracerTexels(),
+                                        renderer.tracerImage, renderer.tracerGroup);
+        !made) {
         return fail(ParticleError::GpuFailed, std::move(made.error()));
     }
     for (ParticleFrameSlot& slot : renderer.frameSlots) {
@@ -233,24 +264,24 @@ auto ParticleRenderer::createPipeline(std::span<const std::byte> shaderCode, rhi
     return {};
 }
 
-auto ParticleRenderer::createDot(rhi::CommandList& commands) -> Result<void, rhi::RhiError> {
+auto ParticleRenderer::createMask(rhi::CommandList& commands, std::string_view label, rhi::Extent2d size,
+                                  std::span<const std::byte> texels, rhi::OwnedTexture& image,
+                                  rhi::OwnedBindGroup& bindGroup) -> Result<void, rhi::RhiError> {
     Uploader uploader{*m_device, commands};
-    const std::vector<std::byte> texels = dotTexels();
     const std::array<std::size_t, 1> offsets{0};
-    auto texture =
-        uploader.texture("particle.dot", {.width = kDotSide, .height = kDotSide}, 1, 1, texels, offsets);
+    auto texture = uploader.texture(label, size, 1, 1, texels, offsets);
     if (!texture) {
         return std::unexpected{std::move(texture.error())};
     }
     const std::array bindings{rhi::Binding{.binding = kImageBinding, .resource = texture->get()},
                               rhi::Binding{.binding = kImageSamplerBinding, .resource = m_sampler.get()}};
-    auto group = m_device->createBindGroup(
-        {.label = "particle.dot", .layout = m_imageLayout.get(), .bindings = bindings});
+    auto group =
+        m_device->createBindGroup({.label = label, .layout = m_imageLayout.get(), .bindings = bindings});
     if (!group) {
         return std::unexpected{std::move(group.error())};
     }
-    m_dot = std::move(*texture);
-    m_dotGroup = std::move(*group);
+    image = std::move(*texture);
+    bindGroup = std::move(*group);
     return {};
 }
 
@@ -319,6 +350,7 @@ auto ParticleRenderer::reserve(ParticleFrameSlot& slot, std::size_t quads) -> Re
 auto ParticleRenderer::prepare(const ParticleDraw& draw) -> Result<void, ParticleError> {
     m_preparedQuads = 0;
     preparedStreaks = 0;
+    preparedTracers = 0;
     ParticleFrameSlot& slot = frameSlots.advance();
     const FrameUniform uniform{.viewProjection = viewProjectionMatrix(draw.camera, draw.aspect),
                                .fog = fogBlockOf(draw.fog, draw.camera, m_encoding),
@@ -326,32 +358,35 @@ auto ParticleRenderer::prepare(const ParticleDraw& draw) -> Result<void, Particl
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
     const std::span<const StreakInstance> streaks =
         streakGroup.get().isNull() ? std::span<const StreakInstance>{} : draw.streaks;
-    if (draw.particles.empty() && streaks.empty()) {
+    if (draw.particles.empty() && streaks.empty() && draw.tracers.empty()) {
         return {};
     }
     const AngleVectors view = angleVectors(draw.camera.angles);
     std::vector<ParticleVertex> vertices;
-    vertices.reserve((draw.particles.size() + streaks.size()) * kQuadVertices);
+    vertices.reserve((draw.particles.size() + streaks.size() + draw.tracers.size()) * kQuadVertices);
     for (const ParticleInstance& particle : draw.particles) {
         addQuad(vertices, particle, draw.camera.position, view);
     }
-    const Mat4 toClip = viewProjectionMatrix(draw.camera, draw.aspect);
-    const auto streakCount =
-        static_cast<std::size_t>(std::ranges::count_if(streaks, [&](const StreakInstance& streak) {
-            return addStreak(vertices, streak, toClip, draw.aspect, view);
+    const auto appendStreaks = [&](std::span<const StreakInstance> instances, float imageLength) {
+        return static_cast<std::size_t>(std::ranges::count_if(instances, [&](const StreakInstance& streak) {
+            return addStreak(vertices, streak, uniform.viewProjection, draw.aspect, view, imageLength);
         }));
-    const std::size_t quads = draw.particles.size() + streakCount;
+    };
+    const std::size_t streakCount = appendStreaks(streaks, kStreakImageLength);
+    const std::size_t tracerCount = appendStreaks(draw.tracers, 1.0F);
+    const std::size_t quads = draw.particles.size() + streakCount + tracerCount;
     if (auto reserved = reserve(slot, quads); !reserved) {
         return fail(ParticleError::GpuFailed, std::move(reserved.error()));
     }
     std::ranges::copy(std::as_bytes(std::span{vertices}), m_device->mappedBytes(slot.vertices.get()).begin());
     m_preparedQuads = narrow<std::uint32_t>(draw.particles.size());
     preparedStreaks = narrow<std::uint32_t>(streakCount);
+    preparedTracers = narrow<std::uint32_t>(tracerCount);
     return {};
 }
 
 void ParticleRenderer::drawPrepared(rhi::CommandList& commands) const {
-    if (m_preparedQuads == 0 && preparedStreaks == 0) {
+    if (m_preparedQuads == 0 && preparedStreaks == 0 && preparedTracers == 0) {
         return;
     }
     // The particles, then the streaks after them (CL_DrawEFX).
@@ -363,11 +398,18 @@ void ParticleRenderer::drawPrepared(rhi::CommandList& commands) const {
         commands.setBindGroup(kImageGroup, m_dotGroup.get());
         commands.draw(m_preparedQuads * kQuadVertices, 1, 0, 0);
     }
-    if (preparedStreaks > 0) {
+    if (preparedStreaks > 0 || preparedTracers > 0) {
         commands.setPipeline(streakPipeline.get());
         commands.setBindGroup(kFrameGroup, slot.group.get());
-        commands.setBindGroup(kImageGroup, streakGroup.get());
-        commands.draw(preparedStreaks * kQuadVertices, 1, m_preparedQuads * kQuadVertices, 0);
+        if (preparedStreaks > 0) {
+            commands.setBindGroup(kImageGroup, streakGroup.get());
+            commands.draw(preparedStreaks * kQuadVertices, 1, m_preparedQuads * kQuadVertices, 0);
+        }
+        if (preparedTracers > 0) {
+            commands.setBindGroup(kImageGroup, tracerGroup.get());
+            commands.draw(preparedTracers * kQuadVertices, 1,
+                          (m_preparedQuads + preparedStreaks) * kQuadVertices, 0);
+        }
     }
 }
 

@@ -39,12 +39,19 @@ struct Particle {
     nx::Seconds goesAt{};
 };
 
+/// The endpoint of a bullet tracer and the firing animation for one seen in first person.
+struct TracerPath {
+    nx::Vec3 end{};
+    std::optional<ViewAnimation> view{};
+};
+
 /// A streak: where it starts and how it moves, its color, and when it goes, in the time of the map.
 struct Streak {
     nx::Vec3 origin{};
     nx::Vec3 velocity{};
     nx::render::RenderColor color{};
     nx::Seconds goesAt{};
+    std::optional<TracerPath> tracer{}; ///< For a tracer, origin is the start of the server's shot.
 };
 
 /// How opaque `particle` is at `now`, of 255: wholly until its last sixteenth of a second, then fading out
@@ -53,9 +60,14 @@ struct Streak {
 /// How opaque `streak` is at `now`, of 255: wholly until its last half second, then fading out as it goes
 /// (CL_DrawTracers).
 [[nodiscard]] auto amountOf(const Streak& streak, nx::Seconds now) noexcept -> std::uint8_t;
-/// Where `streak` ends at `now`: along its velocity, as far as it moves in the time it has left, a tenth
-/// of a second of it at most (CL_DrawTracers).
+/// Where a moving `streak` ends at `now`: along its velocity, as far as it moves in the time it has left, a
+/// tenth of a second of it at most (CL_DrawTracers).
 [[nodiscard]] auto endOf(const Streak& streak, nx::Seconds now) noexcept -> nx::Vec3;
+
+/// The visible line of a tracer. First-person tracers need the posed muzzle and an impact ahead of it. Other
+/// shots use an approximation based on the server's path.
+[[nodiscard]] auto tracerOf(const Streak& streak, std::optional<nx::Vec3> muzzle, nx::Seconds now) noexcept
+    -> std::optional<nx::render::StreakInstance>;
 
 /// The color of streak color `index` (gTracerColors): white, red, green, blue, the tracer cvars' (their
 /// defaults: tracerred 0.8, tracergreen 0.8 and tracerblue 0.4, times traceralpha 0.5), sparks' yellow
@@ -76,6 +88,10 @@ public:
     /// way times its speed, drawn up to its spread faster or slower, as much on each axis, of its color,
     /// gone after a tenth to half a second. Those past kMostParticles are not made.
     void splashStreaks(const StreakSplash& splash, nx::Seconds now);
+
+    /// Keeps the shot's path briefly. For `viewer`'s shot, the view model supplies the visible origin.
+    void traceBullet(const BulletTracer& shot, PlayerIndex viewer, nx::Seconds now);
+    void clearBulletTracers();
 
     /// Moves them over `elapsed` up to `now`, the world's gravity `gravity`: each moves by its velocity,
     /// then a particle falls its share of the gravity (CL_ThinkParticle), a streak all of it, slowing

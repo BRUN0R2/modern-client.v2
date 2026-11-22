@@ -36,6 +36,7 @@ struct Session {
     cs::Particles particles;
     cs::BloodEffects blood; ///< The enhanced look's.
     cs::ViewModelEvents viewModelEvents{};
+    cs::ViewModelBob viewModelBob{};
     std::optional<cs::ViewModelPose> viewPose{}; ///< Of the frame played.
     std::vector<cs::PassedEvent> clientEvents{}; ///< Its view model passed in the frame.
     /// Where the other players show in the frame played, by cs::PlayerIndex: what their sounds follow.

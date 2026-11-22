@@ -88,9 +88,55 @@ struct Opened {
 constexpr MouseButtonChanged kLeftDown{.button = MouseButton::Left, .isDown = true};
 constexpr MouseButtonChanged kLeftUp{.button = MouseButton::Left, .isDown = false};
 
+TEST(OptionsPageTest, CrosshairEditsPreviewBeforeTheyApplyAndReopeningDiscardsUnappliedEdits) {
+    cs::CrosshairStyle active{.type = cs::CrosshairType::Tee};
+    const auto draft = std::make_shared<cs::CrosshairStyle>();
+    cs::OptionsPage page{
+        {{.category = OptionCategory::Crosshair,
+          .name = &OptionsTexts::crosshairDot,
+          .control = cs::OptionSwitch{.isOn = [draft] { return draft->hasDot; },
+                                      .set = [draft](bool value) { draft->hasDot = value; }}}},
+        {.draft = draft,
+         .read = [&active] { return active; },
+         .apply = [&active](const cs::CrosshairStyle& style) { active = style; }}};
+    const cs::MainMenuLayout layout{kScreen, 2};
+    const auto tab = layout.optionTab(static_cast<std::size_t>(OptionCategory::Crosshair));
+    const auto row = layout.withCrosshairPreview().listRow(0);
+    const auto click = [&](const nx::ui::PixelRect& rect) {
+        return page.handle(kLeftDown, middleOf(rect), layout);
+    };
+    const auto frame = [&] {
+        return page.frame(layout.listRows());
+    };
+
+    page.open();
+    EXPECT_EQ(click(tab), OptionsOutcome::Stays);
+    EXPECT_EQ(frame().crosshairPreview, active);
+    EXPECT_FALSE(frame().canApplyCrosshair);
+
+    EXPECT_EQ(click(row), OptionsOutcome::Stays);
+    ASSERT_TRUE(frame().crosshairPreview);
+    EXPECT_TRUE(frame().crosshairPreview->hasDot);
+    EXPECT_FALSE(active.hasDot);
+    EXPECT_TRUE(frame().canApplyCrosshair);
+
+    EXPECT_EQ(click(layout.confirmButton()), OptionsOutcome::Stays);
+    EXPECT_TRUE(active.hasDot);
+    EXPECT_FALSE(frame().canApplyCrosshair);
+    EXPECT_EQ(click(row), OptionsOutcome::Stays);
+    EXPECT_EQ(click(layout.backButton()), OptionsOutcome::GoesBack);
+    page.open();
+    EXPECT_EQ(click(tab), OptionsOutcome::Stays);
+    EXPECT_EQ(frame().crosshairPreview, active);
+    EXPECT_FALSE(frame().canApplyCrosshair);
+}
+
 TEST(OptionsPageTest, OpensOnItsFirstTabWithTheTabsSelected) {
     Settings settings;
     Opened options{settings};
+    EXPECT_EQ(options.shown().category, OptionCategory::Game);
+    std::ignore = options.press(Key::Right);
+    std::ignore = options.press(Key::Right);
     const cs::OptionsFrame frame = options.shown();
     EXPECT_EQ(frame.category, OptionCategory::Mouse);
     EXPECT_EQ(frame.selectedRow, std::nullopt);
@@ -107,9 +153,11 @@ TEST(OptionsPageTest, LeftAndRightChangeTheTabWhileTheTabsAreSelected) {
     Settings settings;
     Opened options{settings};
     EXPECT_EQ(options.press(Key::Left), OptionsOutcome::Stays);
-    EXPECT_EQ(options.shown().category, OptionCategory::Mouse) << "the first stays the first";
+    EXPECT_EQ(options.shown().category, OptionCategory::Game) << "the first stays the first";
     std::ignore = options.press(Key::Right);
     EXPECT_EQ(options.shown().category, OptionCategory::Keyboard);
+    std::ignore = options.press(Key::Right);
+    EXPECT_EQ(options.shown().category, OptionCategory::Mouse);
     std::ignore = options.press(Key::Right);
     const cs::OptionsFrame audio = options.shown();
     EXPECT_EQ(audio.category, OptionCategory::Audio);
@@ -118,7 +166,7 @@ TEST(OptionsPageTest, LeftAndRightChangeTheTabWhileTheTabsAreSelected) {
     for (int press = 0; press < 5; ++press) {
         std::ignore = options.press(Key::Right);
     }
-    EXPECT_EQ(options.shown().category, OptionCategory::Game) << "the last stays the last";
+    EXPECT_EQ(options.shown().category, OptionCategory::Crosshair) << "the last stays the last";
     EXPECT_TRUE(options.shown().rows.empty());
     std::ignore = options.press(Key::Down);
     EXPECT_EQ(options.shown().selectedRow, std::nullopt) << "a tab of no rows selects none";
@@ -128,6 +176,8 @@ TEST(OptionsPageTest, LeftAndRightChangeTheTabWhileTheTabsAreSelected) {
 TEST(OptionsPageTest, TheArrowsSelectARowAndChangeIt) {
     Settings settings;
     Opened options{settings};
+    std::ignore = options.press(Key::Right);
+    std::ignore = options.press(Key::Right);
     std::ignore = options.press(Key::Down);
     EXPECT_EQ(options.shown().selectedRow, 0U);
     std::ignore = options.press(Key::Right);
@@ -164,6 +214,7 @@ TEST(OptionsPageTest, TheMouseShowsATabSwitchesASwitchAndDragsASlider) {
     Settings settings;
     Opened options{settings};
     const cs::MainMenuLayout& layout = options.layout;
+    std::ignore = options.mouse(kLeftDown, middleOf(layout.optionTab(2)));
     EXPECT_EQ(options.mouse(MouseMoved{}, middleOf(layout.listRow(1))), OptionsOutcome::Stays);
     EXPECT_EQ(options.shown().selectedRow, 1U);
     std::ignore = options.mouse(kLeftDown, middleOf(layout.listRow(1)));
@@ -190,7 +241,7 @@ TEST(OptionsPageTest, TheMouseShowsATabSwitchesASwitchAndDragsASlider) {
     std::ignore = options.mouse(kLeftDown, middleOf(layout.listRow(0)));
     EXPECT_FLOAT_EQ(settings.sensitivity, 1.0F) << "pressed on its name, it does not change";
 
-    std::ignore = options.mouse(kLeftDown, middleOf(layout.optionTab(2)));
+    std::ignore = options.mouse(kLeftDown, middleOf(layout.optionTab(3)));
     EXPECT_EQ(options.shown().category, OptionCategory::Audio);
     EXPECT_EQ(options.shown().selectedRow, std::nullopt);
     std::ignore = options.mouse(MouseMoved{}, middleOf(layout.listRow(1)));
@@ -362,7 +413,7 @@ TEST(OptionsPageTest, AListLongerThanThePageScrolls) {
 TEST(OptionsPageTest, AChoiceGoesAroundItsValuesWrittenByTheirTextsOrAsTheyAre) {
     using cs::ChoiceText;
     std::optional<std::size_t> chosen = 1;
-    cs::OptionsPage page{{{.category = OptionCategory::Mouse,
+    cs::OptionsPage page{{{.category = OptionCategory::Game,
                            .name = &OptionsTexts::fidelity,
                            .control = cs::OptionChoice{
                                .values = {ChoiceText{&OptionsTexts::fidelityLegacy},
@@ -405,11 +456,81 @@ TEST(OptionsPageTest, AChoiceGoesAroundItsValuesWrittenByTheirTextsOrAsTheyAre) 
     EXPECT_EQ(chosen, 0U) << "going on from none, the first";
 }
 
-TEST(OptionsPageTest, ATextIsTypedSetByEnterOnceItsSettingTakesItAndLeftAsItWasByEscape) {
+TEST(OptionsPageTest, AChoiceMenuScrollsAndOnlyChangesTheValueWhenAnItemIsPicked) {
+    std::size_t chosen = 0;
+    bool fixed = false;
+    constexpr std::size_t kChoices = 12;
+    std::vector<cs::ChoiceText> values(kChoices, cs::ChoiceText{"1280x720"});
+    cs::OptionsPage page{
+        {{.category = OptionCategory::Video,
+          .name = &OptionsTexts::resolution,
+          .control = cs::OptionChoice{
+              .values = std::move(values),
+              .chosen = [&] { return std::optional{chosen}; },
+              .choose = [&](std::size_t index) { chosen = index; },
+              .fixedValue = [&]() -> std::optional<cs::ChoiceText> {
+                  return fixed ? std::optional<cs::ChoiceText>{&OptionsTexts::automaticResolution}
+                               : std::nullopt;
+              },
+              .opensMenu = true}}}};
+    const cs::MainMenuLayout layout{kScreen, 2};
+    const auto send = [&](const nx::platform::WindowEvent& event, MousePosition cursor = kNowhere) {
+        return page.handle(event, cursor, layout);
+    };
+    const auto popup = [&] {
+        return page.frame(layout.listRows()).choiceMenu;
+    };
+    const auto field = middleOf(layout.optionField(0));
+    page.open();
+    std::ignore =
+        send(kLeftDown, middleOf(layout.optionTab(static_cast<std::size_t>(OptionCategory::Video))));
+    auto label = middleOf(layout.listRow(0));
+    label.x = static_cast<float>(layout.listRow(0).x.value() + 30);
+    std::ignore = send(kLeftDown, label);
+    EXPECT_FALSE(popup());
+
+    std::ignore = send(kLeftDown, field);
+    ASSERT_TRUE(popup());
+    EXPECT_EQ(popup()->values.size(), kChoices);
+    EXPECT_EQ(popup()->chosen, 0U);
+    const auto menu = layout.choiceMenu(0, kChoices);
+    ASSERT_GT(menu.rows, 0U);
+    ASSERT_LT(menu.rows, kChoices);
+    const auto lastItem = middleOf(menu.item(menu.rows - 1));
+    std::ignore = send(nx::platform::MouseWheelMoved{.dy = -12.0F}, lastItem);
+    EXPECT_EQ(popup()->highlighted, kChoices - 1);
+    EXPECT_EQ(chosen, 0U);
+    std::ignore = send(kLeftDown, lastItem);
+    EXPECT_EQ(chosen, kChoices - 1);
+    EXPECT_FALSE(popup());
+
+    std::ignore = send(pressed(Key::Enter));
+    std::ignore = send(pressed(Key::Up));
+    EXPECT_EQ(send(pressed(Key::Escape)), OptionsOutcome::Stays);
+    EXPECT_FALSE(popup());
+    EXPECT_EQ(chosen, kChoices - 1);
+    std::ignore = send(pressed(Key::Enter));
+    std::ignore = send(pressed(Key::Up));
+    std::ignore = send(pressed(Key::Enter));
+    EXPECT_EQ(chosen, kChoices - 2);
+    EXPECT_FALSE(popup());
+
+    std::ignore = send(kLeftDown, field);
+    EXPECT_EQ(send(kLeftDown, middleOf(layout.confirmButton())), OptionsOutcome::Stays);
+    EXPECT_FALSE(popup());
+    EXPECT_EQ(chosen, kChoices - 2);
+
+    fixed = true;
+    std::ignore = send(kLeftDown, field);
+    EXPECT_FALSE(popup());
+    EXPECT_EQ(chosen, kChoices - 2);
+}
+
+TEST(OptionsPageTest, ATextEditCanBeCancelledOrFinishedWithoutEnter) {
     constexpr std::size_t kMostBytes = 8;
     std::string name = "Player";
     cs::OptionsPage page{
-        {{.category = OptionCategory::Mouse,
+        {{.category = OptionCategory::Game,
           .name = &OptionsTexts::playerName,
           .control = cs::OptionText{.text = [&] { return name; },
                                     .accepts =
@@ -442,8 +563,9 @@ TEST(OptionsPageTest, ATextIsTypedSetByEnterOnceItsSettingTakesItAndLeftAsItWasB
     std::ignore = send(pressed(Key::Left));
     std::ignore = send(pressed(Key::Backspace));
     EXPECT_EQ(shown(), (cs::ShownControl{cs::ShownText{.text = "PlayeX", .cursorBytes = 5}}));
-    std::ignore = send(kLeftDown, middleOf(layout.backButton()));
-    EXPECT_TRUE(page.isTyping()) << "the mouse does nothing while it is typed";
+    std::ignore = send(kLeftDown, middleOf(layout.optionControl(0)));
+    EXPECT_TRUE(page.isTyping()) << "clicking the same field keeps editing";
+    EXPECT_EQ(std::get<cs::ShownText>(shown()).text, "PlayeX");
     std::ignore = send(pressed(Key::Escape));
     EXPECT_FALSE(page.isTyping());
     EXPECT_EQ(name, "Player") << "left as it was";
@@ -452,12 +574,18 @@ TEST(OptionsPageTest, ATextIsTypedSetByEnterOnceItsSettingTakesItAndLeftAsItWasB
     for (std::size_t erased = 0; erased < name.size(); ++erased) {
         std::ignore = send(pressed(Key::Backspace));
     }
-    std::ignore = send(pressed(Key::Enter));
-    EXPECT_TRUE(page.isTyping()) << "an empty name its setting refuses: typed on";
-    std::ignore = send(typedOf("Ana"));
-    std::ignore = send(pressed(Key::Enter));
+    EXPECT_EQ(send(pressed(Key::Tab)), OptionsOutcome::Stays);
     EXPECT_FALSE(page.isTyping());
-    EXPECT_EQ(name, "Ana") << "set as Enter is pressed";
+    EXPECT_EQ(name, "Player") << "leaving a rejected draft keeps the previous name";
+
+    std::ignore = send(kLeftDown, middleOf(layout.optionControl(0)));
+    for (std::size_t erased = 0; erased < name.size(); ++erased) {
+        std::ignore = send(pressed(Key::Backspace));
+    }
+    std::ignore = send(typedOf("Ana"));
+    EXPECT_EQ(send(kLeftDown, middleOf(layout.confirmButton())), OptionsOutcome::GoesBack);
+    EXPECT_FALSE(page.isTyping());
+    EXPECT_EQ(name, "Ana") << "the same click saves the name and closes the page";
     EXPECT_EQ(shown(), cs::ShownControl{cs::ShownText{.text = "Ana"}});
 }
 
@@ -466,9 +594,9 @@ TEST(OptionsPageTest, EscapeAndItsButtonGoBack) {
     Opened options{settings};
     EXPECT_EQ(options.press(Key::Escape, true), OptionsOutcome::Stays);
     EXPECT_EQ(options.press(Key::Escape), OptionsOutcome::GoesBack);
-    EXPECT_EQ(options.mouse(kLeftDown, middleOf(options.layout.backButton())), OptionsOutcome::GoesBack);
+    EXPECT_EQ(options.mouse(kLeftDown, middleOf(options.layout.confirmButton())), OptionsOutcome::GoesBack);
     EXPECT_EQ(options.mouse(MouseButtonChanged{.button = MouseButton::Right, .isDown = true},
-                            middleOf(options.layout.backButton())),
+                            middleOf(options.layout.confirmButton())),
               OptionsOutcome::Stays);
 }
 
@@ -498,6 +626,8 @@ TEST(OptionsPageTest, ItsItemOpensItOnTheMenuAndEscapeGoesBackToTheItems) {
     ASSERT_TRUE(menu.frameOf(cs::MenuGame::None, kScreen).options.has_value());
 
     EXPECT_FALSE(menu.takesEveryKey());
+    EXPECT_EQ(send(pressed(Key::Right)), std::nullopt);
+    EXPECT_EQ(send(pressed(Key::Right)), std::nullopt);
     EXPECT_EQ(send(pressed(Key::Down)), std::nullopt);
     EXPECT_EQ(send(pressed(Key::Right)), std::nullopt);
     EXPECT_FLOAT_EQ(settings.sensitivity, 3.5F) << "the keys are the page's";
@@ -514,6 +644,9 @@ TEST(OptionsPageTest, ItsItemOpensItOnTheMenuAndEscapeGoesBackToTheItems) {
 
     std::ignore = send(pressed(Key::Enter));
     ASSERT_TRUE(menu.showsOptions());
+    EXPECT_EQ(send(kLeftDown, middleOf(layout.item(1))), std::nullopt);
+    EXPECT_TRUE(menu.showsOptions()) << "the options panel blocks the items behind it";
+    std::ignore = send(pressed(Key::Escape));
     const auto quit = send(kLeftDown, middleOf(layout.item(1)));
     ASSERT_TRUE(quit.has_value());
     EXPECT_EQ(quit->action, cs::MainMenuAction::Quit) << "another item chosen leaves the page";
@@ -529,7 +662,7 @@ TEST(OptionsPageTest, OnTheMenuATextTypedTakesEveryKeyAndWhatIsTyped) {
     cs::MainMenu menu{
         look,
         {},
-        {{.category = OptionCategory::Mouse,
+        {{.category = OptionCategory::Game,
           .name = &OptionsTexts::playerName,
           .control = cs::OptionText{.text = [&] { return name; },
                                     .accepts = [](std::string_view) { return true; },

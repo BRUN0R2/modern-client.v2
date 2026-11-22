@@ -5,12 +5,14 @@
 
 import std;
 import nx.core;
+import nx.console;
 import nx.math;
 import nx.assets;
 import nx.render;
 import cs.shared;
 import cs.client;
 
+#include "consoleFixtures.hpp"
 #include "temporaryDirectory.hpp"
 #include "triangleModel.hpp"
 
@@ -53,7 +55,8 @@ protected:
 
     [[nodiscard]] auto read(const cs::Weapon& weapon) const -> nx::Result<cs::ViewModel, cs::ViewModelError> {
         writeBytes(weapon.models.view, model.bytes);
-        writeBytes("models/triangle01.mdl", model.groupFile);
+        const std::string_view path = weapon.models.view;
+        writeBytes(std::format("{}triangle01.mdl", path.substr(0, path.rfind('/') + 1)), model.groupFile);
         auto vfs = nx::assets::Vfs::create(std::array{files.path()});
         EXPECT_TRUE(vfs.has_value()) << (vfs ? "" : nx::describe(vfs.error()));
         if (!vfs) {
@@ -92,6 +95,15 @@ TEST_F(ViewModelAppearanceTest, KeepsOriginalDefaults) {
     ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
     EXPECT_EQ(viewModel->skin(), 0U);
     EXPECT_TRUE(viewModel->bodyChoices().empty());
+}
+
+TEST_F(ViewModelAppearanceTest, ReadsSequenceGroupBesideARelocatedModel) {
+    cs::Weapon declared = weapon();
+    declared.models.view = "models/pack/triangle.mdl";
+    declared.view.drawSequences = {1};
+    const auto viewModel = read(declared);
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    EXPECT_EQ(viewModel->sequence(1).label, "wave");
 }
 
 TEST_F(ViewModelAppearanceTest, DecodesEverySequenceWhenSeveralShareOneExternalGroup) {
@@ -136,6 +148,66 @@ TEST_F(ViewModelAppearanceTest, IsMirroredInTheHandItIsNotModeledIn) {
         EXPECT_FLOAT_EQ(mirrored.rows[row].y, side * asModeled.rows[row].y) << row;
         EXPECT_FLOAT_EQ(mirrored.rows[row].z, side * asModeled.rows[row].z) << row;
         EXPECT_FLOAT_EQ(mirrored.rows[row].w, side * asModeled.rows[row].w) << row;
+    }
+}
+
+TEST_F(ViewModelAppearanceTest, OffsetsMoveTheMuzzleInCameraSpaceInEitherHand) {
+    const auto view = read(weapon());
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+    const nx::render::Camera camera{.position = {.x = 100.0F, .y = 200.0F, .z = 300.0F},
+                                    .angles = {.yaw = nx::Degrees{90.0F}}};
+    const cs::ViewModelOffset offset{
+        .right = nx::HammerUnits{1.5F}, .forward = nx::HammerUnits{2.0F}, .up = nx::HammerUnits{-0.5F}};
+    constexpr float kPositionTolerance = 0.0001F;
+    for (const cs::Hand hand : {cs::Hand::Left, cs::Hand::Right}) {
+        const auto before = view->muzzleAt(view->pose(camera, 0, {}, hand), 0);
+        const auto after = view->muzzleAt(view->pose(camera, 0, {}, hand, offset), 0);
+        ASSERT_TRUE(before.has_value());
+        ASSERT_TRUE(after.has_value());
+        const nx::Vec3 delta = *after - *before;
+        EXPECT_NEAR(delta.x, offset.right.value(), kPositionTolerance);
+        EXPECT_NEAR(delta.y, offset.forward.value(), kPositionTolerance);
+        EXPECT_NEAR(delta.z, offset.up.value(), kPositionTolerance);
+    }
+}
+
+TEST(ViewModelBobTest, GentlyFollowsSpeedAndSettlesWithoutDependingOnFrameRate) {
+    constexpr nx::UnitsPerSecond kRunningSpeed{240.0F};
+    constexpr float kTolerance = 0.0001F;
+    cs::ViewModelBob single;
+    EXPECT_EQ(single.offset().up, nx::HammerUnits{});
+    single.update(kRunningSpeed, nx::Seconds{0.2F});
+    cs::ViewModelBob split;
+    for (int frame = 0; frame < 20; ++frame) {
+        split.update(kRunningSpeed, nx::Seconds{0.01F});
+    }
+    const auto offset = single.offset();
+    EXPECT_GT(std::abs(offset.right.value()), 0.05F);
+    EXPECT_LT(std::abs(offset.up.value()), 0.2F);
+    EXPECT_NEAR(offset.right.value(), split.offset().right.value(), kTolerance);
+    EXPECT_NEAR(offset.up.value(), split.offset().up.value(), kTolerance);
+
+    single.update({}, nx::Seconds{1.5F});
+    EXPECT_NEAR(single.offset().right.value(), 0.0F, kTolerance);
+    EXPECT_NEAR(single.offset().up.value(), 0.0F, kTolerance);
+}
+
+TEST(ViewModelSettingsTest, ArchivesOffsetsAndRejectsValuesOutsideTheirRanges) {
+    nx::test::RecordingOutput output;
+    nx::test::MemoryFiles files;
+    nx::console::Console console{output, files};
+    const auto settings = cs::ViewModelCvars::registerIn(console);
+    ASSERT_TRUE(settings.has_value()) << nx::describe(settings.error());
+    EXPECT_TRUE(settings->right.set(2.5F).has_value());
+    EXPECT_FALSE(settings->forward.set(2.5F).has_value());
+    EXPECT_TRUE(settings->up.set(-1.0F).has_value());
+    EXPECT_FALSE(console.setCvar("viewmodel_bob", "1").has_value());
+    const cs::ViewModelBob still{};
+    EXPECT_EQ(settings->offset(still).right, nx::HammerUnits{2.5F});
+    EXPECT_EQ(settings->offset(still).up, nx::HammerUnits{-1.0F});
+    const std::string archived = console.archivedCvars();
+    for (const std::string_view name : {"viewmodel_offset_x", "viewmodel_offset_y", "viewmodel_offset_z"}) {
+        EXPECT_TRUE(archived.contains(name)) << name;
     }
 }
 
@@ -259,6 +331,23 @@ TEST_F(ViewModelSoundsTest, ItsSoundEventsNameTheSoundsTheyPlay) {
     EXPECT_EQ(viewModel->soundEvents(), (std::vector<std::string_view>{"player/pl_step1.wav"}));
 }
 
+TEST_F(ViewModelSoundsTest, PlaysSoundEventsAcrossMoreThanOneLoop) {
+    const std::size_t event = fieldAt(model.sequences + kSequenceEventsOffset);
+    model.put(event, std::int32_t{0});
+    const auto viewModel = read(weapon());
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    cs::ViewModelEvents events;
+    cs::ViewModelPose pose{.intoIt = nx::Seconds{0.025F}};
+    ASSERT_EQ(events.passed(&*viewModel, pose).size(), 1U);
+    pose.intoIt = nx::Seconds{0.075F};
+    const auto passed = events.passed(&*viewModel, pose);
+    ASSERT_EQ(passed.size(), 2U);
+    EXPECT_EQ(passed[0].event->event, cs::kSoundEvent);
+    EXPECT_FLOAT_EQ(passed[0].intoPlay.count(), 1.0F / 30.0F);
+    EXPECT_FLOAT_EQ(passed[1].intoPlay.count(), 2.0F / 30.0F);
+    EXPECT_TRUE(events.passed(&*viewModel, pose).empty());
+}
+
 TEST_F(ViewModelSoundsTest, AWeaponInHandSoundsAsItsDataAndItsViewModelsEventsSay) {
     cs::Weapon held = weapon();
     held.view.drawSound = cs::GameSound{.files = {"weapons/draw1.wav", "weapons/draw2.wav"}};
@@ -295,10 +384,10 @@ TEST_F(ViewModelAppearanceTest, RejectsStaticAppearanceInAlternateViews) {
 /// The same model, whose "idle" shows a muzzle flash in place of its sound.
 class ViewModelMuzzleFlashTest : public ViewModelAppearanceTest {
 protected:
-    /// Its event a muzzle flash's at the first attachment, of `options`.
-    void flashes(std::string_view options) {
+    /// Its event a muzzle flash's at the attachment named by `eventNumber`.
+    void flashes(std::string_view options, std::int32_t eventNumber = 5001) {
         const std::size_t event = fieldAt(model.sequences + kSequenceEventsOffset);
-        model.put(event + kEventNumberOffset, std::int32_t{5001});
+        model.put(event + kEventNumberOffset, eventNumber);
         nx::test::Bytes written;
         nx::test::appendName(written, options, kEventOptionsBytes);
         std::ranges::copy(written,
@@ -312,6 +401,37 @@ TEST_F(ViewModelMuzzleFlashTest, ItsEventsNameTheSpritesTheirFlashesShowEachOnce
     ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
     EXPECT_EQ(viewModel->muzzleFlashSprites(), (std::vector<std::string>{"sprites/muzzleflash341.spr"}));
     EXPECT_TRUE(viewModel->soundEvents().empty()) << "its event is a flash's";
+}
+
+TEST_F(ViewModelMuzzleFlashTest, TheFiringSequenceSelectsTheMuzzleInEitherHand) {
+    constexpr std::size_t kAttachmentTableOffset = 212;
+    const auto attachment = [](nx::Vec3 origin) {
+        nx::test::Bytes record;
+        nx::test::appendName(record, "muzzle", 32);
+        nx::test::append(record, std::int32_t{0});
+        nx::test::append(record, std::int32_t{1});
+        nx::test::appendVec3(record, origin);
+        record.resize(record.size() + 36);
+        return record;
+    };
+    auto muzzles = attachment({.x = 4.0F, .y = 2.0F});
+    const auto second = attachment({.x = 8.0F, .y = 4.0F});
+    muzzles.insert(muzzles.end(), second.begin(), second.end());
+    std::ignore = model.table(kAttachmentTableOffset, 2, muzzles);
+    flashes("22", 5011);
+    const auto viewModel = read(weapon());
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    const auto leftBones = viewModel->pose({}, 0, {}, cs::Hand::Left);
+    const auto rightBones = viewModel->pose({}, 0, {}, cs::Hand::Right);
+    const auto left = viewModel->muzzleAt(leftBones, 0);
+    const auto right = viewModel->muzzleAt(rightBones, 0);
+    ASSERT_TRUE(left.has_value());
+    ASSERT_TRUE(right.has_value());
+    EXPECT_EQ(left, viewModel->attachmentAt(leftBones, 1));
+    EXPECT_NE(left, viewModel->attachmentAt(leftBones, 0));
+    EXPECT_FLOAT_EQ(left->y, -right->y);
+    EXPECT_FLOAT_EQ(left->x, right->x);
+    EXPECT_FLOAT_EQ(left->z, right->z);
 }
 
 TEST_F(ViewModelMuzzleFlashTest, ItsWeaponsLookStylesItsFlashes) {

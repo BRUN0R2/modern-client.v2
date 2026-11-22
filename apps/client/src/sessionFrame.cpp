@@ -105,7 +105,7 @@ void showNotices(Session& session, const FrameNotices& notices, const cs::Weapon
 }
 
 void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent& content, nx::Seconds now,
-                 nx::Seconds elapsed) {
+                 nx::Seconds elapsed, bool showBulletTracers) {
     const std::vector<cs::BloodSpray> sprays = session.client.takeBloodSprays();
     const std::vector<cs::BloodStream> streams = session.client.takeBloodStreams();
     const std::vector<cs::StreakSplash> splashes = session.client.takeStreakSplashes();
@@ -117,6 +117,14 @@ void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent
     session.blood.update(now, elapsed, level.hulls(), gravity, enhancedLook);
     for (const cs::StreakSplash& splash : splashes) {
         session.particles.splashStreaks(splash, now);
+    }
+    const std::vector<cs::BulletTracer> tracers = session.client.takeBulletTracers();
+    if (showBulletTracers) {
+        for (const cs::BulletTracer& tracer : tracers) {
+            session.particles.traceBullet(tracer, session.client.self(), now);
+        }
+    } else {
+        session.particles.clearBulletTracers();
     }
     const std::optional<nx::assets::Palette>& palette = level.palette();
     if (!palette) {

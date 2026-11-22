@@ -38,6 +38,47 @@ using nx::console::ConsoleError;
 
 constexpr nx::log::Category kLog{"client"};
 
+// The arrow's hotspot is its top-left texel. The outline stays visible on bright menus.
+constexpr auto kMenuCursorMask = std::to_array<std::string_view>({
+    "#...........",
+    "##..........",
+    "#+#.........",
+    "#++#........",
+    "#+++#.......",
+    "#++++#......",
+    "#+++++#.....",
+    "#++++++#....",
+    "#+++++++#...",
+    "#++++++++#..",
+    "#+++++++++#.",
+    "#++++++#####",
+    "#++#++#.....",
+    "#+#.#++#....",
+    "##..#++#....",
+    "#....#++#...",
+    ".....#++#...",
+    "......##....",
+});
+constexpr auto kMenuCursorWidth = static_cast<std::uint32_t>(kMenuCursorMask.front().size());
+constexpr auto kMenuCursorHeight = static_cast<std::uint32_t>(kMenuCursorMask.size());
+constexpr std::byte kMenuCursorDark{20};
+constexpr std::byte kMenuCursorWhite{std::numeric_limits<std::uint8_t>::max()};
+constexpr auto kMenuCursorTexels = [] {
+    std::array<std::byte, std::size_t{kMenuCursorWidth} * kMenuCursorHeight * nx::assets::kRgbaBytes>
+        texels{};
+    std::size_t offset = 0;
+    for (const std::string_view row : kMenuCursorMask) {
+        for (const char pixel : row) {
+            const auto rgb = pixel == '+' ? kMenuCursorWhite : kMenuCursorDark;
+            texels.at(offset++) = rgb;
+            texels.at(offset++) = rgb;
+            texels.at(offset++) = rgb;
+            texels.at(offset++) = pixel == '.' ? std::byte{0} : kMenuCursorWhite;
+        }
+    }
+    return texels;
+}();
+
 /// The folder of the data that holds the project's own fonts.
 constexpr std::string_view kFontsFolder = "fonts";
 /// How long a minimized window waits before it looks for events again.
@@ -135,6 +176,7 @@ public:
 
 private:
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
+    void followWindowMode();
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     /// Loads the map asked for, once a frame told that it is loading (MapChange::loadAsked); one that cannot
@@ -147,9 +189,10 @@ private:
     void lastWeaponCommand();
     /// Opens the console's window, or closes it.
     void toggleConsole();
-    /// The cursor shows while the console's window, the main menu or the buy menu is open; else the mouse
+    /// The cursor shows outside a focused game and while a menu or the console is open; else the mouse
     /// turns the view.
-    void showCursorAsNeeded();
+    [[nodiscard]] auto mouseModeNeeded() const -> nx::platform::MouseMode;
+    void showCursorAsNeeded(bool redrawCursor = false);
     /// The keys type text (the platform's TextEntered) while the console's window is open or the main menu
     /// has a text typed, and only then.
     void typeAsNeeded();
@@ -212,6 +255,7 @@ private:
     /// The screen's pictures over the frame, of `size`: the HUD, cl_showfps's label, the main menu and the
     /// console's window when open.
     void appendScreen(nx::rhi::Extent2d size);
+    void appendMenuCursor(nx::rhi::Extent2d size);
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
 
     const ClientOptions* m_options;
@@ -249,6 +293,7 @@ private:
     std::optional<Video> m_video;
     std::optional<cs::Scene> m_scene;          ///< Of the session's level, made with the first image of it.
     std::optional<cs::FrameRenderer> m_frames; ///< What draws the frames, made with the first image.
+    std::optional<nx::render::ScreenImage> menuCursor;
     std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
     std::vector<nx::render::ModelPlacement> m_placements; ///< Where the frame draws the brush entities.
     std::vector<cs::ShownHostage> m_hostages;             ///< How the frame shows the game's hostages.
@@ -259,7 +304,7 @@ private:
     std::optional<ClientBuyMenu> buyMenu;               ///< Made with the game's content.
     std::optional<cs::PlayerTexts> texts;   ///< What the client writes, in the language of `cl_language`.
     std::optional<ClientMainMenu> mainMenu; ///< Made with the game's content and the texts.
-    bool isCursorShown = false;
+    nx::log::RateLimit cursorWarnings{std::chrono::seconds{1}};
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
@@ -268,6 +313,10 @@ private:
     nx::platform::Instant m_frameStart = nx::platform::MonotonicClock::now();
     bool m_isRunning = true;
     bool m_isFocused = true; ///< The window is, as it opens.
+    bool isMinimized = false;
+    bool needsSurfaceRefresh = false;
+    nx::platform::WindowMode appliedWindowMode = nx::platform::WindowMode::Windowed;
+    std::string appliedResolution = "auto";
 };
 
 /// The installation `options` name (`-basedir`), else the content configuration's
@@ -382,17 +431,23 @@ auto Client::start() -> nx::Result<void, ClientError> {
                         std::move(written.error()));
     }
     texts.emplace(std::move(*written));
-    mainMenu.emplace(*m_content, texts->written(),
-                     clientOptionsOf(*settings, m_bindings, texts->languages()));
-    if (!mapChange.askedMap()) {
-        mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
-    }
     sounds->openNamedOutput();
     auto video = openVideo(*m_options, settings->client.video.vsync.value(), readPipelineCache());
     if (!video) {
         return std::unexpected{std::move(video.error())};
     }
     m_video = std::move(*video);
+    const auto crosshairDraft = std::make_shared<cs::CrosshairStyle>();
+    mainMenu.emplace(
+        *m_content, texts->written(),
+        clientOptionsOf(*settings, m_bindings, texts->languages(), m_video->window, crosshairDraft),
+        cs::CrosshairEditor{
+            .draft = crosshairDraft,
+            .read = [hud = settings->hud] { return hud.crosshair(); },
+            .apply = [hud = settings->hud](const cs::CrosshairStyle& style) { hud.setCrosshair(style); }});
+    if (!mapChange.askedMap()) {
+        mainMenu->open(cs::MenuGame::None); // no map was asked for: the client opens on its menu
+    }
     auto size = m_video->window.pixelSize();
     if (!size) {
         return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
@@ -560,17 +615,25 @@ void Client::toggleConsole() {
     showCursorAsNeeded();
 }
 
-void Client::showCursorAsNeeded() {
-    const bool isNeeded =
-        (m_consoleWindow != nullptr && m_consoleWindow->isOpen()) || mainMenu->isOpen() || buyMenu->isOpen();
-    if (isNeeded == isCursorShown) {
-        return;
+auto Client::mouseModeNeeded() const -> nx::platform::MouseMode {
+    using nx::platform::MouseMode;
+    if (!m_isFocused) {
+        return MouseMode::Absolute;
     }
-    isCursorShown = isNeeded;
-    if (auto set = m_video->window.setMouseMode(isNeeded ? nx::platform::MouseMode::Absolute
-                                                         : nx::platform::MouseMode::Relative);
-        !set) {
-        nx::log::warning(kLog, "{}", nx::describe(set.error()));
+    const bool hasOpenUi =
+        mainMenu->isOpen() || buyMenu->isOpen() || (m_consoleWindow != nullptr && m_consoleWindow->isOpen());
+    if (mapChange.played() != nullptr && !hasOpenUi) {
+        return MouseMode::Relative;
+    }
+    return appliedWindowMode == nx::platform::WindowMode::Windowed ? MouseMode::Absolute
+                                                                   : MouseMode::AbsoluteHidden;
+}
+
+void Client::showCursorAsNeeded(bool redrawCursor) {
+    if (auto set = m_video->window.setMouseMode(mouseModeNeeded(), redrawCursor);
+        !set && cursorWarnings.allow()) {
+        nx::log::warning(kLog, "the mouse mode: {} ({} suppressed)", nx::describe(set.error()),
+                         cursorWarnings.takeSuppressed());
     }
 }
 
@@ -632,6 +695,7 @@ void Client::handleInMainMenu(const nx::platform::WindowEvent& event) {
 
 auto Client::run() -> nx::Result<void, ClientError> {
     while (m_isRunning) {
+        followWindowMode();
         // fps_max: the limiter waits before the input is read, so that the frame shows the latest
         // (docs/05-rendering.md, section 12). The local game is one of more than one player, as a
         // Counter-Strike server's.
@@ -665,10 +729,10 @@ auto Client::run() -> nx::Result<void, ClientError> {
         std::ignore = m_console.execute();
         followLanguage();
         buyMenu->update();
-        showCursorAsNeeded();
-        typeAsNeeded();
         sounds->update(m_isFocused);
         switchMap();
+        showCursorAsNeeded();
+        typeAsNeeded();
         updateWeapons();
         const nx::Seconds elapsed = m_frameClock.restart();
         settings->input.turn(m_camera.angles, elapsed);
@@ -680,6 +744,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             // The player's own setting, as its client tells the server of it.
             session->game->setAutoSwitch(session->player, autoSwitchOf(settings->client.player));
             playSession(elapsed);
+            session->viewModelBob.update(session->client.walkingSpeed(), elapsed);
             m_camera.position = session->client.eye();
             session->client.updatePlayers(elapsed, settings->corpses.stayTime(), m_players);
             turnAsTheGameDid();
@@ -689,7 +754,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             stampMarks(*session, *m_scene, *m_content, m_bulletHoles);
             const nx::Seconds now{m_mapClock.elapsed()};
             showNotices(*session, hud.notices(m_console, *settings), m_content->weapons, now);
-            showEffects(*session, *m_scene, *m_content, now, elapsed);
+            showEffects(*session, *m_scene, *m_content, now, elapsed, settings->hud.bulletTracers.value());
         }
         if (auto drawn = drawFrame(commands->get()); !drawn) {
             return drawn;
@@ -708,21 +773,73 @@ void Client::followLanguage() {
     }
 }
 
+void Client::followWindowMode() {
+    auto& video = *m_video;
+    const auto mode = settings->client.video.windowMode;
+    const auto resolution = settings->client.video.resolution;
+    const auto requested = mode.value();
+    const std::string& size = resolution.value();
+    if ((requested == appliedWindowMode && size == appliedResolution) || isMinimized ||
+        !video.window.isShown()) {
+        return;
+    }
+    if (requested == nx::platform::WindowMode::Borderless && requested == appliedWindowMode) {
+        appliedResolution = size;
+        return;
+    }
+    video.device->waitIdle();
+    if (const auto applied = video.window.setMode(requested, nx::settings::resolutionOf(size)); !applied) {
+        nx::log::warning(kLog, "vid_mode {} at {}: {}", nx::enumName(requested), size,
+                         nx::describe(applied.error()));
+        if (const auto restored =
+                video.window.setMode(appliedWindowMode, nx::settings::resolutionOf(appliedResolution));
+            !restored) {
+            nx::log::warning(kLog, "restoring the window mode: {}", nx::describe(restored.error()));
+        }
+        mode.setAccepted(video.window.mode());
+        resolution.setAccepted(appliedResolution);
+    } else {
+        appliedResolution = size;
+        nx::log::info(kLog, "vid_mode {} at {}", nx::enumName(requested), size);
+    }
+    appliedWindowMode = mode.value();
+    needsSurfaceRefresh = true;
+}
+
 auto Client::readInput() -> nx::Result<void, ClientError> {
     m_events.clear();
     m_video->window.pollEvents(m_events);
+    bool refreshSurface = std::exchange(needsSurfaceRefresh, false);
     for (const nx::platform::WindowEvent& event : m_events) {
         if (const auto* focus = std::get_if<nx::platform::FocusChanged>(&event)) {
             m_isFocused = focus->isFocused;
+            refreshSurface = refreshSurface || m_isFocused;
         }
         if (std::holds_alternative<nx::platform::CloseRequested>(event)) {
             m_isRunning = false;
-        } else if (const auto* resized = std::get_if<nx::platform::Resized>(&event)) {
-            if (auto recreated = m_video->swapchain->resize(extentOf(resized->size)); !recreated) {
-                return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
-            }
+        } else if (const auto* minimized = std::get_if<nx::platform::Minimized>(&event)) {
+            isMinimized = minimized->isMinimized;
+            refreshSurface = true;
+        } else if (std::holds_alternative<nx::platform::Resized>(event)) {
+            refreshSurface = true;
         } else {
             handleInput(event);
+        }
+    }
+    if (refreshSurface && m_isRunning) {
+        if (!isMinimized) {
+            showCursorAsNeeded(true);
+        }
+        nx::platform::PixelSize size{};
+        if (!isMinimized) {
+            auto current = m_video->window.pixelSize();
+            if (!current) {
+                return nx::fail(ClientError::WindowUnavailable, std::move(current.error()));
+            }
+            size = *current;
+        }
+        if (auto recreated = m_video->swapchain->resize(extentOf(size)); !recreated) {
+            return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
         }
     }
     return {};
@@ -917,11 +1034,20 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
             m_output.window = m_consoleWindow->dialog();
         }
     }
+    if (!menuCursor && mouseModeNeeded() == nx::platform::MouseMode::AbsoluteHidden) {
+        auto image = m_frames->screen().loadImage(list, kMenuCursorTexels, kMenuCursorWidth,
+                                                  kMenuCursorHeight, "menu cursor");
+        if (!image) {
+            return nx::fail(ClientError::GpuFailed, std::move(image.error()));
+        }
+        menuCursor.emplace(std::move(*image));
+    }
     if (auto followed = followPicture(list); !followed) {
         return followed;
     }
     if (mainMenu->isOpen() || mapChange.askedMap()) {
-        if (auto loaded = mainMenu->load(m_fonts, m_frames->screen(), list, frame.size); !loaded) {
+        if (auto loaded = mainMenu->load(m_fonts, m_frames->screen(), list, frame.size, dataFolder);
+            !loaded) {
             return loaded;
         }
     }
@@ -991,6 +1117,7 @@ auto Client::sessionView() -> cs::SceneView {
             .entities = shownEntities,
             .crowd = session.client.crowd(),
             .viewModel = session.viewPose,
+            .viewModelOffset = settings->viewModel.offset(session.viewModelBob),
             .tempEntities = session.effects.shown(),
             .particles = session.particles.shown(),
             .streaks = session.particles.shownStreaks(),
@@ -1029,6 +1156,25 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         m_logSink->showIn(*m_consoleWindow->dialog());
         m_consoleWindow->paint(m_screenQuads, size);
     }
+    appendMenuCursor(size);
+}
+
+void Client::appendMenuCursor(nx::rhi::Extent2d size) {
+    if (!menuCursor || mouseModeNeeded() != nx::platform::MouseMode::AbsoluteHidden) {
+        return;
+    }
+    const auto mouse = m_video->window.mousePosition();
+    const float height = static_cast<float>(size.height);
+    if (mouse.x < 0.0F || mouse.x >= static_cast<float>(size.width) || mouse.y < 0.0F || mouse.y >= height) {
+        return;
+    }
+    const float scale = std::clamp(std::round(height / 720.0F), 1.0F, 3.0F);
+    m_screenQuads.push_back({.image = &*menuCursor,
+                             .source = {.width = kMenuCursorWidth, .height = kMenuCursorHeight},
+                             .target = {.x = std::floor(mouse.x),
+                                        .y = std::floor(mouse.y),
+                                        .width = scale * static_cast<float>(kMenuCursorWidth),
+                                        .height = scale * static_cast<float>(kMenuCursorHeight)}});
 }
 
 auto Client::finish() -> nx::Result<void, ClientError> {

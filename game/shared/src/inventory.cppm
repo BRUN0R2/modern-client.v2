@@ -126,6 +126,7 @@ struct Shot {
     /// it, as the original's is.
     nx::HammerUnits reach{};
     ShotRound round{};
+    ViewAnimation animation{}; ///< The firing sequence whose events identify the muzzle.
 };
 
 /// A melee attack that met an entity, which it attacks (TraceAttack): which, the trace that met it,

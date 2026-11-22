@@ -67,6 +67,8 @@ public:
     /// The player's eye, between where the last two ticks left it by the time left over; where the game
     /// placed it, at once.
     [[nodiscard]] auto eye() const noexcept -> nx::Vec3;
+    /// Horizontal speed on the ground, for the local weapon's walking motion.
+    [[nodiscard]] auto walkingSpeed() const noexcept -> nx::UnitsPerSecond;
     /// What the view model shows when the eye is drawn: none while the player holds no weapon.
     [[nodiscard]] auto viewModel() const -> std::optional<ViewModelPose>;
     /// How the next frame hears what the game makes until it (Hearing): from the moment of the game a
@@ -133,8 +135,11 @@ public:
     [[nodiscard]] inline auto takePlayerSounds() -> std::vector<PlayerSound> {
         return std::exchange(playerSounds, {});
     }
-    /// Where the shots met the world and the brush entities since the last call, in their order: where
-    /// a bullet leaves its mark.
+    /// The shot paths received since the last call, in the order they were fired.
+    [[nodiscard]] inline auto takeBulletTracers() -> std::vector<BulletTracer> {
+        return std::exchange(bulletTracers, {});
+    }
+    /// Where the shots met the world and the brush entities since the last call, in their order.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
     /// Where the blood the hits shed met the world and the brush entities since the last call, in their
     /// order: where it leaves its decal.
@@ -203,6 +208,7 @@ private:
     std::optional<nx::EulerAngles> m_turnedView{}; ///< Since takeTurnedView.
     std::vector<SoundMade> m_sounds;               ///< Since takeSounds.
     std::vector<PlayerSound> playerSounds;         ///< Since takePlayerSounds.
+    std::vector<BulletTracer> bulletTracers;       ///< Since takeBulletTracers.
     std::vector<Impact> m_impacts;                 ///< Since takeImpacts.
     std::vector<BloodMark> bloodMarks;             ///< Since takeBloodMarks.
     std::vector<BloodSpray> bloodSprays;           ///< Since takeBloodSprays.

@@ -9,6 +9,7 @@
 /// the farther it is past 20 units in front of the view, by 0.002 of its distance, so that the far ones
 /// do not vanish. A streak is a quad along a line, as wide as it is across the line on the screen, the
 /// first image of the engine's dot sprite along it, of its color, added as much as it is opaque.
+/// Bullet tracers use a separate, generated white sprite tinted by their instance color.
 export module nx.render:particle;
 
 import std;
@@ -71,12 +72,13 @@ struct StreakInstance {
     std::uint8_t amount = 0;
 };
 
-/// What a draw of particles shows: its particles, then its streaks.
+/// What a draw of particles shows: particles, legacy streaks, then bullet tracers.
 struct ParticleDraw {
     Camera camera{};
     float aspect = 1.0F; ///< Of the target: width over height.
     std::span<const ParticleInstance> particles{};
     std::span<const StreakInstance> streaks{};
+    std::span<const StreakInstance> tracers{};
     /// The fog the particles are seen through, the streaks added through none; none, clear
     /// (nx.render:fog).
     std::optional<Fog> fog{};
@@ -85,7 +87,7 @@ struct ParticleDraw {
 /// What draws particles: their shader, pipeline, dot texture, and what each frame in flight writes.
 class ParticleRenderer {
 public:
-    /// Records the upload of its dot in `commands`. Errors: GpuFailed.
+    /// Records the uploads of its dot and bullet tracer sprite in `commands`. Errors: GpuFailed.
     [[nodiscard]] static auto create(rhi::Device& device, rhi::CommandList& commands,
                                      const ParticleRendererDesc& desc)
         -> Result<ParticleRenderer, ParticleError>;
@@ -120,8 +122,10 @@ private:
     /// The shader, the bind group layouts, the sampler and the pipelines.
     [[nodiscard]] auto createPipeline(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
         -> Result<void, rhi::RhiError>;
-    /// Puts the dot on the GPU, its upload recorded in `commands`.
-    [[nodiscard]] auto createDot(rhi::CommandList& commands) -> Result<void, rhi::RhiError>;
+    /// Uploads a white RGBA mask and binds it to the particle sampler.
+    [[nodiscard]] auto createMask(rhi::CommandList& commands, std::string_view label, rhi::Extent2d size,
+                                  std::span<const std::byte> texels, rhi::OwnedTexture& image,
+                                  rhi::OwnedBindGroup& group) -> Result<void, rhi::RhiError>;
     /// Makes room in `slot` for `quads` quads, at least.
     [[nodiscard]] auto reserve(ParticleFrameSlot& slot, std::size_t quads) -> Result<void, rhi::RhiError>;
 
@@ -138,9 +142,12 @@ private:
     rhi::OwnedBindGroup m_dotGroup;
     rhi::OwnedTexture streakImage;
     rhi::OwnedBindGroup streakGroup;
+    rhi::OwnedTexture tracerImage;
+    rhi::OwnedBindGroup tracerGroup;
     FrameSlots<ParticleFrameSlot> frameSlots{rhi::kMaxFramesInFlight};
     std::uint32_t m_preparedQuads = 0; ///< Of the last prepare's particles.
     std::uint32_t preparedStreaks = 0; ///< Of the last prepare.
+    std::uint32_t preparedTracers = 0; ///< Of the last prepare.
 };
 
 } // namespace nx::render

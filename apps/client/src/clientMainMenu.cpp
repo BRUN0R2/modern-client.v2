@@ -36,8 +36,9 @@ constexpr char kQuote = '"';
 } // namespace
 
 ClientMainMenu::ClientMainMenu(const cs::GameContent& content, const cs::Texts& texts,
-                               std::vector<cs::OptionRow> settings)
-    : files{&content.vfs}, menu{content.mainMenu, playableMapsOf(content), std::move(settings)},
+                               std::vector<cs::OptionRow> settings, cs::CrosshairEditor crosshair)
+    : files{&content.vfs},
+      menu{content.mainMenu, playableMapsOf(content), std::move(settings), std::move(crosshair)},
       panel{content.mainMenu, texts} {}
 
 void ClientMainMenu::writeIn(const cs::Texts& texts) noexcept {
@@ -81,12 +82,13 @@ void ClientMainMenu::handle(const nx::platform::WindowEvent& event, nx::platform
 }
 
 auto ClientMainMenu::load(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
-                          nx::rhi::CommandList& list, nx::rhi::Extent2d size)
-    -> nx::Result<void, ClientError> {
+                          nx::rhi::CommandList& list, nx::rhi::Extent2d size,
+                          const std::filesystem::path& data) -> nx::Result<void, ClientError> {
     if (panel.isLoadedFor(size.height)) {
         return {};
     }
-    if (auto loaded = panel.load(fonts, *files, screen, list, size.height); !loaded) {
+    const auto logo = data / "cstrike" / "modernClientLogo.tga";
+    if (auto loaded = panel.load(fonts, *files, screen, list, logo, size.height); !loaded) {
         const ClientError code = loaded.error().code == cs::MenuPanelError::GpuFailed
                                      ? ClientError::GpuFailed
                                      : ClientError::ContentUnavailable;

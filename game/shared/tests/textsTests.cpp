@@ -28,11 +28,33 @@ using cs::TextsError;
         "\"t\"\nkeyDelete = \"u\"\nclear = \"v\"\n"
         "[options]\n"
         "mouse = \"a\"\naudio = \"b\"\nvideo = \"c\"\ngame = \"d\"\nsensitivity = \"e\"\n"
+        "action = \"x\"\nkeys = \"x\"\nalternateKey = \"x\"\ndone = \"x\"\n"
+        "languageEnglish = \"x\"\nlanguagePortuguese = \"x\"\n"
         "reverseMouse = \"f\"\nvolume = \"g\"\nplayUnfocused = \"h\"\nmaxFps = \"i\"\n"
+        "resolution = \"x\"\nautomaticResolution = \"x\"\n"
+        "windowMode = \"x\"\nwindowed = \"x\"\nborderless = \"x\"\nfullscreen = \"x\"\n"
         "showFps = \"j\"\ndrawHud = \"k\"\nautoSwitch = \"l\"\nrightHand = \"m\"\non = \"n\"\n"
+        "weaponOffsetX = \"x\"\nweaponOffsetY = \"x\"\nweaponOffsetZ = \"x\"\n"
         "off = \"o\"\nkeyboard = \"p\"\npressAKey = \"q\"\nnoKey = \"r\"\n"
         "vsync = \"x\"\ngamma = \"x\"\nbrightness = \"x\"\nfidelity = \"x\"\n"
         "fidelityLegacy = \"x\"\nfidelityEnhanced = \"x\"\nlanguage = \"x\"\nplayerName = \"x\"\n"
+        "crosshairTab = \"x\"\n"
+        "crosshairPreview = \"x\"\n"
+        "crosshairIdle = \"x\"\n"
+        "crosshairFiring = \"x\"\n"
+        "apply = \"x\"\n"
+        "applyKey = \"x\"\n"
+        "crosshairType = \"x\"\n"
+        "crosshairStatic = \"x\"\n"
+        "crosshairDynamic = \"x\"\n"
+        "crosshairTee = \"x\"\n"
+        "crosshairDotOnly = \"x\"\n"
+        "crosshairFollowRecoil = \"x\"\n"
+        "crosshairGap = \"x\"\n"
+        "crosshairThickness = \"x\"\n"
+        "crosshairDot = \"x\"\n"
+        "crosshairOutline = \"x\"\n"
+        "bulletTracers = \"x\"\n"
         "crosshairSize = \"x\"\ncrosshairAuto = \"x\"\ncrosshairSmall = \"x\"\n"
         "crosshairMedium = \"x\"\ncrosshairLarge = \"x\"\ncrosshairTranslucent = \"x\"\n"
         "crosshairRed = \"x\"\ncrosshairGreen = \"x\"\ncrosshairBlue = \"x\"\n"
@@ -67,7 +89,7 @@ using cs::TextsError;
 }
 
 TEST(TextsTest, EveryLanguageOfTheRepositoryWritesEveryText) {
-    const std::filesystem::path data{NX_DATA_DIRECTORY};
+    const auto data = nx::platform::fromUtf8(NX_DATA_DIRECTORY);
     const auto languages = cs::languagesOf(data);
     ASSERT_TRUE(languages.has_value()) << (languages ? "" : nx::describe(languages.error()));
     EXPECT_EQ(*languages, (std::vector<std::string>{"en", "pt-BR"}));
@@ -78,7 +100,7 @@ TEST(TextsTest, EveryLanguageOfTheRepositoryWritesEveryText) {
 }
 
 TEST(TextsTest, ALanguageWritesItsOwnTexts) {
-    const std::filesystem::path data{NX_DATA_DIRECTORY};
+    const auto data = nx::platform::fromUtf8(NX_DATA_DIRECTORY);
     const auto english = cs::openTexts(data, "en");
     const auto portuguese = cs::openTexts(data, "pt-BR");
     ASSERT_TRUE(english.has_value());
