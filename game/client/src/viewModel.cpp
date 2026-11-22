@@ -340,8 +340,8 @@ auto ViewModelEvents::passed(const ViewModel* viewModel, const std::optional<Vie
     if (sequence.isLooping && sequence.frameCount > 1 && sequence.fps > 0.0F) {
         const auto rate = static_cast<double>(sequence.fps);
         const auto framesPerLoop = static_cast<double>(sequence.frameCount - 1);
-        const double firstFrame =
-            continued ? static_cast<double>(previous.count()) * rate : kBeforeTheFirstFrame;
+        const double firstFrame = continued ? static_cast<double>(previous.count()) * rate
+                                            : static_cast<double>(kBeforeTheFirstFrame);
         const double lastFrame = static_cast<double>(pose->intoIt.count()) * rate;
         std::vector<PassedEvent> events;
         if (std::ranges::none_of(sequence.events, [](const nx::assets::StudioEvent& event) {
