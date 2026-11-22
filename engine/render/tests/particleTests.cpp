@@ -208,7 +208,10 @@ TEST(ParticleRendererTest, ABulletTracerUsesItsTintWithoutALegacyStreakSprite) {
         GTEST_SKIP() << nx::test::kNoVulkan;
     }
     std::optional<nx::render::ParticleRenderer> renderer = rendererOf(**device);
-    ASSERT_TRUE(renderer.has_value());
+    if (!renderer) {
+        FAIL() << "the Vulkan particle renderer could not be created";
+        return;
+    }
     OffscreenTarget target{**device};
     StreakInstance tracer = kAcross;
     tracer.color = {.blue = 255};
