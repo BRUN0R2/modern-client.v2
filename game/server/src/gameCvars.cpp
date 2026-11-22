@@ -6,6 +6,7 @@ module cs.server;
 import std;
 import nx.core;
 import nx.console;
+import nx.assets;
 import cs.shared;
 
 namespace cs {
@@ -17,6 +18,25 @@ constexpr nx::console::CvarFlags kServerCvar{nx::console::CvarFlag::Notify};
 constexpr nx::Seconds kDefaultFreezeTime{6.0F};
 constexpr nx::Minutes kDefaultRoundTime{5.0F};
 constexpr nx::Minutes kDefaultBuyTime{1.5F};
+
+/// Six hexadecimal digits in RRGGBB order, with no prefix.
+[[nodiscard]] auto tracerColorOf(std::string_view text) noexcept -> std::optional<nx::assets::PaletteColor> {
+    constexpr std::size_t kHexDigits = 6;
+    constexpr int kHexBase = 16;
+    constexpr auto kChannelBits = std::numeric_limits<std::uint8_t>::digits;
+    constexpr std::uint32_t kChannelMask = std::numeric_limits<std::uint8_t>::max();
+    if (text.size() != kHexDigits) {
+        return std::nullopt;
+    }
+    std::uint32_t rgb = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), rgb, kHexBase);
+    if (error != std::errc{} || end != text.data() + text.size()) {
+        return std::nullopt;
+    }
+    return nx::assets::PaletteColor{.red = static_cast<std::uint8_t>(rgb >> (2 * kChannelBits)),
+                                    .green = static_cast<std::uint8_t>((rgb >> kChannelBits) & kChannelMask),
+                                    .blue = static_cast<std::uint8_t>(rgb & kChannelMask)};
+}
 
 } // namespace
 
@@ -46,6 +66,18 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
             return std::unexpected{std::move(registered->error())};
         }
     }
+    const auto defaultColor = kDefaultBulletTracerColor;
+    auto tracerColor = console.registerCvar(CvarDesc<std::string>{
+        .name = "sv_tracer_color",
+        .defaultValue =
+            std::format("{:02X}{:02X}{:02X}", defaultColor.red, defaultColor.green, defaultColor.blue),
+        .description = "Bullet tracer color as six hexadecimal digits (RRGGBB).",
+        .flags = kServerCvar,
+        .rule = {.expectation = "six hexadecimal digits (RRGGBB)",
+                 .accepts = [](std::string_view text) noexcept { return tracerColorOf(text).has_value(); }}});
+    if (!tracerColor) {
+        return std::unexpected{std::move(tracerColor.error())};
+    }
     return GameCvars{.freezeTime = *freezeTime,
                      .roundTime = *roundTime,
                      .startMoney = *startMoney,
@@ -53,7 +85,8 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                      .restart = *restart,
                      .footsteps = *footsteps,
                      .friendlyFire = *friendlyFire,
-                     .buyTime = *buyTime};
+                     .buyTime = *buyTime,
+                     .tracerColor = *tracerColor};
 }
 
 // The values set back are finite, and the cvars have no range: each set holds. The cvars hold numbers:
@@ -103,6 +136,12 @@ auto GameCvars::doStepsSound() const -> bool {
 
 auto GameCvars::isFriendlyFireOn() const -> bool {
     return friendlyFire.value() != 0.0F;
+}
+
+auto GameCvars::bulletTracerColor() const -> nx::assets::PaletteColor {
+    const auto color = tracerColorOf(tracerColor.value());
+    nx::invariant(color.has_value(), "GameCvars: the tracer color rule keeps its value valid");
+    return *color;
 }
 
 } // namespace cs

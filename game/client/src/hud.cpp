@@ -5,6 +5,7 @@ module cs.client;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.console;
 import nx.assets;
 import nx.rhi;
@@ -69,6 +70,18 @@ constexpr std::uint32_t kLargeFrom = 1024;
 /// The names cl_crosshair_size takes.
 constexpr nx::EnumArray<CrosshairSize, std::string_view> kSizeNames{
     nx::EnumArray<CrosshairSize, std::string_view>::Storage{"auto", "small", "medium", "large"}};
+
+constexpr nx::EnumArray<CrosshairType, std::string_view> kTypeNames{
+    nx::EnumArray<CrosshairType, std::string_view>::Storage{"static", "dynamic", "t", "dot"}};
+
+[[nodiscard]] auto crosshairTypeNamed(std::string_view name) noexcept -> std::optional<CrosshairType> {
+    for (const CrosshairType type : kTypeNames.keys()) {
+        if (kTypeNames[type] == name) {
+            return type;
+        }
+    }
+    return std::nullopt;
+}
 
 /// A factor of the crosshair's scale, kept exact.
 struct Fraction {
@@ -309,6 +322,10 @@ auto crosshairColorOf(std::string_view text) noexcept -> std::optional<nx::rende
     return nx::render::ScreenColor{.red = red, .green = green, .blue = blue};
 }
 
+auto crosshairTypeName(CrosshairType type) noexcept -> std::string_view {
+    return kTypeNames[type];
+}
+
 auto HudCvars::registerIn(nx::console::Console& console) -> nx::Result<HudCvars, nx::console::CvarError> {
     using nx::console::CvarDesc;
     constexpr nx::console::CvarFlags kArchived{nx::console::CvarFlag::Archive};
@@ -329,15 +346,58 @@ auto HudCvars::registerIn(nx::console::Console& console) -> nx::Result<HudCvars,
                                     .defaultValue = true,
                                     .description = "Whether the crosshair is added to what is behind it.",
                                     .flags = kArchived});
+    auto type = console.registerCvar(CvarDesc<std::string>{
+        .name = "cl_crosshair_style",
+        .defaultValue = "static",
+        .description = "Crosshair style: static, dynamic, t or dot.",
+        .flags = kArchived,
+        .rule = {.expectation = "static, dynamic, t or dot", .accepts = [](std::string_view text) noexcept {
+                     return crosshairTypeNamed(text).has_value();
+                 }}});
+    auto gap = console.registerCvar(CvarDesc<float>{.name = "cl_crosshairgap",
+                                                    .defaultValue = CrosshairStyle{}.gap,
+                                                    .description = "Space between the center and the arms.",
+                                                    .flags = kArchived,
+                                                    .minimum = 0.0F,
+                                                    .maximum = kMaxCrosshairGap});
+    auto thickness = console.registerCvar(CvarDesc<float>{.name = "cl_crosshairthickness",
+                                                          .defaultValue = CrosshairStyle{}.thickness,
+                                                          .description = "Thickness of the crosshair lines.",
+                                                          .flags = kArchived,
+                                                          .minimum = 1.0F,
+                                                          .maximum = kMaxCrosshairThickness});
+    auto follow = console.registerCvar(CvarDesc<bool>{.name = "cl_crosshair_recoil",
+                                                      .defaultValue = false,
+                                                      .description = "Move the crosshair with weapon recoil.",
+                                                      .flags = kArchived});
+    auto dot = console.registerCvar(CvarDesc<bool>{.name = "cl_crosshairdot",
+                                                   .defaultValue = false,
+                                                   .description = "Draw a dot at the crosshair center.",
+                                                   .flags = kArchived});
+    auto outline = console.registerCvar(CvarDesc<bool>{.name = "cl_crosshair_drawoutline",
+                                                       .defaultValue = false,
+                                                       .description = "Draw a dark crosshair outline.",
+                                                       .flags = kArchived});
+    auto tracers = console.registerCvar(CvarDesc<bool>{.name = "r_drawtracers",
+                                                       .defaultValue = true,
+                                                       .description = "Draw visual bullet tracers.",
+                                                       .flags = kArchived});
     auto rightHand = console.registerCvar(nx::console::CvarDesc<bool>{
         .name = "cl_righthand",
         .defaultValue = true,
         .description = "Whether the weapons are held in the right hand, else the left.",
         .flags = kArchived});
-    if (!color || !size) {
-        return std::unexpected{std::move(!color ? color.error() : size.error())};
+    for (auto* const registered : {&color, &size, &type}) {
+        if (!*registered) {
+            return std::unexpected{std::move(registered->error())};
+        }
     }
-    for (auto* const registered : {&translucent, &rightHand}) {
+    for (auto* const registered : {&gap, &thickness}) {
+        if (!*registered) {
+            return std::unexpected{std::move(registered->error())};
+        }
+    }
+    for (auto* const registered : {&translucent, &follow, &dot, &outline, &tracers, &rightHand}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -345,6 +405,13 @@ auto HudCvars::registerIn(nx::console::Console& console) -> nx::Result<HudCvars,
     return HudCvars{.crosshairColor = *color,
                     .crosshairSize = *size,
                     .crosshairTranslucent = *translucent,
+                    .crosshairType = *type,
+                    .crosshairGap = *gap,
+                    .crosshairThickness = *thickness,
+                    .crosshairFollowRecoil = *follow,
+                    .crosshairDot = *dot,
+                    .crosshairOutline = *outline,
+                    .bulletTracers = *tracers,
                     .rightHand = *rightHand};
 }
 
@@ -356,6 +423,18 @@ void HudCvars::setCrosshairColor(nx::render::ScreenColor color) const {
     crosshairColor.setAccepted(std::format("{} {} {}", color.red, color.green, color.blue));
 }
 
+void HudCvars::setCrosshair(const CrosshairStyle& style) const {
+    setCrosshairColor(style.color);
+    crosshairType.setAccepted(std::string{crosshairTypeName(style.type)});
+    crosshairSize.setAccepted(std::string{crosshairSizeName(style.size)});
+    crosshairGap.setAccepted(style.gap);
+    crosshairThickness.setAccepted(style.thickness);
+    crosshairFollowRecoil.setAccepted(style.followsRecoil);
+    crosshairDot.setAccepted(style.hasDot);
+    crosshairOutline.setAccepted(style.hasOutline);
+    crosshairTranslucent.setAccepted(style.isTranslucent);
+}
+
 auto HudCvars::crosshair() const -> CrosshairStyle {
     const std::optional<nx::render::ScreenColor> color = crosshairColorOf(crosshairColor.value());
     const std::optional<CrosshairSize> size = crosshairSizeNamed(crosshairSize.value());
@@ -363,7 +442,13 @@ auto HudCvars::crosshair() const -> CrosshairStyle {
     const CrosshairStyle defaults{};
     return {.color = color.value_or(defaults.color),
             .size = size.value_or(defaults.size),
-            .isTranslucent = crosshairTranslucent.value()};
+            .isTranslucent = crosshairTranslucent.value(),
+            .type = crosshairTypeNamed(crosshairType.value()).value_or(defaults.type),
+            .gap = crosshairGap.value(),
+            .thickness = crosshairThickness.value(),
+            .followsRecoil = crosshairFollowRecoil.value(),
+            .hasDot = crosshairDot.value(),
+            .hasOutline = crosshairOutline.value()};
 }
 
 auto crosshairRects(CrosshairSize crosshairSize, std::uint32_t distance, nx::rhi::Extent2d size)
@@ -387,6 +472,36 @@ auto crosshairRects(CrosshairSize crosshairSize, std::uint32_t distance, nx::rhi
             nx::render::ScreenRect{.x = x + gap, .y = y, .width = length, .height = 1.0F},
             nx::render::ScreenRect{.x = x, .y = y - gap - length + 1.0F, .width = 1.0F, .height = length},
             nx::render::ScreenRect{.x = x, .y = y + gap, .width = 1.0F, .height = length}};
+}
+
+auto crosshairDistanceOf(const CrosshairStyle& style, nx::EulerAngles punch) noexcept -> std::uint32_t {
+    float gap = style.gap;
+    if (style.type == CrosshairType::Dynamic) {
+        constexpr float kGapPerDegree = 2.0F;
+        gap += std::min(std::hypot(punch.pitch.value(), punch.yaw.value()) * kGapPerDegree, kMaxCrosshairGap);
+    }
+    return static_cast<std::uint32_t>(std::lround(gap));
+}
+
+auto crosshairRecoilOffset(const nx::render::Camera& view, nx::EulerAngles punch,
+                           nx::rhi::Extent2d size) noexcept -> nx::render::ScreenPoint {
+    if (size.width == 0 || size.height == 0) {
+        return {};
+    }
+    // The view already kicks. Show the recoil indicator relative to that view.
+    nx::EulerAngles aim = view.angles;
+    aim.pitch = aim.pitch + punch.pitch;
+    aim.yaw = aim.yaw + punch.yaw;
+    constexpr float kProjectionDistance = 1024.0F;
+    const nx::Vec3 point = view.position + (nx::angleVectors(aim).forward * kProjectionDistance);
+    const auto width = static_cast<float>(size.width);
+    const auto height = static_cast<float>(size.height);
+    const auto projection = nx::render::viewProjectionMatrix(view, width / height);
+    const auto projected = nx::render::screenPointOf(projection, point, width, height);
+    if (!projected) {
+        return {};
+    }
+    return {.x = std::round(projected->x - width * 0.5F), .y = std::round(projected->y - height * 0.5F)};
 }
 
 Hud::Hud(HudSheet sheet, std::vector<nx::render::ScreenImage> images,
@@ -464,14 +579,61 @@ void Hud::layOut(std::vector<nx::render::ScreenQuad>& quads, const HudView& view
                 static_cast<float>(ammo.pictureY.value()), kHudColor, nx::render::ScreenBlend::Additive));
         }
     }
-    if (!view.crosshairDistance) {
-        return;
+    if (view.crosshairDistance) {
+        appendCrosshair(quads, crosshair, *view.crosshairDistance, size,
+                        {.x = view.crosshairOffsetX, .y = view.crosshairOffsetY});
     }
+}
+
+void appendCrosshair(std::vector<nx::render::ScreenQuad>& quads, const CrosshairStyle& crosshair,
+                     std::uint32_t distance, nx::rhi::Extent2d size, nx::render::ScreenPoint offset) {
     // As FillRGBA draws it: added at its full alpha, or drawn as it is.
     const nx::render::ScreenBlend blend =
         crosshair.isTranslucent ? nx::render::ScreenBlend::Additive : nx::render::ScreenBlend::Normal;
-    for (const nx::render::ScreenRect& line : crosshairRects(crosshair.size, *view.crosshairDistance, size)) {
-        quads.push_back(nx::render::ScreenQuad{.target = line, .color = crosshair.color, .blend = blend});
+    std::array<nx::render::ScreenRect, 5> rects{};
+    std::size_t count = 0;
+    const auto add = [&](nx::render::ScreenRect rect) {
+        rect.x += offset.x;
+        rect.y += offset.y;
+        rects[count++] = rect;
+    };
+    const float thickness = crosshair.thickness;
+    const float inset = (thickness - 1.0F) * 0.5F;
+    if (crosshair.type != CrosshairType::Dot) {
+        auto [left, right, top, bottom] = crosshairRects(crosshair.size, distance, size);
+        for (auto* line : {&left, &right}) {
+            line->height = thickness;
+            line->y -= inset;
+            add(*line);
+        }
+        for (auto* line : {&top, &bottom}) {
+            line->width = thickness;
+            line->x -= inset;
+        }
+        if (crosshair.type != CrosshairType::Tee) {
+            add(top);
+        }
+        add(bottom);
+    }
+    if (crosshair.hasDot || crosshair.type == CrosshairType::Dot) {
+        add({.x = static_cast<float>(size.width / 2) - inset,
+             .y = static_cast<float>(size.height / 2) - inset,
+             .width = thickness,
+             .height = thickness});
+    }
+    const auto marks = std::span{rects}.first(count);
+    if (crosshair.hasOutline) {
+        constexpr nx::render::ScreenColor kOutline{.red = 0, .green = 0, .blue = 0};
+        for (const auto& rect : marks) {
+            quads.push_back({.target = {.x = rect.x - 1.0F,
+                                        .y = rect.y - 1.0F,
+                                        .width = rect.width + 2.0F,
+                                        .height = rect.height + 2.0F},
+                             .color = kOutline});
+        }
+    }
+    for (const auto& rect : marks) {
+        quads.push_back({.target = rect, .color = crosshair.color, .blend = blend});
     }
 }
 

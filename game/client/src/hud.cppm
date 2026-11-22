@@ -10,14 +10,13 @@
 /// section 3.4): a number of more digits than the original's room for it widens it, and pushes away
 /// what is beside it.
 ///
-/// Today: health, armor, money and ammo as they rest, the round's time, and the crosshair of a player
-/// standing, with the original's cvars. The status icons, the radar, the weapon menu, the crosshair
-/// opening as the player moves, the timer's color as the round runs out, and the flash of a number
-/// that changes, come next (TODO.md).
+/// The crosshair starts with the classic style. The player can change its shape, size and color or
+/// set it to react to recoil.
 export module cs.client:hud;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.console;
 import nx.assets;
 import nx.rhi;
@@ -84,6 +83,8 @@ struct HudView {
     std::optional<std::uint32_t> crosshairDistance{};
     /// The whole seconds the round's timer shows (cs::RoundTimer); none without a round.
     std::optional<WholeSeconds> roundTime{};
+    float crosshairOffsetX = 0.0F;
+    float crosshairOffsetY = 0.0F;
 
     [[nodiscard]] inline auto operator==(const HudView&) const noexcept -> bool = default;
 };
@@ -105,21 +106,52 @@ enum class CrosshairSize : std::uint8_t {
 /// ("50 250 50"); none for other text.
 [[nodiscard]] auto crosshairColorOf(std::string_view text) noexcept -> std::optional<nx::render::ScreenColor>;
 
+enum class CrosshairType : std::uint8_t { Static, Dynamic, Tee, Dot, Count };
+
+[[nodiscard]] auto crosshairTypeName(CrosshairType type) noexcept -> std::string_view;
+
+inline constexpr float kMaxCrosshairGap = 24.0F;
+inline constexpr float kMaxCrosshairThickness = 5.0F;
+
 /// How the crosshair is drawn, as its cvars say.
 struct CrosshairStyle {
     nx::render::ScreenColor color{.red = 50, .green = 250, .blue = 50};
     CrosshairSize size = CrosshairSize::Auto;
     bool isTranslucent = true; ///< Added to what is behind it; else drawn over it as it is.
+    CrosshairType type = CrosshairType::Static;
+    float gap = 7.0F;
+    float thickness = 1.0F;
+    bool followsRecoil = false;
+    bool hasDot = false;
+    bool hasOutline = false;
 
     [[nodiscard]] inline auto operator==(const CrosshairStyle&) const noexcept -> bool = default;
 };
 
-/// The HUD's cvars, by the original's names, archived, with Counter-Strike 1.6's values:
-/// `cl_crosshair_color` (50 250 50), `cl_crosshair_size` (auto) and `cl_crosshair_translucent` (1).
+/// The gap, including the temporary spread of a dynamic crosshair.
+[[nodiscard]] auto crosshairDistanceOf(const CrosshairStyle& style, nx::EulerAngles punch) noexcept
+    -> std::uint32_t;
+
+/// The position shift shown relative to a camera that already includes weapon recoil.
+[[nodiscard]] auto crosshairRecoilOffset(const nx::render::Camera& view, nx::EulerAngles punch,
+                                         nx::rhi::Extent2d size) noexcept -> nx::render::ScreenPoint;
+
+/// Draws the reticle centered on the screen plus the given offset.
+void appendCrosshair(std::vector<nx::render::ScreenQuad>& quads, const CrosshairStyle& crosshair,
+                     std::uint32_t distance, nx::rhi::Extent2d size, nx::render::ScreenPoint offset = {});
+
+/// Archived client settings for the crosshair, bullet tracers and viewmodel hand.
 struct HudCvars {
     nx::console::Cvar<std::string> crosshairColor;
     nx::console::Cvar<std::string> crosshairSize;
     nx::console::Cvar<bool> crosshairTranslucent;
+    nx::console::Cvar<std::string> crosshairType;
+    nx::console::Cvar<float> crosshairGap;
+    nx::console::Cvar<float> crosshairThickness;
+    nx::console::Cvar<bool> crosshairFollowRecoil;
+    nx::console::Cvar<bool> crosshairDot;
+    nx::console::Cvar<bool> crosshairOutline;
+    nx::console::Cvar<bool> bulletTracers;
     nx::console::Cvar<bool> rightHand; ///< `cl_righthand`: the weapons in the right hand, else the left.
 
     /// Registers them in `console`. Errors: those of Console::registerCvar.
@@ -128,6 +160,7 @@ struct HudCvars {
 
     /// The crosshair they ask for.
     [[nodiscard]] auto crosshair() const -> CrosshairStyle;
+    void setCrosshair(const CrosshairStyle& style) const;
     /// Sets `cl_crosshair_color` to `color`, written as it takes it: red, green and blue, spaces between
     /// them. Its alpha is none of the cvar's.
     void setCrosshairColor(nx::render::ScreenColor color) const;

@@ -190,6 +190,58 @@ TEST_F(ParticlesTest, AStreakMovesThenFallsAtTheWholeGravitySlowingAcrossTheGrou
     EXPECT_TRUE(particles.shownStreaks().empty()) << "all gone by half a second";
 }
 
+TEST_F(ParticlesTest, BulletTracersFadeAtTheirImpactAndCanBeClearedIndependently) {
+    const cs::BulletTracer shot{.end = {.x = 96.0F}, .color = {.red = 53, .green = 190, .blue = 255}};
+    particles.splashStreaks(kSplash, {});
+    const std::size_t sparks = particles.shownStreaks().size();
+    particles.traceBullet(shot, cs::PlayerIndex{1}, {});
+    ASSERT_EQ(particles.shownStreaks().size(), sparks + 1);
+    const cs::Streak before = particles.shownStreaks().back();
+    EXPECT_EQ(before.color.red, shot.color.red);
+    EXPECT_EQ(before.color.green, shot.color.green);
+    EXPECT_EQ(before.color.blue, shot.color.blue);
+    particles.update(kFrame, kFrame, kGravity);
+    ASSERT_EQ(particles.shownStreaks().size(), sparks + 1);
+    const cs::Streak& after = particles.shownStreaks().back();
+    EXPECT_EQ(after.origin, before.origin);
+    const auto line = cs::tracerOf(after, std::nullopt, kFrame);
+    ASSERT_TRUE(line.has_value());
+    EXPECT_EQ(line->end, shot.end);
+    EXPECT_LT(cs::amountOf(after, kFrame), cs::amountOf(before, {}));
+    particles.clearBulletTracers();
+    EXPECT_EQ(particles.shownStreaks().size(), sparks);
+}
+
+TEST_F(ParticlesTest, AFirstPersonTracerStartsAtThePosedMuzzleAndAimsAtTheImpact) {
+    constexpr cs::PlayerIndex kViewer{4};
+    constexpr cs::BulletTracer kShot{.end = {.x = 120.0F, .y = 4.0F, .z = 2.0F}, .shooter = kViewer};
+    constexpr nx::Vec3 kRightMuzzle{.x = 29.0F, .y = -8.0F, .z = -5.0F};
+    constexpr nx::Vec3 kLeftMuzzle{.x = 29.0F, .y = 8.0F, .z = -5.0F};
+    particles.traceBullet(kShot, kViewer, {});
+    ASSERT_EQ(particles.shownStreaks().size(), 1U);
+    const cs::Streak& streak = particles.shownStreaks().front();
+    for (const nx::Vec3 muzzle : {kRightMuzzle, kLeftMuzzle}) {
+        const auto line = cs::tracerOf(streak, muzzle, {});
+        ASSERT_TRUE(line.has_value());
+        EXPECT_EQ(line->start, muzzle);
+        EXPECT_EQ(line->end, kShot.end);
+    }
+    EXPECT_FALSE(cs::tracerOf(streak, std::nullopt, {}).has_value());
+    EXPECT_FALSE(cs::tracerOf(streak, nx::Vec3{.x = 150.0F}, {}).has_value())
+        << "the world stopped the shot before the muzzle";
+}
+
+TEST(StreakTest, AShortenedTracerStillPointsAtTheActualImpact) {
+    constexpr nx::Vec3 kMuzzle{.x = 24.0F, .y = 8.0F, .z = -6.0F};
+    constexpr nx::Vec3 kImpact{.x = 1600.0F, .y = 80.0F, .z = 12.0F};
+    const cs::Streak streak{.tracer = cs::TracerPath{.end = kImpact, .view = cs::ViewAnimation{}}};
+    const auto line = cs::tracerOf(streak, kMuzzle, {});
+    ASSERT_TRUE(line.has_value());
+    EXPECT_LT(nx::lengthSquared(line->end - kMuzzle), nx::lengthSquared(kImpact - kMuzzle));
+    expectNear(nx::normalized(line->end - kMuzzle), nx::normalized(kImpact - kMuzzle),
+               "the shortened line still aims at the impact");
+}
+
 TEST(StreakTest, AStreakIsDrawnAsFarAsItMovesInItsTimeLeftATenthAtMostFadingInItsLastHalfSecond) {
     const cs::Streak streak{.velocity = {.x = 100.0F}, .goesAt = nx::Seconds{1.0F}};
     expectNear(cs::endOf(streak, {}), {.x = 10.0F}, "a tenth of a second of it");

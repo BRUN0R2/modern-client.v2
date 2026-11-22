@@ -66,8 +66,8 @@ class MainMenu {
 public:
     /// The menu of what `listed` lists, which must outlive it, a new game played on one of `playable`, the
     /// names of the game's maps in the order its page lists them, and its options those of `settings`.
-    MainMenu(const MainMenuLook& listed, std::vector<std::string> playable,
-             std::vector<OptionRow> settings) noexcept;
+    MainMenu(const MainMenuLook& listed, std::vector<std::string> playable, std::vector<OptionRow> settings,
+             CrosshairEditor crosshair = {}) noexcept;
 
     [[nodiscard]] inline auto isOpen() const noexcept -> bool { return isShown; }
     [[nodiscard]] inline auto selected() const noexcept -> const std::optional<MainMenuAction>& {

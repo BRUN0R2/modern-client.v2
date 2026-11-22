@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.assets;
+import nx.console;
 import nx.rhi;
 import nx.render;
 import cs.shared;
@@ -17,7 +18,20 @@ namespace {
 
 /// A sequence played anew plays the events of its first frame too (R_StudioClientEvents).
 constexpr float kBeforeTheFirstFrame = -0.01F;
+/// Limit catch-up work for very short loops or a stalled render frame.
+constexpr double kMaxLoopsOfEventsPerFrame = 8.0;
 constexpr nx::log::Category kViewModelLog{"client"};
+
+/// At a typical running speed, roughly one step per shift of the weapon from side to side.
+constexpr nx::UnitsPerSecond kFullBobSpeed{240.0F};
+constexpr nx::Seconds kBobResponseTime{0.12F};
+constexpr float kBobCyclesPerSecond = 1.35F;
+constexpr float kBobCycle = 2.0F * std::numbers::pi_v<float>;
+constexpr nx::HammerUnits kSideBob{0.45F};
+constexpr nx::HammerUnits kDepthBob{0.15F};
+constexpr nx::HammerUnits kVerticalBob{0.55F};
+constexpr float kBobStrength = 0.35F;
+constexpr nx::console::CvarFlags kArchived{nx::console::CvarFlag::Archive};
 
 using nx::assets::MdlView;
 using nx::assets::Vfs;
@@ -111,6 +125,54 @@ void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
 
 } // namespace
 
+void ViewModelBob::update(nx::UnitsPerSecond groundSpeed, nx::Seconds elapsed) noexcept {
+    const float target = std::clamp(groundSpeed / kFullBobSpeed, 0.0F, 1.0F);
+    const float blend = -std::expm1(-elapsed / kBobResponseTime);
+    // Integrate the smoothed speed over the frame so that changing FPS does not change the rhythm.
+    const float travelled =
+        (target * elapsed.count()) + ((speedShare - target) * kBobResponseTime.count() * blend);
+    speedShare = std::lerp(speedShare, target, blend);
+    phase = std::fmod(phase + (travelled * kBobCyclesPerSecond * kBobCycle), kBobCycle);
+}
+
+auto ViewModelBob::offset() const noexcept -> ViewModelOffset {
+    const float amount = speedShare * kBobStrength;
+    const float step = 2.0F * phase;
+    return {.right = kSideBob * (amount * std::sin(phase)),
+            .forward = kDepthBob * (amount * std::sin(step)),
+            .up = kVerticalBob * (amount * std::cos(step))};
+}
+
+auto ViewModelCvars::registerIn(nx::console::Console& console)
+    -> nx::Result<ViewModelCvars, nx::console::CvarError> {
+    const auto offset = [&console](std::string_view name, std::string_view description, float limit) {
+        return console.registerCvar(nx::console::CvarDesc<float>{.name = name,
+                                                                 .description = description,
+                                                                 .flags = kArchived,
+                                                                 .minimum = -limit,
+                                                                 .maximum = limit});
+    };
+    auto right =
+        offset("viewmodel_offset_x", "Shift the weapon right in camera space.", kMaxViewModelSideOffset);
+    auto forward =
+        offset("viewmodel_offset_y", "Shift the weapon forward in camera space.", kMaxViewModelDepthOffset);
+    auto up = offset("viewmodel_offset_z", "Shift the weapon up in camera space.", kMaxViewModelDepthOffset);
+    for (auto* const registered : {&right, &forward, &up}) {
+        if (!*registered) {
+            return std::unexpected{std::move(registered->error())};
+        }
+    }
+    return ViewModelCvars{.right = *right, .forward = *forward, .up = *up};
+}
+
+auto ViewModelCvars::offset(const ViewModelBob& motion) const noexcept -> ViewModelOffset {
+    ViewModelOffset offset = motion.offset();
+    offset.right += nx::HammerUnits{right.value()};
+    offset.forward += nx::HammerUnits{forward.value()};
+    offset.up += nx::HammerUnits{up.value()};
+    return offset;
+}
+
 ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
                      std::vector<std::optional<nx::render::StudioMaterial>> materials, Hand hand,
                      Appearance appearance) noexcept
@@ -167,6 +229,16 @@ auto ViewModel::attachmentAt(std::span<const nx::Mat3x4> bones, std::uint32_t at
     return nx::transformPoint(bones[attachments[attachment].bone.value], attachments[attachment].origin);
 }
 
+auto ViewModel::muzzleAt(std::span<const nx::Mat3x4> bones, std::uint32_t sequenceIndex) const
+    -> std::optional<nx::Vec3> {
+    for (const nx::assets::StudioEvent& event : sequence(sequenceIndex).events) {
+        if (const auto attachment = muzzleFlashAttachmentOf(event.event)) {
+            return attachmentAt(bones, *attachment);
+        }
+    }
+    return attachmentAt(bones, 0);
+}
+
 auto ViewModel::soundEvents() const -> std::vector<std::string_view> {
     std::vector<std::string_view> sounds;
     for (const nx::assets::StudioSequence& sequence : m_files->view->sequences()) {
@@ -210,14 +282,17 @@ auto soundFilesOf(const Weapon& weapon, const ViewModel* viewModel) -> std::vect
     return files;
 }
 
-auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt,
-                     Hand hand) const -> std::vector<nx::Mat3x4> {
+auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt, Hand hand,
+                     ViewModelOffset offset) const -> std::vector<nx::Mat3x4> {
     const MdlView& model = *m_files->view;
     nx::expects(sequence < m_animations.size(), "ViewModel::pose: a sequence of the model");
     const nx::assets::StudioSequence& played = model.sequences()[sequence];
     // The view's own model turns as the view does: the client gives it the view's angles with the pitch
     // negated, which the engine's studio transform negates back.
-    nx::Mat3x4 placement = nx::affine(nx::rotationMatrix(camera.angles), camera.position);
+    const nx::Mat3 rotation = nx::rotationMatrix(camera.angles);
+    // Studio space has +Y to the left. Apply the screen-space shift before mirroring the bones.
+    const nx::Vec3 shift{.x = offset.forward.value(), .y = -offset.right.value(), .z = offset.up.value()};
+    nx::Mat3x4 placement = nx::affine(rotation, camera.position + (rotation * shift));
     if (isMirroredIn(hand)) {
         // Its left, the placement's second column, turned to its right.
         for (nx::Vec4& row : placement.rows) {
@@ -259,12 +334,39 @@ auto ViewModelEvents::passed(const ViewModel* viewModel, const std::optional<Vie
         return {};
     }
     const nx::assets::StudioSequence& sequence = viewModel->sequence(pose->sequence);
+    const bool continued = m_lastPose && m_lastPose->isSamePlay(*pose);
+    const nx::Seconds previous = continued ? m_lastPose->intoIt : nx::Seconds{};
+    m_lastPose = pose;
+    if (sequence.isLooping && sequence.frameCount > 1 && sequence.fps > 0.0F) {
+        const auto rate = static_cast<double>(sequence.fps);
+        const auto framesPerLoop = static_cast<double>(sequence.frameCount - 1);
+        const double firstFrame =
+            continued ? static_cast<double>(previous.count()) * rate : kBeforeTheFirstFrame;
+        const double lastFrame = static_cast<double>(pose->intoIt.count()) * rate;
+        std::vector<PassedEvent> events;
+        if (std::ranges::none_of(sequence.events, [](const nx::assets::StudioEvent& event) {
+                return event.event >= kFirstClientEvent;
+            })) {
+            return events;
+        }
+        const double lastLoop = std::floor(lastFrame / framesPerLoop);
+        const double firstLoop = std::max(0.0, std::floor(firstFrame / framesPerLoop));
+        const double loopsAfterFirst = std::min(lastLoop - firstLoop, kMaxLoopsOfEventsPerFrame - 1.0);
+        for (double loopsBack = loopsAfterFirst; loopsBack >= 0.0; --loopsBack) {
+            const double start = (lastLoop - loopsBack) * framesPerLoop;
+            for (const auto* event : clientEventsBetween(sequence, static_cast<float>(firstFrame - start),
+                                                         static_cast<float>(lastFrame - start))) {
+                events.push_back(
+                    {.event = event,
+                     .intoPlay = nx::Seconds{static_cast<float>((start + event->frame) / rate)}});
+            }
+        }
+        return events;
+    }
     const float now = sequenceFrameAt(sequence, pose->intoIt, kOwnSpeed).value();
     // A play already passed goes on from the frame it was at; a new one plays its events from its first.
-    const float before = m_lastPose && m_lastPose->isSamePlay(*pose)
-                             ? sequenceFrameAt(sequence, m_lastPose->intoIt, kOwnSpeed).value()
-                             : kBeforeTheFirstFrame;
-    m_lastPose = pose;
+    const float before =
+        continued ? sequenceFrameAt(sequence, previous, kOwnSpeed).value() : kBeforeTheFirstFrame;
     return clientEventsBetween(sequence, before, now) |
            std::views::transform([&sequence, now, &pose](const nx::assets::StudioEvent* event) {
                return PassedEvent{

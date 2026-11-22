@@ -73,6 +73,36 @@ TEST(WindowTest, PollingAppendsWithoutAskingToClose) {
     }));
 }
 
+TEST(WindowTest, AWindowedResolutionChangesTheDrawableSize) {
+    auto window = openWindow();
+    ASSERT_TRUE(window.has_value());
+    constexpr PixelSize kRequested{.width = 800, .height = 600};
+    const auto resized = window->setMode(nx::platform::WindowMode::Windowed, kRequested);
+    ASSERT_TRUE(resized.has_value()) << nx::describe(resized.error());
+    EXPECT_EQ(window->mode(), nx::platform::WindowMode::Windowed);
+    EXPECT_EQ(window->pixelSize(), kRequested);
+}
+
+TEST(WindowTest, AbsoluteMouseModeCanHideAndRestoreTheNativeCursor) {
+    auto window = openWindow();
+    ASSERT_TRUE(window.has_value());
+    const auto shown = window->setMouseMode(nx::platform::MouseMode::Absolute);
+    ASSERT_TRUE(shown.has_value()) << nx::describe(shown.error());
+    ASSERT_TRUE(SDL_CursorVisible());
+    const auto hidden = window->setMouseMode(nx::platform::MouseMode::AbsoluteHidden, true);
+    ASSERT_TRUE(hidden.has_value()) << nx::describe(hidden.error());
+    EXPECT_FALSE(SDL_CursorVisible());
+    int count = 0;
+    SDL_Window** const windows = SDL_GetWindows(&count);
+    const bool usesRelativeMotion = count == 1 && SDL_GetWindowRelativeMouseMode(windows[0]);
+    SDL_free(windows);
+    EXPECT_EQ(count, 1);
+    EXPECT_FALSE(usesRelativeMotion);
+    const auto restored = window->setMouseMode(nx::platform::MouseMode::Absolute);
+    ASSERT_TRUE(restored.has_value()) << nx::describe(restored.error());
+    EXPECT_TRUE(SDL_CursorVisible());
+}
+
 TEST(WindowTest, TextInputTurnsOnAndOff) {
     auto window = openWindow();
     ASSERT_TRUE(window.has_value());

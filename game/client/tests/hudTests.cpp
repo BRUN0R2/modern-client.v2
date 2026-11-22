@@ -446,9 +446,17 @@ TEST(CrosshairTest, ItsCvarsAreTheOriginalsAndRefuseWhatItCannotDraw) {
     EXPECT_FALSE(console.setCvar("cl_crosshair_color", "300 0 0").has_value());
     EXPECT_FALSE(console.setCvar("cl_crosshair_color", "50 250").has_value());
     EXPECT_FALSE(console.setCvar("cl_crosshair_size", "huge").has_value());
+    EXPECT_TRUE(console.setCvar("cl_crosshair_style", "dynamic").has_value());
+    EXPECT_FALSE(console.setCvar("cl_crosshair_style", "unknown").has_value());
+    EXPECT_TRUE(console.setCvar("cl_crosshair_recoil", "1").has_value());
+    EXPECT_TRUE(console.setCvar("cl_crosshairthickness", "2.5").has_value());
+    EXPECT_FALSE(console.setCvar("cl_crosshairgap", "-1").has_value());
     const cs::CrosshairStyle changed = cvars->crosshair();
     EXPECT_EQ(changed.color, (nx::render::ScreenColor{.red = 255, .green = 255, .blue = 255}));
     EXPECT_EQ(changed.size, cs::CrosshairSize::Small);
+    EXPECT_EQ(changed.type, cs::CrosshairType::Dynamic);
+    EXPECT_TRUE(changed.followsRecoil);
+    EXPECT_FLOAT_EQ(changed.thickness, 2.5F);
     EXPECT_FALSE(changed.isTranslucent);
 }
 

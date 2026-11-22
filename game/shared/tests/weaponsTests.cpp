@@ -9,7 +9,10 @@
 import std;
 import nx.core;
 import nx.platform;
+import nx.assets;
 import cs.shared;
+
+#include "temporaryDirectory.hpp"
 
 namespace {
 
@@ -24,7 +27,7 @@ using cs::WeaponSlot;
 
 /// The repository's data/cstrike/.
 [[nodiscard]] auto dataFolder() -> std::filesystem::path {
-    return std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike";
+    return nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike";
 }
 
 [[nodiscard]] auto textOf(const std::filesystem::path& file) -> std::string {
@@ -111,6 +114,66 @@ maxSpeed = 221.0
 [[nodiscard]] auto nineMillimeter() -> AmmoTypes {
     return AmmoTypes{
         .ammo = {AmmoType{.id = "9mm", .maxCarried = 120, .boxPrice = nx::Money{20}, .boxRounds = 30}}};
+}
+
+TEST(WeaponContentTest, LoadsLocalDefinitionsIntoTheCatalog) {
+    nx::test::TemporaryDirectory addons;
+    addons.write("weapons/localgun.toml", weaponText(R"(
+id = "localgun"
+classname = "weapon_localgun"
+name = "Local Gun"
+slot = "primary"
+position = 99
+weight = 25
+maxSpeed = 221.0
+)",
+                                                     R"(
+[purchase]
+buyers = "everyone"
+price = 700
+menu = { tab = "rifles", key = 8, picture = "gfx/vgui/local.tga", counterTerroristKey = 7 }
+
+[magazine]
+ammo = "localammo"
+clipSize = 10
+)"));
+    addons.write("ammo.toml", R"(
+[[ammo]]
+id = "localammo"
+name = "Local Ammo"
+maxCarried = 50
+boxPrice = 25
+boxRounds = 10
+picture = { sprite = "sprites/local.spr", x = 0, y = 0, width = 24, height = 24 }
+penetrationPower = 10
+penetrationDistance = 100.0
+)");
+    addons.write("loadouts.toml", R"(
+[[loadouts]]
+team = "terrorists"
+weapons = ["knife"]
+ammo = []
+
+[[loadouts]]
+team = "counterTerrorists"
+weapons = ["localgun"]
+ammo = [{ id = "localammo", rounds = 10 }]
+)");
+    auto vfs = nx::assets::Vfs::create(std::array{addons.path()});
+    ASSERT_TRUE(vfs.has_value());
+    const auto content = cs::readGameContent(dataFolder().parent_path(), std::move(*vfs), addons.path());
+    ASSERT_TRUE(content.has_value()) << nx::describe(content.error());
+    const Weapon* const local = content->weapons.findWeapon("localgun");
+    ASSERT_NE(local, nullptr);
+    ASSERT_TRUE(local->purchase && local->purchase->menu);
+    EXPECT_EQ(local->purchase->menu->counterTerroristKey, 7U);
+    EXPECT_NE(content->weapons.findWeapon("usp"), nullptr);
+    EXPECT_NE(content->weapons.findAmmo("localammo"), nullptr);
+    const cs::Loadout* const ct = content->loadouts.find(Team::CounterTerrorists);
+    const cs::Loadout* const tr = content->loadouts.find(Team::Terrorists);
+    ASSERT_TRUE(ct && tr);
+    EXPECT_EQ(ct->weapons, (std::vector<std::string>{"localgun"}));
+    EXPECT_EQ(tr->weapons, (std::vector<std::string>{"knife"}));
 }
 
 TEST(WeaponAppearanceSchemaTest, keepsOriginalDefaultsWhenAppearanceIsOmitted) {

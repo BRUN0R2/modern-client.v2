@@ -100,6 +100,22 @@ TEST(ClientCvarsTest, TheWindowModeAcceptsOnlySupportedChoices) {
     EXPECT_EQ(cvars->video.windowMode.value(), WindowMode::Windowed);
 }
 
+TEST(ClientCvarsTest, ResolutionAcceptsPositivePixelDimensionsOrAutomatic) {
+    SilentOutput output;
+    NoFiles files;
+    nx::console::Console console{output, files};
+    const auto cvars = nx::settings::registerClientCvars(console);
+    ASSERT_TRUE(cvars.has_value());
+    EXPECT_EQ(cvars->video.resolution.value(), "auto");
+    ASSERT_TRUE(console.setCvar("vid_resolution", "1280x960").has_value());
+    EXPECT_EQ(nx::settings::resolutionOf(cvars->video.resolution.value()),
+              (nx::platform::PixelSize{.width = 1280, .height = 960}));
+    for (std::string_view bad : {"0x960", "1280x0", "1280", "1280x960x1", "99999x960", "-1x960", "1x1"}) {
+        EXPECT_FALSE(console.setCvar("vid_resolution", bad).has_value()) << bad;
+    }
+    EXPECT_TRUE(console.archivedCvars().contains(R"(vid_resolution "1280x960")"));
+}
+
 TEST(ClientCvarsTest, KeyboardMappingIsTypedArchivedAndChangesExplicitly) {
     SilentOutput output;
     NoFiles files;

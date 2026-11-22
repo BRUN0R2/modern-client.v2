@@ -16,7 +16,14 @@ import :menuDesign;
 export namespace cs {
 
 /// How many tabs a page of the menu has across it: the options'.
-inline constexpr std::size_t kPageTabs = 5;
+inline constexpr std::size_t kPageTabs = 6;
+
+struct ChoiceMenuLayout {
+    nx::ui::PixelRect bounds{};
+    std::size_t rows = 0;
+
+    [[nodiscard]] auto item(std::size_t index) const noexcept -> nx::ui::PixelRect;
+};
 
 /// The main menu's parts on a screen.
 class MainMenuLayout {
@@ -31,7 +38,7 @@ public:
 
     /// The whole screen, which the menu covers.
     [[nodiscard]] inline auto screen() const noexcept -> const nx::ui::PixelRect& { return screenRect; }
-    /// Where the game's name is written: its line's top left.
+    /// The logo's top left.
     [[nodiscard]] inline auto title() const noexcept -> const nx::ui::PixelPoint& { return titlePoint; }
     /// The item at `index`, from the top.
     [[nodiscard]] auto item(std::size_t index) const noexcept -> nx::ui::PixelRect;
@@ -45,6 +52,9 @@ public:
     [[nodiscard]] inline auto page() const noexcept -> const nx::ui::PixelRect& { return pageRect; }
     /// Where the page's name is written: its line's top left.
     [[nodiscard]] auto pageTitle() const noexcept -> nx::ui::PixelPoint;
+    /// Reserves space beside the options list for the crosshair preview.
+    [[nodiscard]] auto withCrosshairPreview() const noexcept -> MainMenuLayout;
+    [[nodiscard]] auto crosshairPreview() const noexcept -> nx::ui::PixelRect;
     /// How many rows of a list the page shows at once, one at least.
     [[nodiscard]] auto listRows() const noexcept -> std::size_t;
     /// The row at `row` of those the page's list shows, from the top.
@@ -59,6 +69,8 @@ public:
     [[nodiscard]] auto optionTab(std::size_t index) const noexcept -> nx::ui::PixelRect;
     /// What changes the setting on the row at `row` of the list: the right of the row.
     [[nodiscard]] auto optionControl(std::size_t row) const noexcept -> nx::ui::PixelRect;
+    [[nodiscard]] auto optionField(std::size_t row) const noexcept -> nx::ui::PixelRect;
+    [[nodiscard]] auto choiceMenu(std::size_t row, std::size_t count) const noexcept -> ChoiceMenuLayout;
     /// The track of a slider on the row at `row`: the left of what changes its setting, its value written
     /// after it.
     [[nodiscard]] auto optionTrack(std::size_t row) const noexcept -> nx::ui::PixelRect;
@@ -75,6 +87,7 @@ private:
     nx::ui::PixelRect firstItem{};
     nx::ui::PixelPoint hintsPoint{};
     nx::ui::PixelRect pageRect{};
+    nx::Pixels previewSpace{};
 };
 
 } // namespace cs

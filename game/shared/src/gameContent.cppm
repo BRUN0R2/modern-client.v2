@@ -98,8 +98,11 @@ struct GameContent {
 /// project's data/ folder, the entity classes, the weapons, each in the file named after its id, the
 /// loadouts, the money of the rounds, what buying costs, what the buy menu shows, the footsteps, the breath,
 /// the hit groups, the player's harm, its use, the characters and the world's light styles; what the textures
-/// are made of, from `vfs`. Errors: Unavailable.
-[[nodiscard]] auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
+/// are made of, from `vfs`. When present, `addons/weapons/` adds or replaces weapons by id, and
+/// `addons/ammo.toml` adds ammo types. `addons/loadouts.toml` can supply both teams' spawn loadouts.
+/// Errors: Unavailable.
+[[nodiscard]] auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs,
+                                   const std::optional<std::filesystem::path>& addons = std::nullopt)
     -> nx::Result<GameContent, GameContentError>;
 
 } // namespace cs

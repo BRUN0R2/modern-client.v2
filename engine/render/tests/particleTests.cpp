@@ -106,10 +106,11 @@ void append(std::vector<std::byte>& bytes, Value value) {
 /// The pixels of `particles` and `streaks` seen from the origin along +X.
 [[nodiscard]] auto drawn(OffscreenTarget& target, nx::render::ParticleRenderer& renderer,
                          std::span<const ParticleInstance> particles,
-                         std::span<const StreakInstance> streaks = {}) -> std::vector<std::byte> {
+                         std::span<const StreakInstance> streaks = {},
+                         std::span<const StreakInstance> tracers = {}) -> std::vector<std::byte> {
     return target.draw([&](nx::rhi::CommandList& list) {
-        const auto drawnParticles =
-            renderer.draw(list, {.aspect = 1.0F, .particles = particles, .streaks = streaks});
+        const auto drawnParticles = renderer.draw(
+            list, {.aspect = 1.0F, .particles = particles, .streaks = streaks, .tracers = tracers});
         EXPECT_TRUE(drawnParticles.has_value())
             << (drawnParticles ? "" : nx::describe(drawnParticles.error()));
     });
@@ -193,6 +194,28 @@ TEST(ParticleRendererTest, AStreakIsItsSpriteAlongItsLineAddedInItsColorOnceItHa
                                           .color = kAcross.color,
                                           .amount = 255}};
     expectNear(pixelAt(drawn(target, *renderer, {}, endOn), kMiddle, kMiddle), {0, 0, 0}, "end on");
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(ParticleRendererTest, ABulletTracerUsesItsTintWithoutALegacyStreakSprite) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    std::optional<nx::render::ParticleRenderer> renderer = rendererOf(**device);
+    ASSERT_TRUE(renderer.has_value());
+    OffscreenTarget target{**device};
+    StreakInstance tracer = kAcross;
+    tracer.color = {.blue = 255};
+    const std::array tracers{tracer};
+    const auto pixels = drawn(target, *renderer, {}, {}, tracers);
+    const Pixel center = pixelAt(pixels, kMiddle, kMiddle);
+    EXPECT_EQ(center.at(0), 0);
+    EXPECT_EQ(center.at(1), 0);
+    EXPECT_GT(center.at(2), 0);
+    expectNear(pixelAt(pixels, kMiddle, kAboveTheStreak), {0, 0, 0}, "beyond the tracer");
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

@@ -88,9 +88,6 @@ auto openVideo(const ClientOptions& options, bool isVsync, std::span<const std::
     if (!sleepTimer) {
         return nx::fail(ClientError::GpuFailed, "the frame's pace", std::move(sleepTimer.error()));
     }
-    if (auto captured = window->setMouseMode(nx::platform::MouseMode::Relative); !captured) {
-        nx::log::warning(kLog, "{}", nx::describe(captured.error())); // the keys still play
-    }
     return Video{.window = std::move(*window),
                  .device = std::move(*device),
                  .swapchain = std::move(*swapchain),

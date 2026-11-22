@@ -114,7 +114,9 @@ struct WeaponMenuPlace {
     BuyTab tab{};
     /// The key that buys it once its tab is open, as the original's submenu numbers it, from 1 to 9.
     std::uint32_t key{};
-    std::string picture{}; ///< Its picture, a TGA among the game's files.
+    std::string picture{};                              ///< Its picture, a TGA among the game's files.
+    std::optional<std::uint32_t> terroristKey{};        ///< Overrides key for terrorists.
+    std::optional<std::uint32_t> counterTerroristKey{}; ///< Overrides key for counter-terrorists.
 };
 
 /// How a weapon is sold.
@@ -555,6 +557,10 @@ struct nx::meta::Description<cs::WeaponMenuPlace> {
         nx::meta::field<&cs::WeaponMenuPlace::tab>("tab"),
         nx::meta::field<&cs::WeaponMenuPlace::key>("key", nx::data::Range{.minimum = 1.0, .maximum = 9.0}),
         nx::meta::field<&cs::WeaponMenuPlace::picture>("picture"),
+        nx::meta::field<&cs::WeaponMenuPlace::terroristKey>("terroristKey",
+                                                            nx::data::Range{.minimum = 1.0, .maximum = 9.0}),
+        nx::meta::field<&cs::WeaponMenuPlace::counterTerroristKey>(
+            "counterTerroristKey", nx::data::Range{.minimum = 1.0, .maximum = 9.0}),
     };
 };
 

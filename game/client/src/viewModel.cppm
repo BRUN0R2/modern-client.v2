@@ -13,6 +13,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.assets;
+import nx.console;
 import nx.rhi;
 import nx.render;
 import cs.shared;
@@ -31,6 +32,43 @@ enum class ViewModelError : std::uint8_t {
     NoSequence,   ///< It lacks a sequence its weapon's data plays.
     NoAppearance, ///< Its static skin/body choices cannot be bound, or its alternate declares them or
                   ///< its muzzle flashes' look.
+};
+
+/// Translation of the weapon in camera space, in Hammer units.
+struct ViewModelOffset {
+    nx::HammerUnits right{};
+    nx::HammerUnits forward{};
+    nx::HammerUnits up{};
+};
+
+/// The view model offsets the console and menu accept in either direction.
+inline constexpr float kMaxViewModelSideOffset = 2.5F;
+inline constexpr float kMaxViewModelDepthOffset = 2.0F;
+
+/// The local movement of the weapon while walking. A session starts with no motion.
+class ViewModelBob {
+public:
+    /// Smooths the speed and advances the walking cycle by this frame's elapsed time.
+    void update(nx::UnitsPerSecond groundSpeed, nx::Seconds elapsed) noexcept;
+
+    /// The camera-space motion at the game's fixed intensity.
+    [[nodiscard]] auto offset() const noexcept -> ViewModelOffset;
+
+private:
+    float speedShare = 0.0F;
+    float phase = 0.0F; ///< Radians into the walking cycle.
+};
+
+/// Archived client settings for the position of the held weapon.
+struct ViewModelCvars {
+    nx::console::Cvar<float> right;
+    nx::console::Cvar<float> forward;
+    nx::console::Cvar<float> up;
+
+    [[nodiscard]] static auto registerIn(nx::console::Console& console)
+        -> nx::Result<ViewModelCvars, nx::console::CvarError>;
+    /// The configured offsets plus the motion of this frame.
+    [[nodiscard]] auto offset(const ViewModelBob& motion) const noexcept -> ViewModelOffset;
 };
 
 /// What a frame shows of the view model: the weapon's, its sequence, when it started, and how far
@@ -88,9 +126,10 @@ public:
 
     /// Its bones `intoIt` into its sequence `sequence`, which must be one of its, played from its
     /// first frame (cs::sequenceFrameAt), in `hand` of a player whose eye and view are `camera`'s:
-    /// from each bone's space to the world, mirrored across the view's right when isMirroredIn it.
+    /// from each bone's space to the world, mirrored across the view's right when isMirroredIn it,
+    /// then translated in camera space by `offset`.
     [[nodiscard]] auto pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt,
-                            Hand hand) const -> std::vector<nx::Mat3x4>;
+                            Hand hand, ViewModelOffset offset = {}) const -> std::vector<nx::Mat3x4>;
 
     /// Whether it is drawn mirrored in the player's `hand`: modeled in the other one, its weapon's
     /// `viewHand`.
@@ -111,6 +150,11 @@ public:
     /// Where its attachment `attachment` is, its bones posed as `bones` says (what pose gave); none
     /// when it has no such attachment.
     [[nodiscard]] auto attachmentAt(std::span<const nx::Mat3x4> bones, std::uint32_t attachment) const
+        -> std::optional<nx::Vec3>;
+
+    /// The muzzle of the firing `sequence` in the currently posed `bones`. Uses its first flash
+    /// event's attachment, or the conventional first attachment when the sequence has no flash.
+    [[nodiscard]] auto muzzleAt(std::span<const nx::Mat3x4> bones, std::uint32_t sequence) const
         -> std::optional<nx::Vec3>;
 
     /// The names of the sounds its sound events (kSoundEvent) play, those of its sequences in their
@@ -151,7 +195,7 @@ private:
 
 /// The client events the view model passes, frame after frame, as the original's client plays them
 /// (Xash3D's R_StudioClientEvents, GPL, consulted: docs/20 section 3): those of the sequence it plays
-/// from the frame it was at in the last frame, or from before its first frame when a play starts.
+/// since the last frame, across loops, or from before its first frame when a play starts.
 class ViewModelEvents {
 public:
     /// The client events `viewModel`, that of the weapon of `pose`, passed since the last call's pose,

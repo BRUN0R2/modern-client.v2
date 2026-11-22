@@ -59,6 +59,18 @@ struct Impact {
     [[nodiscard]] inline auto operator==(const Impact&) const noexcept -> bool = default;
 };
 
+/// The default amber of a bullet tracer.
+inline constexpr nx::assets::PaletteColor kDefaultBulletTracerColor{.red = 255, .green = 217, .blue = 141};
+
+/// The path and tint of a shot, with its shooter and firing animation to locate its visual muzzle.
+struct BulletTracer {
+    nx::Vec3 origin{};
+    nx::Vec3 end{};
+    nx::assets::PaletteColor color = kDefaultBulletTracerColor;
+    PlayerIndex shooter{};
+    ViewAnimation animation{};
+};
+
 /// The blood a hit sprays where it met a body (TE_BLOODSPRITE): the point, the way the hit went, the
 /// palette entry of its color, its size (spraySizeOf), and where on the body it met it. The original's
 /// carries neither the way nor the hit group, which the enhanced look sprays it by.
@@ -255,6 +267,7 @@ struct PlayerSnapshot {
     /// player and each's as it made them, until interest management keeps those it may hear.
     std::vector<PlayerSound> playerSounds{};
     std::vector<Impact> impacts{};              ///< Of the tick's shots, in their order.
+    std::vector<BulletTracer> bulletTracers{};  ///< Of the tick's shots, in their order.
     std::vector<BloodMark> bloodMarks{};        ///< Of the tick's hits, in their order.
     std::vector<BloodSpray> bloodSprays{};      ///< Of the tick's hits, in their order.
     std::vector<BloodStream> bloodStreams{};    ///< Of the tick's hits in the head, in their order.

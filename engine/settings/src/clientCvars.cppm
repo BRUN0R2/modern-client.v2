@@ -42,6 +42,7 @@ struct VideoCvars {
     console::Cvar<bool> fpsOverride; ///< `fps_override`: lifts frameIntervalOf's ceiling of 100.
     console::Cvar<bool> vsync;       ///< `gl_vsync`: frames wait for the display's refresh.
     console::Cvar<platform::WindowMode> windowMode; ///< `vid_mode`.
+    console::Cvar<std::string> resolution;          ///< `vid_resolution`, auto or WIDTHxHEIGHT.
     console::Cvar<float> gamma;
     console::Cvar<float> brightness;
     console::Cvar<float> textureGamma; ///< `texgamma`.
@@ -54,6 +55,9 @@ struct VideoCvars {
     /// `mp_decals`: what r_decals is held to in a game of more than one player.
     console::Cvar<std::int32_t> multiplayerDecals;
 };
+
+/// The pixel size of a validated resolution string. The automatic selection has no explicit size.
+[[nodiscard]] auto resolutionOf(std::string_view text) noexcept -> std::optional<platform::PixelSize>;
 
 /// The ranges the original holds the picture's cvars to (V_CheckGamma): `gamma`, `texgamma` and
 /// `lightgamma` from 1.8 to 3, `brightness` from 0 to 3.

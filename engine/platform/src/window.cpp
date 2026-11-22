@@ -39,6 +39,15 @@ static_assert(std::to_underlying(MouseButton::Left) == SDL_BUTTON_LEFT &&
     return SDL_GetError();
 }
 
+/// Converts a display mode's screen coordinates to drawable pixels.
+[[nodiscard]] auto pixelsOf(const SDL_DisplayMode& mode) noexcept -> PixelSize {
+    return {.width = narrow<std::uint32_t>(std::lround(static_cast<float>(mode.w) * mode.pixel_density)),
+            .height = narrow<std::uint32_t>(std::lround(static_cast<float>(mode.h) * mode.pixel_density))};
+}
+
+/// The modes reported by SDL, in its preferred order within a resolution.
+using DisplayModes = std::unique_ptr<SDL_DisplayMode*, decltype(&SDL_free)>;
+
 /// How many windows SDL has open; its video subsystem must be started.
 [[nodiscard]] auto openWindowCount() noexcept -> int {
     int count = 0;
@@ -181,28 +190,63 @@ auto Window::mode() const noexcept -> WindowMode {
     return SDL_GetWindowFullscreenMode(window) == nullptr ? WindowMode::Borderless : WindowMode::Fullscreen;
 }
 
-auto Window::setMode(WindowMode requested) -> Result<void, WindowError> {
-    if (mode() == requested) {
-        return {};
+auto Window::displayResolutions() const -> std::vector<PixelSize> {
+    const SDL_DisplayID display = SDL_GetDisplayForWindow(windowOf(m_window));
+    int count = 0;
+    const DisplayModes modes{SDL_GetFullscreenDisplayModes(display, &count), SDL_free};
+    std::vector<PixelSize> resolutions;
+    if (modes) {
+        for (const SDL_DisplayMode* mode : std::span{modes.get(), static_cast<std::size_t>(count)}) {
+            resolutions.push_back(pixelsOf(*mode));
+        }
     }
-    SDL_Window* window = windowOf(m_window);
+    if (const auto* desktop = SDL_GetDesktopDisplayMode(display)) {
+        resolutions.push_back(pixelsOf(*desktop));
+    }
+    std::ranges::sort(resolutions, {}, [](PixelSize size) { return std::pair{size.width, size.height}; });
+    resolutions.erase(std::ranges::unique(resolutions).begin(), resolutions.end());
+    return resolutions;
+}
+
+auto Window::setMode(WindowMode requested, std::optional<PixelSize> resolution) -> Result<void, WindowError> {
+    SDL_Window* const window = windowOf(m_window);
     if (requested == WindowMode::Windowed) {
-        if (!SDL_SetWindowFullscreen(window, false)) {
-            return fail(WindowError::ModeUnavailable, std::format("SDL_SetWindowFullscreen: {}", sdlError()));
+        if (mode() != WindowMode::Windowed &&
+            (!SDL_SetWindowFullscreen(window, false) || !SDL_SyncWindow(window))) {
+            return fail(WindowError::ModeUnavailable, std::format("leaving fullscreen: {}", sdlError()));
+        }
+        const PixelSize size = resolution.value_or(kDefaultWindowSize);
+        const float density = SDL_GetWindowPixelDensity(window);
+        if (density <= 0.0F ||
+            !SDL_SetWindowSize(window, narrow<int>(std::lround(static_cast<float>(size.width) / density)),
+                               narrow<int>(std::lround(static_cast<float>(size.height) / density)))) {
+            return fail(WindowError::ModeUnavailable, std::format("setting the window size: {}", sdlError()));
         }
     } else {
-        SDL_DisplayMode displayMode{};
         const SDL_DisplayMode* exclusive = nullptr;
+        int count = 0;
+        const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+        const DisplayModes modes{requested == WindowMode::Fullscreen && resolution
+                                     ? SDL_GetFullscreenDisplayModes(display, &count)
+                                     : nullptr,
+                                 SDL_free};
         if (requested == WindowMode::Fullscreen) {
-            const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
-            const SDL_DisplayMode* desktop = SDL_GetDesktopDisplayMode(display);
-            if (desktop == nullptr ||
-                !SDL_GetClosestFullscreenDisplayMode(display, desktop->w, desktop->h, desktop->refresh_rate,
-                                                     true, &displayMode)) {
-                return fail(WindowError::ModeUnavailable,
-                            std::format("fullscreen display mode: {}", sdlError()));
+            exclusive = SDL_GetDesktopDisplayMode(display);
+            if (resolution && (!exclusive || pixelsOf(*exclusive) != *resolution)) {
+                exclusive = nullptr;
+                if (modes) {
+                    for (const auto* mode : std::span{modes.get(), static_cast<std::size_t>(count)}) {
+                        if (pixelsOf(*mode) == *resolution) {
+                            exclusive = mode;
+                            break;
+                        }
+                    }
+                }
             }
-            exclusive = &displayMode;
+            if (exclusive == nullptr) {
+                return fail(WindowError::ModeUnavailable,
+                            "the display does not support the fullscreen resolution");
+            }
         }
         if (!SDL_SetWindowFullscreenMode(window, exclusive) || !SDL_SetWindowFullscreen(window, true)) {
             return fail(WindowError::ModeUnavailable, std::format("fullscreen transition: {}", sdlError()));
@@ -218,17 +262,49 @@ auto Window::setMode(WindowMode requested) -> Result<void, WindowError> {
 }
 
 auto Window::mousePosition() const noexcept -> MousePosition {
+    SDL_Window* const window = windowOf(m_window);
     MousePosition position;
     // SDL tells it in the window's own units, which a desktop's scaling makes fewer than its pixels.
     std::ignore = SDL_GetMouseState(&position.x, &position.y);
-    const float density = SDL_GetWindowPixelDensity(windowOf(m_window));
-    return {.x = position.x * density, .y = position.y * density};
+#ifdef _WIN32
+    // The cached mouse position can be stale after a fullscreen switch until SDL gets mouse motion.
+    // Read the desktop position directly while fullscreen menus use absolute coordinates.
+    if ((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0 &&
+        !SDL_GetWindowRelativeMouseMode(window)) {
+        int x = 0;
+        int y = 0;
+        if (SDL_GetWindowPosition(window, &x, &y)) {
+            std::ignore = SDL_GetGlobalMouseState(&position.x, &position.y);
+            position.x -= static_cast<float>(x);
+            position.y -= static_cast<float>(y);
+        }
+    }
+#endif
+    int width = 0;
+    int height = 0;
+    const auto pixels = pixelSize();
+    if (SDL_GetWindowSize(window, &width, &height) && pixels && width > 0 && height > 0) {
+        position.x *= static_cast<float>(pixels->width) / static_cast<float>(width);
+        position.y *= static_cast<float>(pixels->height) / static_cast<float>(height);
+    }
+    return position;
 }
 
-auto Window::setMouseMode(MouseMode mode) -> Result<void, WindowError> {
-    if (!SDL_SetWindowRelativeMouseMode(windowOf(m_window), mode == MouseMode::Relative)) {
+auto Window::setMouseMode(MouseMode mode, bool redrawCursor) -> Result<void, WindowError> {
+    SDL_Window* const window = windowOf(m_window);
+    const bool relative = mode == MouseMode::Relative;
+    if (SDL_GetWindowRelativeMouseMode(window) != relative &&
+        !SDL_SetWindowRelativeMouseMode(window, relative)) {
         return fail(WindowError::RelativeMouseUnavailable,
                     std::format("SDL_SetWindowRelativeMouseMode: {}", sdlError()));
+    }
+    const bool showNativeCursor = mode == MouseMode::Absolute;
+    if (!relative && SDL_CursorVisible() != showNativeCursor &&
+        !(showNativeCursor ? SDL_ShowCursor() : SDL_HideCursor())) {
+        return fail(WindowError::CursorUnavailable, sdlError());
+    }
+    if (showNativeCursor && redrawCursor && !SDL_SetCursor(nullptr)) {
+        return fail(WindowError::CursorUnavailable, sdlError());
     }
     return {};
 }

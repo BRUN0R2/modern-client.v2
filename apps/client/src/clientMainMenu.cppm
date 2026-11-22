@@ -25,7 +25,7 @@ public:
     /// The menu of what the main menu of `content` lists, a new game played on one of its maps, its options
     /// those of `settings`, written in `texts`; `content` and `texts` must outlive it.
     ClientMainMenu(const cs::GameContent& content, const cs::Texts& texts,
-                   std::vector<cs::OptionRow> settings);
+                   std::vector<cs::OptionRow> settings, cs::CrosshairEditor crosshair);
 
     /// Writes in `texts` from now on, which must outlive it: what it laid out is laid out again.
     void writeIn(const cs::Texts& texts) noexcept;
@@ -47,11 +47,11 @@ public:
                 nx::rhi::Extent2d size, cs::MenuGame game, nx::console::Console& console);
 
     /// Puts what draws it on the GPU in `list` with `screen`, its faces from `fonts`, for a screen of `size`,
-    /// when they are not there for that height, and its background the first time. Errors: ContentUnavailable
-    /// (the project's fonts cannot be had), GpuFailed, with the cause.
+    /// when they are not there for that height, and its logo from `data` and background the first time.
+    /// Errors: ContentUnavailable (the project's fonts or logo cannot be loaded), GpuFailed, with the cause.
     [[nodiscard]] auto load(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
-                            nx::rhi::CommandList& list, nx::rhi::Extent2d size)
-        -> nx::Result<void, ClientError>;
+                            nx::rhi::CommandList& list, nx::rhi::Extent2d size,
+                            const std::filesystem::path& data) -> nx::Result<void, ClientError>;
 
     /// While it is open: the menu over the frame, of the `size` it was loaded for, while `game`.
     void append(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size, cs::MenuGame game);

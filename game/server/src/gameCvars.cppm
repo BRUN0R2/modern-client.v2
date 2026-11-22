@@ -11,6 +11,7 @@ export module cs.server:gameCvars;
 import std;
 import nx.core;
 import nx.console;
+import nx.assets;
 import cs.shared;
 
 export namespace cs {
@@ -29,6 +30,8 @@ struct GameCvars {
     nx::console::Cvar<float> footsteps;    ///< `mp_footsteps`, read at each step.
     nx::console::Cvar<float> friendlyFire; ///< `mp_friendlyfire`, read at each attack.
     nx::console::Cvar<float> buyTime;      ///< `mp_buytime`, read at each purchase.
+
+    nx::console::Cvar<std::string> tracerColor; ///< `sv_tracer_color`, read at each shot.
 
     /// Registers them in `console`. Errors: those of Console::registerCvar.
     [[nodiscard]] static auto registerIn(nx::console::Console& console)
@@ -49,6 +52,8 @@ struct GameCvars {
     [[nodiscard]] auto isFriendlyFireOn() const -> bool;
     /// How long a round's players buy for, mp_buytime set back where it is held (readBuyTime).
     [[nodiscard]] auto buyingTime() const -> nx::Seconds;
+    /// The tint of a shot's visual tracer.
+    [[nodiscard]] auto bulletTracerColor() const -> nx::assets::PaletteColor;
 };
 
 } // namespace cs

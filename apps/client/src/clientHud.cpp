@@ -5,6 +5,7 @@ module app.client;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.console;
 import nx.rhi;
 import nx.render;
@@ -131,18 +132,24 @@ void ClientHud::appendHud(std::vector<nx::render::ScreenQuad>& quads, const HudF
     }
     const cs::ClientGame& client = frame.session.client;
     if (hud) {
-        // The HUD, over the scene, the knife's crosshair in the middle but under the buy menu.
         const cs::PlayerStatus& status = client.status();
-        hud->append(
-            quads,
-            {.health = status.health,
-             .armor = status.armor,
-             .armorKind = status.armorKind,
-             .money = status.money,
-             .ammo = cs::hudAmmoOf(client.inventory(), frame.content.weapons),
-             .crosshairDistance = isMenuShown ? std::nullopt : std::optional{cs::kKnifeCrosshairDistance},
-             .roundTime = client.roundTimeShown()},
-            frame.settings.hud.crosshair(), frame.size);
+        const cs::CrosshairStyle crosshair = frame.settings.hud.crosshair();
+        const nx::EulerAngles punch = client.punch();
+        const nx::render::ScreenPoint offset = crosshair.followsRecoil
+                                                   ? cs::crosshairRecoilOffset(frame.view, punch, frame.size)
+                                                   : nx::render::ScreenPoint{};
+        const auto distance = cs::crosshairDistanceOf(crosshair, punch);
+        hud->append(quads,
+                    {.health = status.health,
+                     .armor = status.armor,
+                     .armorKind = status.armorKind,
+                     .money = status.money,
+                     .ammo = cs::hudAmmoOf(client.inventory(), frame.content.weapons),
+                     .crosshairDistance = isMenuShown ? std::nullopt : std::optional{distance},
+                     .roundTime = client.roundTimeShown(),
+                     .crosshairOffsetX = offset.x,
+                     .crosshairOffsetY = offset.y},
+                    crosshair, frame.size);
     }
     if (killFeed) {
         killFeed->append(quads, frame.size, frame.now, frame.settings.killFeed.shownFor(),

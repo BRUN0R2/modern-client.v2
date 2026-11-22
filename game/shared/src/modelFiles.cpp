@@ -15,6 +15,11 @@ using nx::assets::MdlView;
 using nx::assets::Vfs;
 using nx::assets::VfsPath;
 
+/// The engine's file system reads a leading slash as the game's folder.
+[[nodiscard]] auto relativeModelPath(std::string_view path) -> std::string_view {
+    return path.substr(std::min(path.find_first_not_of("/\\"), path.size()));
+}
+
 /// The bytes of the file at `path`, which `what` names. Errors: ReadFailed.
 [[nodiscard]] auto readFile(const Vfs& vfs, const nx::Result<VfsPath, nx::assets::VfsError>& path,
                             std::string_view what) -> nx::Result<std::vector<std::byte>, ModelFileError> {
@@ -34,8 +39,20 @@ using nx::assets::VfsPath;
         return std::vector<std::byte>{};
     }
     const MdlView& model = *files.view;
-    return readFile(vfs, VfsPath::parseGoldsrc(model.sequenceGroups()[group].fileName),
-                    std::format("the sequence group file of {:?}", model.sequences()[sequence.value].label));
+    const auto embedded = VfsPath::parseGoldsrc(model.sequenceGroups()[group].fileName);
+    const std::string context = std::format("the sequence group file of {:?} in {:?}",
+                                            model.sequences()[sequence.value].label, files.path);
+    if (embedded) {
+        const std::string_view modelPath = relativeModelPath(files.path);
+        const std::size_t directory = modelPath.find_last_of("/\\");
+        const std::string_view name = embedded->text().substr(embedded->text().rfind('/') + 1);
+        const auto adjacent =
+            VfsPath::parseGoldsrc(std::format("{}{}", modelPath.substr(0, directory + 1), name));
+        if (adjacent && vfs.contains(*adjacent)) {
+            return readFile(vfs, adjacent, context);
+        }
+    }
+    return readFile(vfs, embedded, context);
 }
 
 /// The decoded frames of sequence `sequence` of the model of `files`, from `groupBytes`, its group's
@@ -63,9 +80,7 @@ auto ModelFiles::texturesView() const -> const MdlView& {
 
 auto readModelFiles(const Vfs& vfs, std::string_view path, ModelTextures textures)
     -> nx::Result<std::unique_ptr<ModelFiles>, ModelFileError> {
-    // The engine's file system reads a leading slash as the game's folder.
-    const std::string_view relative = path.substr(std::min(path.find_first_not_of("/\\"), path.size()));
-    const auto at = VfsPath::parseGoldsrc(relative);
+    const auto at = VfsPath::parseGoldsrc(relativeModelPath(path));
     auto files = std::make_unique<ModelFiles>(ModelFiles{.path = std::string{path}});
     auto bytes = readFile(vfs, at, path);
     if (!bytes) {

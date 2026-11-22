@@ -415,9 +415,9 @@ project's own look. Its items are data, `data/cstrike/mainMenu.toml`, as the ori
 `resource/GameMenu.res`: what each does (`action`) and when the menu lists it (`listed`: `always`, or `inGame` for
 over a map played alone), from the top. Today it lists going back to the map played and leaving it, both over a map
 alone, a new game, the options, and ending the game; the server browser comes with what it opens. It shows
-the game's name at the top left and the items down the left, the last a fixed way over the screen's foot, where
-the original's menu stands, with the keys under them: over its background while no map is played, over the scene
-darkened while one is, which plays on under it, as a game of more than one player does.
+the project's logo (`data/cstrike/modernClientLogo.tga`) over a column of text rows near the lower left, with
+keyboard hints underneath and the selected row in gold. The navigation stands over the active background at
+startup and over the darkened scene during a game. The loading screen uses the same logo.
 
 Its background is the active content's own: `background` in the menu's data names a background layout among the
 game's files, the original's `resource/BackgroundLayout.txt`, which places the pictures of the original's menu
@@ -435,7 +435,7 @@ bound to that key, as in the original, the keys held for the game let go and the
 `toggleconsole` open the console's window over it; the other keys run no bind while it is open. An item does what
 the console's command does, queued as a bind queues its own (`app.client:mainMenu`): `disconnect`, `quit`. The
 fonts it writes in are the project's own; a client that cannot have them does not start. What it writes is in
-the player's language ([§7](#7-localization)), but the game's name.
+the player's language ([§7](#7-localization)).
 
 An item that has more to ask opens a centered panel and dims the menu behind it. **A
 new game** lists the game's maps, the `maps/<name>.bsp` of its own folders (`cs::mapNamesOf`: the user's content
@@ -449,10 +449,11 @@ multiplayer settings, keyboard, mouse, audio and video. A row names a setting an
 value written after its track; a switch, which says whether it is on; a choice among a few values, which
 writes the one chosen; the keys of an action; or a button. Today: `sensitivity` and the mouse reversed
 (`m_pitch` below zero, as the original's option sets it); `volume` and the sound while the window is not focused
-(`s_play_unfocused`); the windowed, borderless and exclusive fullscreen modes (`vid_mode`), and the frame
+(`s_play_unfocused`); the windowed, borderless and exclusive fullscreen modes (`vid_mode`), the display
+resolution (`vid_resolution`), and the frame
 limit (`fps_max`, up to 1000 FPS, enabling `fps_override` above 100),
 `gl_vsync`, `cl_showfps`, `hud_draw`, how the picture is made (`r_fidelity`), `gamma` and `brightness`;
-the player's name (`name`), `_cl_autowepswitch`, `cl_righthand`, the language (`cl_language`, among those
+the player's name (`name`), `_cl_autowepswitch`, `cl_righthand`, [weapon position and walking motion](#weapon-position-and-walking-motion), the language (`cl_language`, among those
 the game's data has) and the crosshair: its size (`cl_crosshair_size`), whether it is translucent (`cl_crosshair_translucent`), and its color
 by a slider for each of the red, the green and the blue `cl_crosshair_color` gives, from 0 to 255 by 5, which
 Counter-Strike 1.6's 50 and 250 are among. The original's options name five colors instead; their values wait
@@ -465,9 +466,8 @@ by tag. Brazilian Portuguese is the default. Set from the console to one the gam
 does not have, the row shows none chosen. The player's name is typed (`cs::OptionText`): Enter, or the left
 button, has it typed, the keys typing text then (the platform's `TextEntered`, `Client::typeAsNeeded`); what is
 typed goes in at its cursor, as much as `name` takes (`Cvar::accepts`), the keys edit it as a line of text
-does (`nx::ui::TextLine`), Enter sets it, once `name` takes it, and Escape leaves it as it was. While it is
-typed, every key is the page's, and the mouse does nothing; it shows in gold, its cursor drawn, scrolled
-within its row so that the cursor shows.
+does (`nx::ui::TextLine`). Enter, Tab or clicking away finishes the edit and saves a valid name. Escape
+discards the draft. The focused field shows in gold and scrolls to keep the cursor visible.
 
 **The keys** list the actions of the commands the client has, each with the keys that run it, as `bind` names
 them: moving, jumping, ducking, walking, using, firing, the weapon's special function, reloading, the last
@@ -737,6 +737,31 @@ Log levels are cvars too: `LogLevelCvars` registers one `log_level_<category>` p
 category the application passes in (`log_level_net debug`, or the level's number), and its
 `apply()`, called once a frame after `Console::execute`, copies the changed levels to the
 `Logger` ([02 §10](02-coding-standards.md#10-logging)).
+
+### Display resolution
+
+Options → Video lists the selected display's advertised resolutions. Windowed and exclusive fullscreen
+can select an explicit size. Borderless uses the desktop and displays its current resolution in the list.
+The archived `vid_resolution` takes `auto` or a pixel size such as `1280x960`. Automatic uses the usual
+window size in windowed mode and the desktop mode in exclusive fullscreen. If the window system rejects
+a mode or resolution change, the client restores the previous setting.
+
+### Weapon position and walking motion
+
+Under Options → Game, each player can adjust the held weapon's position in camera space. The
+archived cvars `viewmodel_offset_x`, `viewmodel_offset_y` and `viewmodel_offset_z` shift it to the
+right, forward and up respectively, in Hammer units. X accepts -2.5 to 2.5, and Y and Z accept -2
+to 2. All three default to 0. The axes follow the camera and have the same meaning in either hand.
+
+The weapon's walking motion uses a fixed, subtle intensity. It follows ground speed and fades as the
+player stops or leaves the ground. The position can also be set in the console or in the player's
+`userconfig.cfg`.
+
+### Bullet tracer color
+
+Set `sv_tracer_color` on the listen server to six hexadecimal digits in RGB order, for example
+`sv_tracer_color 35BEFF` for blue. The default is `FFD98D` (amber). The new color is sent with each
+subsequent shot in the player snapshot. Players can hide the effect with `r_drawtracers 0`.
 
 ## 6. Input
 

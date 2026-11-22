@@ -20,6 +20,7 @@ GameState::GameState(const GameContent& gameContent, const GameMap& gameMap, Gam
 
 void TickEvents::clear() noexcept {
     impacts.clear();
+    bulletTracers.clear();
     entitySteps.clear();
     bloodMarks.clear();
     bloodSprays.clear();

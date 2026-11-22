@@ -30,6 +30,7 @@ constexpr float kVolumeStep = 0.05F;
 constexpr float kLeastMaxFps = 30.0F;
 constexpr float kMaxFpsStep = 10.0F;
 constexpr float kPictureStep = 0.1F; ///< Of gamma and brightness.
+constexpr float kWeaponOffsetStep = 0.1F;
 /// Of a channel of the crosshair's color, from 0 to the most a channel holds: Counter-Strike 1.6's 50 and 250
 /// among its steps.
 constexpr float kChannelStep = 5.0F;
@@ -49,6 +50,11 @@ using CrosshairSizeTexts = nx::EnumArray<cs::CrosshairSize, std::string OptionsT
 constexpr CrosshairSizeTexts kCrosshairSizeTexts{
     CrosshairSizeTexts::Storage{&OptionsTexts::crosshairAuto, &OptionsTexts::crosshairSmall,
                                 &OptionsTexts::crosshairMedium, &OptionsTexts::crosshairLarge}};
+
+using CrosshairTypeTexts = nx::EnumArray<cs::CrosshairType, std::string OptionsTexts::*>;
+constexpr CrosshairTypeTexts kCrosshairTypeTexts{
+    CrosshairTypeTexts::Storage{&OptionsTexts::crosshairStatic, &OptionsTexts::crosshairDynamic,
+                                &OptionsTexts::crosshairTee, &OptionsTexts::crosshairDotOnly}};
 
 /// A channel of the crosshair's color, and the text of the options' that names its slider.
 struct CrosshairChannel {
@@ -102,8 +108,8 @@ constexpr auto kCrosshairChannels = std::to_array<CrosshairChannel>({
 /// A choice of `cvar` among `choices`, at least one, each written as `written` writes the one at its place:
 /// none is chosen while the cvar is set to another.
 template <class Value>
-[[nodiscard]] auto choiceOf(Cvar<Value> cvar, std::vector<Value> choices, std::vector<cs::ChoiceText> written)
-    -> cs::OptionChoice {
+[[nodiscard]] auto choiceOf(Cvar<Value> cvar, std::vector<Value> choices, std::vector<cs::ChoiceText> written,
+                            bool opensMenu = false) -> cs::OptionChoice {
     nx::expects(!choices.empty() && choices.size() == written.size(), "choiceOf: a text for each choice");
     return {.values = std::move(written),
             .chosen = [cvar, choices]() -> std::optional<std::size_t> {
@@ -113,8 +119,34 @@ template <class Value>
                 }
                 return nx::narrow<std::size_t>(std::ranges::distance(choices.begin(), found));
             },
-            .choose = [cvar, choices = std::move(choices)](
-                          std::size_t index) { cvar.setAccepted(choices[index]); }};
+            .choose = [cvar,
+                       choices = std::move(choices)](std::size_t index) { cvar.setAccepted(choices[index]); },
+            .opensMenu = opensMenu};
+}
+
+/// The active display's resolutions, with the desktop fixed in borderless mode.
+[[nodiscard]] auto resolutionChoiceOf(const nx::settings::VideoCvars& video,
+                                      const nx::platform::Window& window) -> cs::OptionChoice {
+    std::vector<std::string> choices{"auto"};
+    std::vector<cs::ChoiceText> labels{&OptionsTexts::automaticResolution};
+    for (const nx::platform::PixelSize mode : window.displayResolutions()) {
+        auto value = std::format("{}x{}", mode.width, mode.height);
+        if (nx::settings::resolutionOf(value)) {
+            choices.push_back(std::move(value));
+            labels.emplace_back(std::format("{} × {}", mode.width, mode.height));
+        }
+    }
+    auto choice = choiceOf(video.resolution, std::move(choices), std::move(labels), true);
+    choice.fixedValue = [&window, mode = video.windowMode]() -> std::optional<cs::ChoiceText> {
+        if (mode.value() != nx::platform::WindowMode::Borderless) {
+            return std::nullopt;
+        }
+        if (const auto size = window.pixelSize(); size && size->width > 0 && size->height > 0) {
+            return std::format("{} × {}", size->width, size->height);
+        }
+        return &OptionsTexts::automaticResolution;
+    };
+    return choice;
 }
 
 /// The choice of how the picture is made (`fidelity`, r_fidelity), each way written by its text.
@@ -154,36 +186,58 @@ template <class Value>
             .control = choiceOf(language, languages | std::ranges::to<std::vector>(), std::move(written))};
 }
 
-/// The choice of the crosshair's size (`size`, cl_crosshair_size), each written by its text.
-[[nodiscard]] auto crosshairSizeOf(Cvar<std::string> size) -> cs::OptionRow {
-    return {.category = OptionCategory::Game,
-            .name = &OptionsTexts::crosshairSize,
-            .control =
-                choiceOf(size, CrosshairSizeTexts::keys() | std::views::transform([](cs::CrosshairSize each) {
-                                   return std::string{cs::crosshairSizeName(each)};
-                               }) | std::ranges::to<std::vector>(),
-                         kCrosshairSizeTexts | std::ranges::to<std::vector<cs::ChoiceText>>())};
+template <class Choice>
+[[nodiscard]] auto crosshairChoiceOf(const std::shared_ptr<cs::CrosshairStyle>& draft,
+                                     std::string OptionsTexts::* name, Choice cs::CrosshairStyle::* field,
+                                     const nx::EnumArray<Choice, std::string OptionsTexts::*>& labels)
+    -> cs::OptionRow {
+    return {
+        .category = OptionCategory::Crosshair,
+        .name = name,
+        .control = cs::OptionChoice{
+            .values = labels | std::ranges::to<std::vector<cs::ChoiceText>>(),
+            .chosen = [draft,
+                       field] { return static_cast<std::size_t>(std::to_underlying((*draft).*field)); },
+            .choose = [draft, field](std::size_t index) { (*draft).*field = static_cast<Choice>(index); }}};
 }
 
-/// The slider of `shade`, a channel of the crosshair's color in `hud` (cl_crosshair_color): what it sets
-/// leaves the other channels as they are.
-[[nodiscard]] auto crosshairChannelOf(const cs::HudCvars& hud, const CrosshairChannel& shade)
+[[nodiscard]] auto crosshairSwitchOf(const std::shared_ptr<cs::CrosshairStyle>& draft,
+                                     std::string OptionsTexts::* name, bool cs::CrosshairStyle::* field)
     -> cs::OptionRow {
+    return {.category = OptionCategory::Crosshair,
+            .name = name,
+            .control = cs::OptionSwitch{.isOn = [draft, field] { return (*draft).*field; },
+                                        .set = [draft, field](bool value) { (*draft).*field = value; }}};
+}
+
+[[nodiscard]] auto crosshairSliderOf(const std::shared_ptr<cs::CrosshairStyle>& draft,
+                                     std::string OptionsTexts::* name, float cs::CrosshairStyle::* field,
+                                     float minimum, float maximum, float step, OptionValueStyle style)
+    -> cs::OptionRow {
+    return {.category = OptionCategory::Crosshair,
+            .name = name,
+            .control = cs::OptionSlider{.value = [draft, field] { return (*draft).*field; },
+                                        .set = [draft, field](float value) { (*draft).*field = value; },
+                                        .minimum = minimum,
+                                        .maximum = maximum,
+                                        .step = step,
+                                        .style = style}};
+}
+
+[[nodiscard]] auto crosshairChannelOf(const std::shared_ptr<cs::CrosshairStyle>& draft,
+                                      const CrosshairChannel& shade) -> cs::OptionRow {
     const auto channel = shade.channel;
-    return {.category = OptionCategory::Game,
-            .name = shade.name,
-            .control = cs::OptionSlider{
-                .value = [hud, channel] { return static_cast<float>(hud.crosshair().color.*channel); },
-                .set =
-                    [hud, channel](float value) {
-                        nx::render::ScreenColor color = hud.crosshair().color;
-                        color.*channel = nx::narrow<std::uint8_t>(std::lround(value));
-                        hud.setCrosshairColor(color);
-                    },
-                .minimum = 0.0F,
-                .maximum = kMostChannel,
-                .step = kChannelStep,
-                .style = OptionValueStyle::Whole}};
+    return {
+        .category = OptionCategory::Crosshair,
+        .name = shade.name,
+        .control = cs::OptionSlider{
+            .value = [draft, channel] { return static_cast<float>(draft->color.*channel); },
+            .set = [draft, channel](
+                       float value) { draft->color.*channel = nx::narrow<std::uint8_t>(std::lround(value)); },
+            .minimum = 0.0F,
+            .maximum = kMostChannel,
+            .step = kChannelStep,
+            .style = OptionValueStyle::Whole}};
 }
 
 /// An action the keys run: the text that names it, and its command.
@@ -264,7 +318,8 @@ constexpr auto kKeyActions = std::to_array<KeyAction>({
 } // namespace
 
 auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& bindings,
-                     std::span<const std::string> languages) -> std::vector<cs::OptionRow> {
+                     std::span<const std::string> languages, const nx::platform::Window& window,
+                     const std::shared_ptr<cs::CrosshairStyle>& draft) -> std::vector<cs::OptionRow> {
     const nx::settings::ClientCvars& client = settings.client;
     std::vector<cs::OptionRow> rows;
     for (const KeyAction& action : kKeyActions) {
@@ -279,9 +334,12 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(switchOf(OptionCategory::Audio, &OptionsTexts::playUnfocused, client.audio.playUnfocused));
     rows.push_back({.category = OptionCategory::Video,
                     .name = &OptionsTexts::windowMode,
-                    .control = choiceOf(client.video.windowMode,
-                                        WindowModeTexts::keys() | std::ranges::to<std::vector>(),
-                                        kWindowModeTexts | std::ranges::to<std::vector<cs::ChoiceText>>())});
+                    .control = choiceOf(
+                        client.video.windowMode, WindowModeTexts::keys() | std::ranges::to<std::vector>(),
+                        kWindowModeTexts | std::ranges::to<std::vector<cs::ChoiceText>>(), true)});
+    rows.push_back({.category = OptionCategory::Video,
+                    .name = &OptionsTexts::resolution,
+                    .control = resolutionChoiceOf(client.video, window)});
     auto maxFps = sliderOf(OptionCategory::Video, &OptionsTexts::maxFps, client.video.fpsMax, kLeastMaxFps,
                            nx::settings::kMostFps, kMaxFpsStep, OptionValueStyle::Whole);
     auto& fpsSlider = std::get<cs::OptionSlider>(maxFps.control);
@@ -298,6 +356,7 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::vsync, client.video.vsync));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::showFps, client.video.showFps));
     rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::drawHud, client.video.hudDraw));
+    rows.push_back(switchOf(OptionCategory::Video, &OptionsTexts::bulletTracers, settings.hud.bulletTracers));
     rows.push_back(fidelityOf(client.video.fidelity));
     rows.push_back(sliderOf(OptionCategory::Video, &OptionsTexts::gamma, client.video.gamma,
                             nx::settings::kLeastGamma, nx::settings::kMostGamma, kPictureStep,
@@ -308,12 +367,34 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(typedNameOf(client.player.name));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::autoSwitch, client.player.autoWeaponSwitch));
     rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::rightHand, settings.hud.rightHand));
+    const cs::ViewModelCvars& viewModel = settings.viewModel;
+    rows.push_back(sliderOf(OptionCategory::Game, &OptionsTexts::weaponOffsetX, viewModel.right,
+                            -cs::kMaxViewModelSideOffset, cs::kMaxViewModelSideOffset, kWeaponOffsetStep,
+                            OptionValueStyle::Tenths));
+    rows.push_back(sliderOf(OptionCategory::Game, &OptionsTexts::weaponOffsetY, viewModel.forward,
+                            -cs::kMaxViewModelDepthOffset, cs::kMaxViewModelDepthOffset, kWeaponOffsetStep,
+                            OptionValueStyle::Tenths));
+    rows.push_back(sliderOf(OptionCategory::Game, &OptionsTexts::weaponOffsetZ, viewModel.up,
+                            -cs::kMaxViewModelDepthOffset, cs::kMaxViewModelDepthOffset, kWeaponOffsetStep,
+                            OptionValueStyle::Tenths));
     rows.push_back(languageOf(client.player.language, languages));
-    rows.push_back(crosshairSizeOf(settings.hud.crosshairSize));
-    rows.push_back(switchOf(OptionCategory::Game, &OptionsTexts::crosshairTranslucent,
-                            settings.hud.crosshairTranslucent));
+    rows.push_back(crosshairChoiceOf(draft, &OptionsTexts::crosshairType, &cs::CrosshairStyle::type,
+                                     kCrosshairTypeTexts));
+    rows.push_back(
+        crosshairSwitchOf(draft, &OptionsTexts::crosshairFollowRecoil, &cs::CrosshairStyle::followsRecoil));
+    rows.push_back(crosshairChoiceOf(draft, &OptionsTexts::crosshairSize, &cs::CrosshairStyle::size,
+                                     kCrosshairSizeTexts));
+    rows.push_back(crosshairSliderOf(draft, &OptionsTexts::crosshairGap, &cs::CrosshairStyle::gap, 0.0F,
+                                     cs::kMaxCrosshairGap, 1.0F, OptionValueStyle::Whole));
+    rows.push_back(crosshairSliderOf(draft, &OptionsTexts::crosshairThickness, &cs::CrosshairStyle::thickness,
+                                     1.0F, cs::kMaxCrosshairThickness, 0.5F, OptionValueStyle::Tenths));
+    rows.push_back(crosshairSwitchOf(draft, &OptionsTexts::crosshairDot, &cs::CrosshairStyle::hasDot));
+    rows.push_back(
+        crosshairSwitchOf(draft, &OptionsTexts::crosshairOutline, &cs::CrosshairStyle::hasOutline));
+    rows.push_back(
+        crosshairSwitchOf(draft, &OptionsTexts::crosshairTranslucent, &cs::CrosshairStyle::isTranslucent));
     for (const CrosshairChannel& shade : kCrosshairChannels) {
-        rows.push_back(crosshairChannelOf(settings.hud, shade));
+        rows.push_back(crosshairChannelOf(draft, shade));
     }
     return rows;
 }

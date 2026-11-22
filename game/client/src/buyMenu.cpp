@@ -72,8 +72,10 @@ void appendWeapons(std::vector<BuyEntry>& entries, BuyTab tab, const BuyMenuCont
         const std::optional<BuyItemState> state =
             itemStateOf(weaponPriceFor(weapon, buyer, view.inventory->has(index)));
         if (state) {
+            const auto teamKey =
+                view.team == Team::CounterTerrorists ? place->counterTerroristKey : place->terroristKey;
             entries.push_back({.item = index,
-                               .key = place->key,
+                               .key = teamKey.value_or(place->key),
                                .name = weapon.name,
                                .picture = place->picture,
                                .price = weapon.purchase->price,

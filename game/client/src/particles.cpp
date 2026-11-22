@@ -31,6 +31,12 @@ constexpr nx::Seconds kLongestStreakTime{0.1F};
 /// How much of its speed across the ground a streak loses a second (CL_DrawTracers).
 constexpr float kStreakSlowing = 0.9F;
 
+constexpr nx::Seconds kBulletTracerLife{0.085F};
+constexpr float kRemoteTracerStartDistance = 16.0F;
+constexpr float kTracerEndDistance = 640.0F;
+constexpr nx::Vec3 kRemoteMuzzleOffset{.z = -6.0F};
+constexpr nx::HammerUnits kTracerHalfWidth{1.25F};
+
 /// The streak colors (gTracerColors), by their index.
 constexpr std::array<nx::render::RenderColor, 12> kStreakColors{{
     {.red = 255, .green = 255, .blue = 255}, // white
@@ -62,12 +68,48 @@ auto amountOf(const Particle& particle, nx::Seconds now) noexcept -> std::uint8_
 }
 
 auto amountOf(const Streak& streak, nx::Seconds now) noexcept -> std::uint8_t {
-    return fadedAmount(streak.goesAt - now, kStreakFadePerSecond);
+    const float rate = streak.tracer ? 1.0F / kBulletTracerLife.count() : kStreakFadePerSecond;
+    return fadedAmount(streak.goesAt - now, rate);
 }
 
 auto endOf(const Streak& streak, nx::Seconds now) noexcept -> nx::Vec3 {
     const nx::Seconds drawn = std::min(streak.goesAt - now, kLongestStreakTime);
     return streak.origin + (streak.velocity * (kStreakLength * drawn.count()));
+}
+
+auto tracerOf(const Streak& streak, std::optional<nx::Vec3> muzzle, nx::Seconds now) noexcept
+    -> std::optional<nx::render::StreakInstance> {
+    nx::expects(streak.tracer.has_value(), "tracerOf: a bullet tracer");
+    const TracerPath& shot = *streak.tracer;
+    const nx::Vec3 path = shot.end - streak.origin;
+    nx::Vec3 start{};
+    nx::Vec3 end{};
+    if (shot.view) {
+        if (!muzzle) {
+            return std::nullopt;
+        }
+        start = *muzzle;
+        const nx::Vec3 fromMuzzle = shot.end - start;
+        if (nx::dot(path, fromMuzzle) <= 0.0F) {
+            return std::nullopt;
+        }
+        const float distance = std::sqrt(nx::lengthSquared(fromMuzzle));
+        end = distance <= kTracerEndDistance ? shot.end
+                                             : start + (fromMuzzle * (kTracerEndDistance / distance));
+    } else {
+        const float distance = std::sqrt(nx::lengthSquared(path));
+        if (distance <= kRemoteTracerStartDistance) {
+            return std::nullopt;
+        }
+        const nx::Vec3 direction = path / distance;
+        start = streak.origin + (direction * kRemoteTracerStartDistance) + kRemoteMuzzleOffset;
+        end = distance <= kTracerEndDistance ? shot.end : streak.origin + (direction * kTracerEndDistance);
+    }
+    return nx::render::StreakInstance{.start = start,
+                                      .end = end,
+                                      .halfWidth = kTracerHalfWidth,
+                                      .color = streak.color,
+                                      .amount = amountOf(streak, now)};
 }
 
 auto streakColorOf(std::uint8_t index) noexcept -> nx::render::RenderColor {
@@ -101,6 +143,22 @@ void Particles::splashStreaks(const StreakSplash& splash, nx::Seconds now) {
                                  .color = color,
                                  .goesAt = now + nx::Seconds{life}});
     }
+}
+
+void Particles::traceBullet(const BulletTracer& shot, PlayerIndex viewer, nx::Seconds now) {
+    if (shot.origin == shot.end || !hasRoom()) {
+        return;
+    }
+    const auto view = shot.shooter == viewer ? std::optional{shot.animation} : std::nullopt;
+    streaks.push_back(
+        Streak{.origin = shot.origin,
+               .color = {.red = shot.color.red, .green = shot.color.green, .blue = shot.color.blue},
+               .goesAt = now + kBulletTracerLife,
+               .tracer = TracerPath{.end = shot.end, .view = view}});
+}
+
+void Particles::clearBulletTracers() {
+    std::erase_if(streaks, [](const Streak& streak) { return streak.tracer.has_value(); });
 }
 
 void Particles::streamBlood(const BloodStream& stream, const BloodStreamLook& look, nx::Seconds now) {
@@ -167,6 +225,9 @@ void Particles::update(nx::Seconds now, nx::Seconds elapsed, nx::UnitsPerSecondS
     }
     const float kept = std::max(1.0F - (seconds * kStreakSlowing), 0.0F);
     for (Streak& streak : streaks) {
+        if (streak.tracer) {
+            continue;
+        }
         streak.origin = streak.origin + (streak.velocity * seconds);
         streak.velocity.x *= kept;
         streak.velocity.y *= kept;

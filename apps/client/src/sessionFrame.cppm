@@ -52,6 +52,6 @@ void showNotices(Session& session, const FrameNotices& notices, const cs::Weapon
 /// original's streams; else as the original's (cs::TempEntities::sprayBlood), and the streams the hits in the
 /// head made (cs::Particles::streamBlood); the blood but without the engine's palette, as the level logged.
 void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent& content, nx::Seconds now,
-                 nx::Seconds elapsed);
+                 nx::Seconds elapsed, bool showBulletTracers);
 
 } // namespace app

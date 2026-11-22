@@ -657,6 +657,10 @@ TEST_F(GameTest, EachHitOnAnEntitysBodyTellsItsShooterAloneTheDamageItDealtOverI
     game().give(player, *content().weapons.indexOf("ak47"));
     std::ignore = play(player, kPastTheFirstFreeze);
 
+    EXPECT_EQ(cvars().bulletTracerColor(), cs::kDefaultBulletTracerColor);
+    ASSERT_TRUE(cvars().tracerColor.set("35beff").has_value());
+    EXPECT_FALSE(cvars().tracerColor.set("35BEFG").has_value());
+    constexpr nx::assets::PaletteColor kTracerColor{.red = 53, .green = 190, .blue = 255};
     const cs::PlayerSnapshot shot = press(player, {cs::Button::Attack}, {.pitch = nx::Degrees{5.0F}});
     ASSERT_EQ(shot.damageDealt.size(), 1U);
     const cs::DamageDealt& dealt = shot.damageDealt.front();
@@ -667,9 +671,23 @@ TEST_F(GameTest, EachHitOnAnEntitysBodyTellsItsShooterAloneTheDamageItDealtOverI
     EXPECT_NEAR(dealt.damage.value(), (bleeding.health - shot.entities.front().health).value(), 1e-3F);
     ASSERT_EQ(shot.bloodSprays.size(), 1U);
     EXPECT_GT(dealt.headTop.z, shot.bloodSprays.front().position.z) << "over where the round met it";
-    EXPECT_TRUE(game().snapshotFor(other).damageDealt.empty()) << "its shooter's alone";
+    ASSERT_EQ(shot.bulletTracers.size(), 1U);
+    EXPECT_LT(shot.bulletTracers.front().end.x, kEntityAhead);
+    EXPECT_EQ(shot.bulletTracers.front().color, kTracerColor);
+    EXPECT_EQ(shot.bulletTracers.front().shooter, player);
+    ASSERT_TRUE(shot.inventory.animation().has_value());
+    EXPECT_EQ(shot.bulletTracers.front().animation.weapon, shot.inventory.animation()->weapon);
+    EXPECT_EQ(shot.bulletTracers.front().animation.sequence, shot.inventory.animation()->sequence);
+    const cs::PlayerSnapshot observer = game().snapshotFor(other);
+    ASSERT_EQ(observer.bulletTracers.size(), 1U);
+    EXPECT_EQ(observer.bulletTracers.front().end, shot.bulletTracers.front().end);
+    EXPECT_EQ(observer.bulletTracers.front().color, kTracerColor);
+    EXPECT_EQ(observer.bulletTracers.front().shooter, player);
+    EXPECT_TRUE(observer.damageDealt.empty()) << "its shooter's alone";
     game().tick({});
-    EXPECT_TRUE(game().snapshotFor(player).damageDealt.empty()) << "the tick's alone";
+    const cs::PlayerSnapshot next = game().snapshotFor(player);
+    EXPECT_TRUE(next.bulletTracers.empty());
+    EXPECT_TRUE(next.damageDealt.empty()) << "the tick's alone";
 }
 
 TEST_F(GameTest, AHitShowsItsDamageOverItsVictimsHeadWhereverItMetItStandingOrDucked) {

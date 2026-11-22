@@ -89,6 +89,9 @@ silencers' sounds of the original's models) play their sound at full volume as a
 draw, the USP's `usp_slideback` from its draw's event, and a shot's `usp_unsil-1` are heard in
 their order, each matching its file.
 
+When a sequence loops between rendered frames, the client schedules events on both sides of the
+wrap at their time in the play. Catch-up covers up to the eight most recent loops per frame.
+
 No frame waits on the file of a sound it plays. The client reads the sounds the player hears of a
 weapon in hand (`cs::soundFilesOf`: the files of each sound its data gives, `cs::soundsOf`, and its
 view model's sound events) with `ClientAudio::preload`: those of every weapon as a map starts, and

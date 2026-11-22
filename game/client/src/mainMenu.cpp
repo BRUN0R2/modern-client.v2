@@ -27,8 +27,8 @@ auto mainMenuItemsOf(const MainMenuLook& look, MenuGame game) -> std::vector<Mai
 }
 
 MainMenu::MainMenu(const MainMenuLook& listed, std::vector<std::string> playable,
-                   std::vector<OptionRow> settings) noexcept
-    : look{&listed}, maps{std::move(playable)}, options{std::move(settings)} {}
+                   std::vector<OptionRow> settings, CrosshairEditor crosshair) noexcept
+    : look{&listed}, maps{std::move(playable)}, options{std::move(settings), std::move(crosshair)} {}
 
 void MainMenu::open(MenuGame game) {
     const std::vector<MainMenuAction> items = mainMenuItemsOf(*look, game);

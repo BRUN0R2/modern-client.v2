@@ -64,6 +64,8 @@ struct OptionsTexts {
     std::string playUnfocused{};
     std::string maxFps{};
     std::string windowMode{};
+    std::string resolution{};
+    std::string automaticResolution{};
     std::string windowed{};
     std::string borderless{};
     std::string fullscreen{};
@@ -77,6 +79,23 @@ struct OptionsTexts {
     std::string languageEnglish{};
     std::string languagePortuguese{};
     std::string playerName{};
+    std::string crosshairTab{};
+    std::string crosshairPreview{};
+    std::string crosshairIdle{};
+    std::string crosshairFiring{};
+    std::string apply{};
+    std::string applyKey{};
+    std::string crosshairType{};
+    std::string crosshairStatic{};
+    std::string crosshairDynamic{};
+    std::string crosshairTee{};
+    std::string crosshairDotOnly{};
+    std::string crosshairFollowRecoil{};
+    std::string crosshairGap{};
+    std::string crosshairThickness{};
+    std::string crosshairDot{};
+    std::string crosshairOutline{};
+    std::string bulletTracers{};
     std::string crosshairSize{};
     std::string crosshairAuto{};
     std::string crosshairSmall{};
@@ -90,6 +109,9 @@ struct OptionsTexts {
     std::string drawHud{};
     std::string autoSwitch{};
     std::string rightHand{};
+    std::string weaponOffsetX{};
+    std::string weaponOffsetY{};
+    std::string weaponOffsetZ{};
     std::string on{};
     std::string off{};
     std::string pressAKey{};
@@ -229,6 +251,8 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::playUnfocused>("playUnfocused"),
         nx::meta::field<&cs::OptionsTexts::maxFps>("maxFps"),
         nx::meta::field<&cs::OptionsTexts::windowMode>("windowMode"),
+        nx::meta::field<&cs::OptionsTexts::resolution>("resolution"),
+        nx::meta::field<&cs::OptionsTexts::automaticResolution>("automaticResolution"),
         nx::meta::field<&cs::OptionsTexts::windowed>("windowed"),
         nx::meta::field<&cs::OptionsTexts::borderless>("borderless"),
         nx::meta::field<&cs::OptionsTexts::fullscreen>("fullscreen"),
@@ -242,6 +266,23 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::languageEnglish>("languageEnglish"),
         nx::meta::field<&cs::OptionsTexts::languagePortuguese>("languagePortuguese"),
         nx::meta::field<&cs::OptionsTexts::playerName>("playerName"),
+        nx::meta::field<&cs::OptionsTexts::crosshairTab>("crosshairTab"),
+        nx::meta::field<&cs::OptionsTexts::crosshairPreview>("crosshairPreview"),
+        nx::meta::field<&cs::OptionsTexts::crosshairIdle>("crosshairIdle"),
+        nx::meta::field<&cs::OptionsTexts::crosshairFiring>("crosshairFiring"),
+        nx::meta::field<&cs::OptionsTexts::apply>("apply"),
+        nx::meta::field<&cs::OptionsTexts::applyKey>("applyKey"),
+        nx::meta::field<&cs::OptionsTexts::crosshairType>("crosshairType"),
+        nx::meta::field<&cs::OptionsTexts::crosshairStatic>("crosshairStatic"),
+        nx::meta::field<&cs::OptionsTexts::crosshairDynamic>("crosshairDynamic"),
+        nx::meta::field<&cs::OptionsTexts::crosshairTee>("crosshairTee"),
+        nx::meta::field<&cs::OptionsTexts::crosshairDotOnly>("crosshairDotOnly"),
+        nx::meta::field<&cs::OptionsTexts::crosshairFollowRecoil>("crosshairFollowRecoil"),
+        nx::meta::field<&cs::OptionsTexts::crosshairGap>("crosshairGap"),
+        nx::meta::field<&cs::OptionsTexts::crosshairThickness>("crosshairThickness"),
+        nx::meta::field<&cs::OptionsTexts::crosshairDot>("crosshairDot"),
+        nx::meta::field<&cs::OptionsTexts::crosshairOutline>("crosshairOutline"),
+        nx::meta::field<&cs::OptionsTexts::bulletTracers>("bulletTracers"),
         nx::meta::field<&cs::OptionsTexts::crosshairSize>("crosshairSize"),
         nx::meta::field<&cs::OptionsTexts::crosshairAuto>("crosshairAuto"),
         nx::meta::field<&cs::OptionsTexts::crosshairSmall>("crosshairSmall"),
@@ -255,6 +296,9 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::drawHud>("drawHud"),
         nx::meta::field<&cs::OptionsTexts::autoSwitch>("autoSwitch"),
         nx::meta::field<&cs::OptionsTexts::rightHand>("rightHand"),
+        nx::meta::field<&cs::OptionsTexts::weaponOffsetX>("weaponOffsetX"),
+        nx::meta::field<&cs::OptionsTexts::weaponOffsetY>("weaponOffsetY"),
+        nx::meta::field<&cs::OptionsTexts::weaponOffsetZ>("weaponOffsetZ"),
         nx::meta::field<&cs::OptionsTexts::on>("on"),
         nx::meta::field<&cs::OptionsTexts::off>("off"),
         nx::meta::field<&cs::OptionsTexts::pressAKey>("pressAKey"),

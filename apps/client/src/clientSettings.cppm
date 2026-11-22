@@ -23,6 +23,7 @@ struct ClientSettings {
     nx::settings::ClientCvars client;     ///< Video, audio, mouse, keyboard and the player's.
     cs::PlayerInput input;                ///< The `+` buttons the binds hold, and the moves they make.
     cs::HudCvars hud;                     ///< The crosshair and the hand the weapons are held in.
+    cs::ViewModelCvars viewModel;         ///< The held weapon's offsets.
     cs::FogCvars fog;                     ///< `fog_*`.
     cs::CorpseCvars corpses;              ///< `cl_corpsestay`.
     cs::DamageNumberCvars damageNumbers;  ///< `hud_damagenumbers`.

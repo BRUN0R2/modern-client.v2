@@ -55,6 +55,10 @@ auto registerClientSettings(nx::console::Console& console, nx::settings::KeyBind
     if (!hud) {
         return std::unexpected{std::move(hud.error())};
     }
+    auto viewModel = settingOf(cs::ViewModelCvars::registerIn(console));
+    if (!viewModel) {
+        return std::unexpected{std::move(viewModel.error())};
+    }
     auto fog = settingOf(cs::FogCvars::registerIn(console));
     if (!fog) {
         return std::unexpected{std::move(fog.error())};
@@ -93,6 +97,7 @@ auto registerClientSettings(nx::console::Console& console, nx::settings::KeyBind
     return ClientSettings{.client = std::move(*client),
                           .input = std::move(*input),
                           .hud = std::move(*hud),
+                          .viewModel = std::move(*viewModel),
                           .fog = std::move(*fog),
                           .corpses = std::move(*corpses),
                           .damageNumbers = std::move(*damageNumbers),
