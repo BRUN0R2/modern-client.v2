@@ -61,16 +61,19 @@ constexpr auto kMenuCursorMask = std::to_array<std::string_view>({
 });
 constexpr auto kMenuCursorWidth = static_cast<std::uint32_t>(kMenuCursorMask.front().size());
 constexpr auto kMenuCursorHeight = static_cast<std::uint32_t>(kMenuCursorMask.size());
+constexpr std::byte kMenuCursorDark{20};
+constexpr std::byte kMenuCursorWhite{std::numeric_limits<std::uint8_t>::max()};
 constexpr auto kMenuCursorTexels = [] {
-    std::array<std::byte, kMenuCursorWidth * kMenuCursorHeight * nx::assets::kRgbaBytes> texels{};
+    std::array<std::byte, std::size_t{kMenuCursorWidth} * kMenuCursorHeight * nx::assets::kRgbaBytes>
+        texels{};
     std::size_t offset = 0;
     for (const std::string_view row : kMenuCursorMask) {
         for (const char pixel : row) {
-            const auto rgb = pixel == '+' ? std::byte{255} : std::byte{20};
-            texels[offset++] = rgb;
-            texels[offset++] = rgb;
-            texels[offset++] = rgb;
-            texels[offset++] = pixel == '.' ? std::byte{0} : std::byte{255};
+            const auto rgb = pixel == '+' ? kMenuCursorWhite : kMenuCursorDark;
+            texels.at(offset++) = rgb;
+            texels.at(offset++) = rgb;
+            texels.at(offset++) = rgb;
+            texels.at(offset++) = pixel == '.' ? std::byte{0} : kMenuCursorWhite;
         }
     }
     return texels;

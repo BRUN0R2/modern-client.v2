@@ -75,7 +75,10 @@ TEST(WindowTest, PollingAppendsWithoutAskingToClose) {
 
 TEST(WindowTest, AWindowedResolutionChangesTheDrawableSize) {
     auto window = openWindow();
-    ASSERT_TRUE(window.has_value());
+    if (!window) {
+        FAIL() << "the resolution test needs an open window";
+        return;
+    }
     constexpr PixelSize kRequested{.width = 800, .height = 600};
     const auto resized = window->setMode(nx::platform::WindowMode::Windowed, kRequested);
     ASSERT_TRUE(resized.has_value()) << nx::describe(resized.error());
@@ -85,7 +88,10 @@ TEST(WindowTest, AWindowedResolutionChangesTheDrawableSize) {
 
 TEST(WindowTest, AbsoluteMouseModeCanHideAndRestoreTheNativeCursor) {
     auto window = openWindow();
-    ASSERT_TRUE(window.has_value());
+    if (!window) {
+        FAIL() << "the mouse mode test needs an open window";
+        return;
+    }
     const auto shown = window->setMouseMode(nx::platform::MouseMode::Absolute);
     ASSERT_TRUE(shown.has_value()) << nx::describe(shown.error());
     ASSERT_TRUE(SDL_CursorVisible());
@@ -95,7 +101,7 @@ TEST(WindowTest, AbsoluteMouseModeCanHideAndRestoreTheNativeCursor) {
     int count = 0;
     SDL_Window** const windows = SDL_GetWindows(&count);
     const bool usesRelativeMotion = count == 1 && SDL_GetWindowRelativeMouseMode(windows[0]);
-    SDL_free(windows);
+    SDL_free(static_cast<void*>(windows));
     EXPECT_EQ(count, 1);
     EXPECT_FALSE(usesRelativeMotion);
     const auto restored = window->setMouseMode(nx::platform::MouseMode::Absolute);

@@ -31,6 +31,7 @@ constexpr float kLeastMaxFps = 30.0F;
 constexpr float kMaxFpsStep = 10.0F;
 constexpr float kPictureStep = 0.1F; ///< Of gamma and brightness.
 constexpr float kWeaponOffsetStep = 0.1F;
+constexpr float kCrosshairThicknessStep = 0.5F;
 /// Of a channel of the crosshair's color, from 0 to the most a channel holds: Counter-Strike 1.6's 50 and 250
 /// among its steps.
 constexpr float kChannelStep = 5.0F;
@@ -387,7 +388,8 @@ auto clientOptionsOf(const ClientSettings& settings, nx::settings::KeyBindings& 
     rows.push_back(crosshairSliderOf(draft, &OptionsTexts::crosshairGap, &cs::CrosshairStyle::gap, 0.0F,
                                      cs::kMaxCrosshairGap, 1.0F, OptionValueStyle::Whole));
     rows.push_back(crosshairSliderOf(draft, &OptionsTexts::crosshairThickness, &cs::CrosshairStyle::thickness,
-                                     1.0F, cs::kMaxCrosshairThickness, 0.5F, OptionValueStyle::Tenths));
+                                     1.0F, cs::kMaxCrosshairThickness, kCrosshairThicknessStep,
+                                     OptionValueStyle::Tenths));
     rows.push_back(crosshairSwitchOf(draft, &OptionsTexts::crosshairDot, &cs::CrosshairStyle::hasDot));
     rows.push_back(
         crosshairSwitchOf(draft, &OptionsTexts::crosshairOutline, &cs::CrosshairStyle::hasOutline));

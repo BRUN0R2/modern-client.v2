@@ -23,7 +23,8 @@ constexpr nx::Minutes kDefaultBuyTime{1.5F};
 [[nodiscard]] auto tracerColorOf(std::string_view text) noexcept -> std::optional<nx::assets::PaletteColor> {
     constexpr std::size_t kHexDigits = 6;
     constexpr int kHexBase = 16;
-    constexpr auto kChannelBits = std::numeric_limits<std::uint8_t>::digits;
+    constexpr std::uint32_t kChannelBits = std::numeric_limits<std::uint8_t>::digits;
+    constexpr std::uint32_t kRedChannelShift = kChannelBits + kChannelBits;
     constexpr std::uint32_t kChannelMask = std::numeric_limits<std::uint8_t>::max();
     if (text.size() != kHexDigits) {
         return std::nullopt;
@@ -33,7 +34,7 @@ constexpr nx::Minutes kDefaultBuyTime{1.5F};
     if (error != std::errc{} || end != text.data() + text.size()) {
         return std::nullopt;
     }
-    return nx::assets::PaletteColor{.red = static_cast<std::uint8_t>(rgb >> (2 * kChannelBits)),
+    return nx::assets::PaletteColor{.red = static_cast<std::uint8_t>(rgb >> kRedChannelShift),
                                     .green = static_cast<std::uint8_t>((rgb >> kChannelBits) & kChannelMask),
                                     .blue = static_cast<std::uint8_t>(rgb & kChannelMask)};
 }

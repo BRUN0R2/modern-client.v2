@@ -21,6 +21,11 @@ using nx::render::ScreenColor;
 using TextFaces = nx::EnumArray<MainMenuFont, nx::ui::TextFace>;
 
 constexpr nx::log::Category kLog{"client"};
+constexpr float kHalf = 0.5F;
+constexpr ScreenColor kCrosshairIdleGround{.red = 43, .green = 50, .blue = 48};
+constexpr ScreenColor kCrosshairFiringGround{.red = 107, .green = 99, .blue = 82};
+constexpr nx::EulerAngles kCrosshairIdlePunch{};
+constexpr nx::EulerAngles kCrosshairFiringPunch{.pitch = nx::Degrees{-4.0F}, .yaw = nx::Degrees{1.25F}};
 
 /// What the menu covers the whole screen with while no map is played, under its background.
 constexpr ScreenColor kGround{.red = 23, .green = 28, .blue = 21};
@@ -264,10 +269,10 @@ void paintCrosshairSample(std::vector<nx::render::ScreenQuad>& quads, nx::ui::Pa
                           const CrosshairStyle& style, nx::EulerAngles punch, ScreenColor ground) {
     painter.fill(area, ground);
     const nx::rhi::Rect clip = painter.inside(area).clip();
-    const float originX = static_cast<float>(extent.width / 2);
-    const float originY = static_cast<float>(extent.height / 2);
-    const float halfWide = static_cast<float>(area.wide.value()) * 0.5F;
-    const float halfTall = static_cast<float>(area.tall.value()) * 0.5F;
+    const float originX = static_cast<float>(extent.width) * kHalf;
+    const float originY = static_cast<float>(extent.height) * kHalf;
+    const float halfWide = static_cast<float>(area.wide.value()) * kHalf;
+    const float halfTall = static_cast<float>(area.tall.value()) * kHalf;
     const float centerX = static_cast<float>(area.x.value()) + halfWide;
     const float centerY = static_cast<float>(area.y.value()) + halfTall;
     const std::size_t first = quads.size();
@@ -322,9 +327,8 @@ void paintCrosshairPreview(std::vector<nx::render::ScreenQuad>& quads, nx::ui::P
                              extent, style, punch, ground);
     };
     const nx::Pixels top = preview.y + headingHeight;
-    sample(top, texts.crosshairIdle, {}, {.red = 43, .green = 50, .blue = 48});
-    sample(top + sampleHeight + inset, texts.crosshairFiring,
-           {.pitch = nx::Degrees{-4.0F}, .yaw = nx::Degrees{1.25F}}, {.red = 107, .green = 99, .blue = 82});
+    sample(top, texts.crosshairIdle, kCrosshairIdlePunch, kCrosshairIdleGround);
+    sample(top + sampleHeight + inset, texts.crosshairFiring, kCrosshairFiringPunch, kCrosshairFiringGround);
 }
 
 void paintChoiceMenu(nx::ui::PanelPainter& painter, const MainMenuLayout& layout,

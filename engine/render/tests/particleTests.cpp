@@ -130,7 +130,10 @@ TEST(ParticleRendererTest, AParticleIsADotOfItsColorInTheCornerOfItsQuadTowardTh
         GTEST_SKIP() << nx::test::kNoVulkan;
     }
     std::optional<nx::render::ParticleRenderer> renderer = rendererOf(**device);
-    ASSERT_TRUE(renderer.has_value());
+    if (!renderer) {
+        FAIL() << "the Vulkan particle renderer could not be created";
+        return;
+    }
     OffscreenTarget target{**device};
     const std::array particles{ParticleInstance{.origin = kAhead, .color = kColor, .amount = 255}};
     const std::vector<std::byte> pixels = drawn(target, *renderer, particles);
