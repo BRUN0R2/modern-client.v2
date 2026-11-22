@@ -26,6 +26,7 @@ constexpr std::uint32_t kImageBinding = 0;
 constexpr std::uint32_t kImageSamplerBinding = 1;
 
 constexpr float kChannelTop = 255.0F;
+constexpr std::uint8_t kChannelByteTop = std::numeric_limits<std::uint8_t>::max();
 /// The vertices of a quad: two triangles.
 constexpr std::uint32_t kQuadVertices = 6;
 /// The room a frame starts with, which grows as the frames need, in quads.
@@ -46,6 +47,7 @@ constexpr float kStreakImageLength = 0.8F;
 constexpr std::uint32_t kDotSide = 8;
 constexpr std::uint32_t kDotWidth = 4;
 constexpr std::size_t kTexelBytes = 4;
+constexpr std::size_t kAlphaOffset = kTexelBytes - 1;
 constexpr rhi::Extent2d kTracerSpriteSize{.width = 16, .height = 64};
 
 /// A corner of a particle's quad: where it is, its texture coordinates, and its color and opacity.
@@ -97,7 +99,7 @@ struct FrameUniform {
     constexpr float kTailStart = 0.35F;
     constexpr float kTailWidth = 0.3F;
     const auto [wide, tall] = kTracerSpriteSize;
-    std::vector<std::byte> texels(std::size_t{wide} * tall * kTexelBytes, std::byte{0xff});
+    std::vector<std::byte> texels(std::size_t{wide} * tall * kTexelBytes, std::byte{kChannelByteTop});
     for (std::uint32_t y = 0; y < tall; ++y) {
         const float along = static_cast<float>(y) / static_cast<float>(tall - 1);
         const float tail = std::max(along - kTailStart, 0.0F) / (1.0F - kTailStart);
@@ -108,7 +110,7 @@ struct FrameUniform {
             const float profile = std::max(1.0F - (across / width), 0.0F);
             const float opacity = (1.0F - tail) * profile * profile;
             const std::size_t at = ((std::size_t{y} * wide) + x) * kTexelBytes;
-            texels[at + 3] = std::byte{static_cast<std::uint8_t>(opacity * kChannelTop)};
+            texels.at(at + kAlphaOffset) = std::byte{static_cast<std::uint8_t>(opacity * kChannelTop)};
         }
     }
     return texels;

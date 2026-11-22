@@ -19,7 +19,7 @@ namespace {
 /// A sequence played anew plays the events of its first frame too (R_StudioClientEvents).
 constexpr float kBeforeTheFirstFrame = -0.01F;
 /// Limit catch-up work for very short loops or a stalled render frame.
-constexpr double kMaxLoopsOfEventsPerFrame = 8.0;
+constexpr std::size_t kMaxLoopsOfEventsPerFrame = 8;
 constexpr nx::log::Category kViewModelLog{"client"};
 
 /// At a typical running speed, roughly one step per shift of the weapon from side to side.
@@ -351,8 +351,12 @@ auto ViewModelEvents::passed(const ViewModel* viewModel, const std::optional<Vie
         }
         const double lastLoop = std::floor(lastFrame / framesPerLoop);
         const double firstLoop = std::max(0.0, std::floor(firstFrame / framesPerLoop));
-        const double loopsAfterFirst = std::min(lastLoop - firstLoop, kMaxLoopsOfEventsPerFrame - 1.0);
-        for (double loopsBack = loopsAfterFirst; loopsBack >= 0.0; --loopsBack) {
+        const double loopsAfterFirst =
+            std::min(lastLoop - firstLoop, static_cast<double>(kMaxLoopsOfEventsPerFrame - 1));
+        const std::size_t loopCount =
+            loopsAfterFirst >= 0.0 ? static_cast<std::size_t>(loopsAfterFirst) + 1 : 0;
+        for (std::size_t loop = 0; loop < loopCount; ++loop) {
+            const auto loopsBack = static_cast<double>(loopCount - loop - 1);
             const double start = (lastLoop - loopsBack) * framesPerLoop;
             for (const auto* event : clientEventsBetween(sequence, static_cast<float>(firstFrame - start),
                                                          static_cast<float>(lastFrame - start))) {

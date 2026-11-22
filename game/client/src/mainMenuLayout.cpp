@@ -37,6 +37,7 @@ constexpr MenuUnits kTabTallUnits{38};
 constexpr MenuUnits kTabGapUnits{4};
 constexpr MenuUnits kPreviewWideUnits{280};
 constexpr MenuUnits kPreviewGapUnits{12};
+constexpr std::int32_t kPreviewRowWidthDivisor = 3;
 constexpr MenuUnits kControlWideUnits{300};
 constexpr MenuUnits kFieldMargin{6};
 constexpr std::size_t kMostChoiceRows = 6;
@@ -84,7 +85,7 @@ auto MainMenuLayout::listRows() const noexcept -> std::size_t {
 
 auto MainMenuLayout::withCrosshairPreview() const noexcept -> MainMenuLayout {
     MainMenuLayout layout = *this;
-    layout.previewSpace = std::min(pixels(kPreviewWideUnits), listRow(0).wide / 3);
+    layout.previewSpace = std::min(pixels(kPreviewWideUnits), listRow(0).wide / kPreviewRowWidthDivisor);
     return layout;
 }
 

@@ -112,6 +112,8 @@ enum class CrosshairType : std::uint8_t { Static, Dynamic, Tee, Dot, Count };
 
 inline constexpr float kMaxCrosshairGap = 24.0F;
 inline constexpr float kMaxCrosshairThickness = 5.0F;
+/// The gap Counter-Strike uses when its automatic crosshair is at rest.
+inline constexpr float kDefaultCrosshairGap = 7.0F;
 
 /// How the crosshair is drawn, as its cvars say.
 struct CrosshairStyle {
@@ -119,7 +121,7 @@ struct CrosshairStyle {
     CrosshairSize size = CrosshairSize::Auto;
     bool isTranslucent = true; ///< Added to what is behind it; else drawn over it as it is.
     CrosshairType type = CrosshairType::Static;
-    float gap = 7.0F;
+    float gap = kDefaultCrosshairGap;
     float thickness = 1.0F;
     bool followsRecoil = false;
     bool hasDot = false;

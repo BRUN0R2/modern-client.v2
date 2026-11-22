@@ -16,6 +16,9 @@ namespace cs {
 
 namespace {
 
+constexpr float kHalf = 0.5F;
+constexpr float kCrosshairOutlineGrowth = 2.0F;
+
 /// The names hud.txt gives the HUD's pictures.
 constexpr nx::EnumArray<HudPicture, std::string_view> kPictureNames{
     nx::EnumArray<HudPicture, std::string_view>::Storage{
@@ -501,7 +504,7 @@ auto crosshairRecoilOffset(const nx::render::Camera& view, nx::EulerAngles punch
     if (!projected) {
         return {};
     }
-    return {.x = std::round(projected->x - width * 0.5F), .y = std::round(projected->y - height * 0.5F)};
+    return {.x = std::round(projected->x - width * kHalf), .y = std::round(projected->y - height * kHalf)};
 }
 
 Hud::Hud(HudSheet sheet, std::vector<nx::render::ScreenImage> images,
@@ -616,8 +619,8 @@ void appendCrosshair(std::vector<nx::render::ScreenQuad>& quads, const Crosshair
         add(bottom);
     }
     if (crosshair.hasDot || crosshair.type == CrosshairType::Dot) {
-        add({.x = static_cast<float>(size.width / 2) - inset,
-             .y = static_cast<float>(size.height / 2) - inset,
+        add({.x = static_cast<float>(size.width) * kHalf - inset,
+             .y = static_cast<float>(size.height) * kHalf - inset,
              .width = thickness,
              .height = thickness});
     }
@@ -627,8 +630,8 @@ void appendCrosshair(std::vector<nx::render::ScreenQuad>& quads, const Crosshair
         for (const auto& rect : marks) {
             quads.push_back({.target = {.x = rect.x - 1.0F,
                                         .y = rect.y - 1.0F,
-                                        .width = rect.width + 2.0F,
-                                        .height = rect.height + 2.0F},
+                                        .width = rect.width + kCrosshairOutlineGrowth,
+                                        .height = rect.height + kCrosshairOutlineGrowth},
                              .color = kOutline});
         }
     }
