@@ -163,10 +163,13 @@ void ClientHud::appendPanels(std::vector<nx::render::ScreenQuad>& quads, const H
     if (scoreboard && frame.settings.scoreboard.shown.isDown()) {
         // One of the client's panels, over the HUD whether it is drawn or not.
         const std::string hostname = frame.settings.scoreboard.hostname.value();
-        scoreboard->append(
-            quads,
-            {.hostname = hostname, .rows = client.scores(), .self = client.self(), .wins = client.teamWins()},
-            frame.size);
+        scoreboard->append(quads,
+                           {.hostname = hostname,
+                            .rows = client.scores(),
+                            .self = client.self(),
+                            .ownTeam = client.team(),
+                            .wins = client.teamWins()},
+                           frame.size);
     }
     if (fpsLabel && framesPerSecond && frame.settings.client.video.showFps.value()) {
         fpsLabel->append(quads, *framesPerSecond);
