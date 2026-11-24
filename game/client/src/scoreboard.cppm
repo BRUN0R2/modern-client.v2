@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The scoreboard (docs/12-ui-hud-and-console.md, section 3.2), shown while +showscores is held: the players
-/// of each team under its name, its count and its wins, each by its name, whether it is dead, its health and
-/// its money, its teammates' alone (cs::ScoreRow), its score and its deaths; where Counter-Strike 1.6's
-/// client draws them, measured on it. Drawn as panels draw (nx::ui::PanelPainter), its layout the project's
-/// own (ADR-0020), in kEngineFont where the original has bitmap fonts of its own (TODO.md); no avatar and no
-/// latency yet.
+/// The scoreboard (docs/12-ui-hud-and-console.md, section 3.2), shown while +showscores is held: the local
+/// player's team on the left, its opponent on the right, with each roster under its name, count and wins.
+/// It shows each player's name, status, health and money to teammates, score and deaths. Drawn as panels draw
+/// (nx::ui::PanelPainter), in kEngineFont where the original has bitmap fonts of its own (TODO.md); no avatar
+/// and no latency values yet.
 export module cs.client:scoreboard;
 
 import std;
@@ -47,27 +46,32 @@ struct ScoreTeam {
     [[nodiscard]] inline auto operator==(const ScoreTeam&) const noexcept -> bool = default;
 };
 
-/// The teams of `rows` as the board lists them, those of no player left out: the one of more wins first, the
-/// terrorists of as many; each team's players from the most frags, of as many the fewest deaths, of as many
-/// by their slots.
+/// The teams of `rows` as the board lists them, the local player's first and its opponent second, even when
+/// either team has no rows; each team's players from the most frags, of as many the fewest deaths, of as many
+/// by their slots. Wins never change a team's side.
 [[nodiscard]] auto scoreTeamsOf(std::span<const ScoreRow> rows,
-                                const nx::EnumArray<Team, std::uint32_t>& wins) -> std::vector<ScoreTeam>;
+                                const nx::EnumArray<Team, std::uint32_t>& wins, Team ownTeam)
+    -> std::vector<ScoreTeam>;
 
 /// What the row of `team`, of `count` players, says: "Terrorists   -   1 player".
 [[nodiscard]] auto teamRowText(Team team, std::size_t count) -> std::string;
 
 /// Where the board's parts go on a screen, in pixels, those inside the panel from its top left: the panel;
-/// the title's line and the columns' heads' top; the line under them; a team's row of text and the line
-/// under it, and the pen of a team's and of a player's name; where a row's line of text starts under the
-/// team's line, a row's status starts, and how far apart rows are; where each right-aligned column ends, its
-/// last pixel; and the band of a player's own row, under the team's line.
+/// the title and the line under it; the two teams' columns and their headers; where each right-aligned column
+/// ends; where a row's line of text starts under its team's line, how far apart rows are, and the band of a
+/// player's own row.
 struct ScoreboardMetrics {
     nx::ui::PixelRect panel{};
     nx::Pixels titleX{};
     nx::Pixels headsY{};
     nx::Pixels separatorY{};
     nx::Pixels teamTextY{};
+    nx::Pixels columnHeadsY{};
     nx::Pixels teamLineY{};
+    nx::Pixels teamWide{};
+    nx::Pixels leftTeamX{};
+    nx::Pixels rightTeamX{};
+    nx::Pixels dividerX{};
     nx::Pixels nameX{};
     nx::Pixels rowTextUnderLine{};
     nx::Pixels statusX{};
@@ -83,16 +87,17 @@ struct ScoreboardMetrics {
     [[nodiscard]] inline auto operator==(const ScoreboardMetrics&) const noexcept -> bool = default;
 };
 
-/// The board's parts on a screen of `size`, written in a font of lines `lineHeight` tall (docs/12
-/// section 3.2).
-[[nodiscard]] auto scoreboardMetricsOf(nx::rhi::Extent2d size, nx::Pixels lineHeight) noexcept
-    -> ScoreboardMetrics;
+/// The board's parts on a screen of `size`, written in a font of lines `lineHeight` tall, sized for the
+/// larger team's `rowsPerTeam` rows (docs/12 section 3.2).
+[[nodiscard]] auto scoreboardMetricsOf(nx::rhi::Extent2d size, nx::Pixels lineHeight,
+                                       std::size_t rowsPerTeam) noexcept -> ScoreboardMetrics;
 
-/// What the board shows: what heads it, the players, whose its own player is, and the teams' wins.
+/// What the board shows: its heading, the players, the local player and team, and the teams' wins.
 struct ScoreboardView {
     std::string_view hostname{};
     std::span<const ScoreRow> rows{};
     PlayerIndex self{};
+    Team ownTeam{}; ///< Puts this team on the left for this client.
     nx::EnumArray<Team, std::uint32_t> wins{};
 };
 
@@ -121,6 +126,7 @@ private:
         std::string hostname{};
         std::vector<ScoreRow> rows{};
         PlayerIndex self{};
+        Team ownTeam{}; ///< Also invalidates retained quads when the local player changes teams.
         nx::EnumArray<Team, std::uint32_t> wins{};
         nx::rhi::Extent2d size{};
 

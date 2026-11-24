@@ -35,20 +35,33 @@ TEST(ScoreTeamsTest, ATeamsPlayersGoFromTheMostFragsThenTheFewestDeathsThenTheir
     const std::array rows{
         rowOf(0, "Few", cs::Team::Terrorists, 1, 0), rowOf(1, "Most", cs::Team::Terrorists, 5, 3),
         rowOf(2, "Dying", cs::Team::Terrorists, 1, 4), rowOf(3, "Same", cs::Team::Terrorists, 1, 0)};
-    const std::vector<cs::ScoreTeam> teams = cs::scoreTeamsOf(rows, {});
-    ASSERT_EQ(teams.size(), 1U) << "a team of no player is not listed";
-    EXPECT_EQ(namesOf(teams.front()), (std::vector<std::string>{"Most", "Few", "Same", "Dying"}));
+    const std::vector<cs::ScoreTeam> teams = cs::scoreTeamsOf(rows, {}, cs::Team::Terrorists);
+    ASSERT_EQ(teams.size(), 2U);
+    EXPECT_EQ(teams[0].team, cs::Team::Terrorists);
+    EXPECT_EQ(namesOf(teams[0]), (std::vector<std::string>{"Most", "Few", "Same", "Dying"}));
+    EXPECT_EQ(teams[1].team, cs::Team::CounterTerrorists);
+    EXPECT_TRUE(teams[1].rows.empty());
 }
 
-TEST(ScoreTeamsTest, TheTeamOfMoreWinsGoesFirstTheTerroristsOfAsMany) {
+TEST(ScoreTeamsTest, EachViewerSeesTheirTeamLeftAndTheirOpponentRightRegardlessOfWins) {
     const std::array rows{rowOf(0, "Ct", cs::Team::CounterTerrorists, 0, 0),
                           rowOf(1, "T", cs::Team::Terrorists, 0, 0)};
     nx::EnumArray<cs::Team, std::uint32_t> wins{};
-    EXPECT_EQ(cs::scoreTeamsOf(rows, wins).front().team, cs::Team::Terrorists);
     wins[cs::Team::CounterTerrorists] = 2;
-    const std::vector<cs::ScoreTeam> teams = cs::scoreTeamsOf(rows, wins);
-    EXPECT_EQ(teams.front().team, cs::Team::CounterTerrorists);
-    EXPECT_EQ(teams.front().wins, 2U);
+    wins[cs::Team::Terrorists] = 9;
+
+    const std::vector<cs::ScoreTeam> terroristView = cs::scoreTeamsOf(rows, wins, cs::Team::Terrorists);
+    ASSERT_EQ(terroristView.size(), 2U);
+    EXPECT_EQ(terroristView[0].team, cs::Team::Terrorists);
+    EXPECT_EQ(terroristView[0].wins, 9U);
+    EXPECT_EQ(terroristView[1].team, cs::Team::CounterTerrorists);
+    EXPECT_EQ(terroristView[1].wins, 2U);
+
+    const std::vector<cs::ScoreTeam> counterTerroristView =
+        cs::scoreTeamsOf(rows, wins, cs::Team::CounterTerrorists);
+    ASSERT_EQ(counterTerroristView.size(), 2U);
+    EXPECT_EQ(counterTerroristView[0].team, cs::Team::CounterTerrorists);
+    EXPECT_EQ(counterTerroristView[1].team, cs::Team::Terrorists);
 }
 
 TEST(ScoreboardTextTest, ATeamRowCountsItsPlayers) {
@@ -56,53 +69,100 @@ TEST(ScoreboardTextTest, ATeamRowCountsItsPlayers) {
     EXPECT_EQ(cs::teamRowText(cs::Team::CounterTerrorists, 2), "Counter-Terrorists   -   2 players");
 }
 
-/// The board measured on the original at a screen, against its panel's top left where inside it: the panel,
-/// the line under the heads and the team's line, the name's pen and where the score's column ends. All whole
-/// pixels; the score's end as the units give it, within 2 of the measure at 800x600 and 1600x900.
-struct MeasuredBoard {
+/// The two columns' placement on the screen: the panel, the columns and the ends of their data fields.
+struct BoardLayout {
     nx::rhi::Extent2d size{};
     std::int32_t panelX = 0;
     std::int32_t panelY = 0;
     std::int32_t panelWide = 0;
     std::int32_t panelTall = 0;
-    std::int32_t separatorY = 0;
-    std::int32_t teamLineY = 0;
+    std::int32_t teamWide = 0;
+    std::int32_t leftTeamX = 0;
+    std::int32_t rightTeamX = 0;
     std::int32_t nameX = 0;
+    std::int32_t statusX = 0;
+    std::int32_t healthEnd = 0;
+    std::int32_t moneyEnd = 0;
     std::int32_t scoreEnd = 0;
+    std::int32_t deathsEnd = 0;
+    std::int32_t latencyEnd = 0;
 };
 
-TEST(ScoreboardLayoutTest, ThePanelAndItsRowsAreWhereTheOriginalDrawsThem) {
-    const std::array measured{
-        MeasuredBoard{{.width = 800, .height = 600}, 75, 87, 650, 425, 23, 51, 45, 515},
-        MeasuredBoard{{.width = 1024, .height = 768}, 96, 112, 832, 544, 24, 53, 61, 659},
-        MeasuredBoard{{.width = 1280, .height = 720}, 250, 105, 780, 510, 23, 51, 45, 618},
-        MeasuredBoard{{.width = 1280, .height = 960}, 120, 140, 1040, 680, 24, 53, 61, 824},
-        MeasuredBoard{{.width = 1600, .height = 900}, 312, 131, 975, 637, 24, 53, 61, 772},
+TEST(ScoreboardLayoutTest, TheTwoColumnsStayWithinThePanelAtDifferentAspectRatios) {
+    const std::array layouts{
+        BoardLayout{{.width = 800, .height = 600}, 75, 87, 650, 425, 313, 6, 329, 15, 131, 169, 212, 247,
+                    284, 313},
+        BoardLayout{{.width = 1024, .height = 768}, 96, 112, 832, 544, 403, 6, 421, 20, 169, 217, 274,
+                    318, 366, 403},
+        BoardLayout{{.width = 1280, .height = 720}, 250, 105, 780, 510, 377, 6, 395, 18, 158, 203, 256,
+                    297, 343, 377},
+        BoardLayout{{.width = 1600, .height = 900}, 312, 131, 975, 637, 473, 6, 494, 23, 198, 255, 321,
+                    373, 430, 473},
+        BoardLayout{{.width = 320, .height = 240}, 30, 35, 260, 170, 121, 6, 131, 6, 50, 65, 82, 95, 110,
+                    121},
     };
-    for (const MeasuredBoard& board : measured) {
-        const cs::ScoreboardMetrics metrics = cs::scoreboardMetricsOf(board.size, nx::Pixels{16});
-        EXPECT_EQ(metrics.panel.x, nx::Pixels{board.panelX}) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.panel.y, nx::Pixels{board.panelY}) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.panel.wide, nx::Pixels{board.panelWide})
-            << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.panel.tall, nx::Pixels{board.panelTall})
-            << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.separatorY, nx::Pixels{board.separatorY})
-            << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.teamLineY, nx::Pixels{board.teamLineY})
-            << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.nameX, nx::Pixels{board.nameX}) << board.size.width << "x" << board.size.height;
-        EXPECT_EQ(metrics.scoreEnd, nx::Pixels{board.scoreEnd})
-            << board.size.width << "x" << board.size.height;
+    for (const BoardLayout& layout : layouts) {
+        const cs::ScoreboardMetrics metrics = cs::scoreboardMetricsOf(layout.size, nx::Pixels{16}, 0);
+        EXPECT_EQ(metrics.panel.x, nx::Pixels{layout.panelX})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.panel.y, nx::Pixels{layout.panelY})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.panel.wide, nx::Pixels{layout.panelWide})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.panel.tall, nx::Pixels{layout.panelTall})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.teamWide, nx::Pixels{layout.teamWide})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.leftTeamX, nx::Pixels{layout.leftTeamX})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.rightTeamX, nx::Pixels{layout.rightTeamX})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.nameX, nx::Pixels{layout.nameX})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.statusX, nx::Pixels{layout.statusX})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.healthEnd, nx::Pixels{layout.healthEnd})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.moneyEnd, nx::Pixels{layout.moneyEnd})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.scoreEnd, nx::Pixels{layout.scoreEnd})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.deathsEnd, nx::Pixels{layout.deathsEnd})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.latencyEnd, nx::Pixels{layout.latencyEnd})
+            << layout.size.width << "x" << layout.size.height;
+        EXPECT_LT(metrics.nameX, metrics.statusX);
+        EXPECT_LT(metrics.statusX, metrics.healthEnd);
+        EXPECT_LT(metrics.healthEnd, metrics.moneyEnd);
+        EXPECT_LT(metrics.moneyEnd, metrics.scoreEnd);
+        EXPECT_LT(metrics.scoreEnd, metrics.deathsEnd);
+        EXPECT_LT(metrics.deathsEnd, metrics.latencyEnd);
+        EXPECT_LE(metrics.latencyEnd, metrics.teamWide);
     }
 }
 
-TEST(ScoreboardLayoutTest, ARowsTextIsCenteredUnderItsTeamsLineAsTheOriginalPutsIt) {
-    // A font of lines 16 tall, 12 units down at 1280x720: 18 less 8 and a pixel.
-    EXPECT_EQ(cs::scoreboardMetricsOf({.width = 1280, .height = 720}, nx::Pixels{16}).rowTextUnderLine,
-              nx::Pixels{9});
-    EXPECT_EQ(cs::scoreboardMetricsOf({.width = 1280, .height = 960}, nx::Pixels{16}).rowTextUnderLine,
-              nx::Pixels{15});
+TEST(ScoreboardLayoutTest, TheRowsExpandThePanelAndCompressToFitTheScreen) {
+    const cs::ScoreboardMetrics defaultRows =
+        cs::scoreboardMetricsOf({.width = 1280, .height = 720}, nx::Pixels{16}, 0);
+    const cs::ScoreboardMetrics manyRows =
+        cs::scoreboardMetricsOf({.width = 1280, .height = 720}, nx::Pixels{16}, 32);
+    EXPECT_GT(manyRows.panel.tall, defaultRows.panel.tall);
+    EXPECT_LT(manyRows.rowPitch, defaultRows.rowPitch);
+    EXPECT_LE(manyRows.rowTextUnderLine + nx::Pixels{16}, manyRows.rowPitch);
+    EXPECT_LE(manyRows.panel.y + manyRows.panel.tall, nx::Pixels{720});
+
+    const cs::ScoreboardMetrics sixteenRows =
+        cs::scoreboardMetricsOf({.width = 1280, .height = 720}, nx::Pixels{16}, 16);
+    EXPECT_EQ(sixteenRows.rowPitch, defaultRows.rowPitch);
+    EXPECT_GT(sixteenRows.panel.tall, defaultRows.panel.tall);
+}
+
+TEST(ScoreboardLayoutTest, ARowsTextIsCenteredUnderItsTeamsLine) {
+    // A font of lines 16 tall sits just above each row's center, with its current pitch.
+    EXPECT_EQ(cs::scoreboardMetricsOf({.width = 1280, .height = 720}, nx::Pixels{16}, 0).rowTextUnderLine,
+              nx::Pixels{6});
+    EXPECT_EQ(cs::scoreboardMetricsOf({.width = 1280, .height = 960}, nx::Pixels{16}, 0).rowTextUnderLine,
+              nx::Pixels{12});
 }
 
 TEST(ScoreboardControlsTest, ShowscoresShowsTheBoardWhileHeld) {

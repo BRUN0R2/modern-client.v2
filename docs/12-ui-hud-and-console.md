@@ -291,13 +291,13 @@ own client of today (build 10210) draws the same rows at those resolutions, up t
 its `EngineFont` writes its capitals one lower, and prints `<victim> died` in the console.
 
 **The scoreboard** (`cs.client:scoreboard`, a layout of the project's own, [ADR-0020](adr/0020-in-house-ui-toolkit.md)):
-while `+showscores` is held (`TAB`), over the HUD whether `hud_draw` draws it or not, a panel with the
-teams of players, each under its row, of the most wins first (the terrorists of as many) and each of its
-players from the most frags, of as many the fewest deaths, of as many by its slot; what it shows is
-[10 §7.4](10-counter-strike-gameplay.md#74-damage)'s scores. **Observed** (Valve's client of today, build
+while `+showscores` is held (`TAB`), over the HUD whether `hud_draw` draws it or not, a panel with two team
+columns and each team's players sorted by frags, then deaths, then slot; what it shows is
+[10 §7.4](10-counter-strike-gameplay.md#74-damage)'s scores. The local player's team is always on the left
+and its opponent on the right, regardless of wins. **Observed** (Valve's client of today, build
 10210; a player alone on its team, alive and after `kill`, at 800x600, 1024x768, 1280x720, 1280x960 and
 1600x900), with H the screen's height and Y(n) = n × H / 480 in whole pixels, each place from the panel's
-top left:
+top left. This table records the original client's single-column layout as a visual reference:
 
 | Part | Where |
 |------|-------|
@@ -308,14 +308,18 @@ top left:
 | A player's row | Its name, `Dead` from Y(215), its health and `$` and its money while the server tells them, its score and its deaths ending in their columns; its line of text Y(12) under the team's line less half the line's height and a pixel |
 | The player's own row | White at 25 of 255 over the panel, Y(21) tall, from 2 under the team's line, 5 in from each side of the panel |
 
+The project's layout uses two equal-width columns inside a centered panel. Each client places its own team first,
+using the team from its current `ClientGame`; the other team's client sees the opposite orientation. Both sides
+remain anchored even when one has no players. The panel stays within the available screen width, expands for
+larger rosters, and tightens row spacing when needed to keep those players visible. Each side has its own
+column headings, team-colored line and wins; long names are shortened to keep the score fields aligned.
+
 `hostname` is `Counter-Strike 1.6` until it is set, the game the project plays, a departure the user chose
-(2026-11-02) from the original's `Half-Life`. The rows of more players are not measured, for that build's game
-has no bots: the next row is drawn Y(21)
-under the last, as tall as the band, and a next team's line two of them under its last row ([TODO](TODO.md)),
-as the order of the teams and of their players, which come from the original's rules. The original writes
-all of it in bitmap fonts of its own (`gfx/vgui/fonts/<size>_Scoreboard Text.tga` and its title's), which
-`next` writes in `EngineFont` until it reads them. The room of the avatar of Steam's (at 16 under 768 lines,
-21 from them) stays empty, and `Latency` has no numbers yet.
+(2026-11-02) from the original's `Half-Life`. The rows of more players are not measured on Valve's client,
+for that build's game has no bots. The original writes all of it in bitmap fonts of its own
+(`gfx/vgui/fonts/<size>_Scoreboard Text.tga` and its title's), which `next` writes in `EngineFont` until it
+reads them. The room of the avatar of Steam's (at 16 under 768 lines, 21 from them) stays empty, and `Ping`
+has no numbers yet.
 
 **The damage numbers** (`cs.client:damageNumbers`), the project's own, nothing of the original's, as
 action games show the damage a hit deals: while `hud_damagenumbers` is 1 and `hud_draw` draws the HUD,

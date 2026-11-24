@@ -165,7 +165,11 @@ void ClientHud::appendPanels(std::vector<nx::render::ScreenQuad>& quads, const H
         const std::string hostname = frame.settings.scoreboard.hostname.value();
         scoreboard->append(
             quads,
-            {.hostname = hostname, .rows = client.scores(), .self = client.self(), .wins = client.teamWins()},
+            {.hostname = hostname,
+             .rows = client.scores(),
+             .self = client.self(),
+             .ownTeam = client.team(),
+             .wins = client.teamWins()},
             frame.size);
     }
     if (fpsLabel && framesPerSecond && frame.settings.client.video.showFps.value()) {
