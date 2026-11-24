@@ -90,16 +90,42 @@ struct BoardLayout {
 
 TEST(ScoreboardLayoutTest, TheTwoColumnsStayWithinThePanelAtDifferentAspectRatios) {
     const std::array layouts{
-        BoardLayout{{.width = 800, .height = 600}, 75, 87, 650, 425, 313, 6, 329, 15, 131, 169, 212, 247,
-                    284, 313},
-        BoardLayout{{.width = 1024, .height = 768}, 96, 112, 832, 544, 403, 6, 421, 20, 169, 217, 274,
-                    318, 366, 403},
-        BoardLayout{{.width = 1280, .height = 720}, 250, 105, 780, 510, 377, 6, 395, 18, 158, 203, 256,
-                    297, 343, 377},
-        BoardLayout{{.width = 1600, .height = 900}, 312, 131, 975, 637, 473, 6, 494, 23, 198, 255, 321,
-                    373, 430, 473},
-        BoardLayout{{.width = 320, .height = 240}, 30, 35, 260, 170, 121, 6, 131, 6, 50, 65, 82, 95, 110,
-                    121},
+        BoardLayout{
+            {.width = 800, .height = 600}, 75, 87, 650, 425, 313, 6, 329, 15, 131, 169, 212, 247, 284, 313},
+        BoardLayout{
+            {.width = 1024, .height = 768}, 96, 112, 832, 544, 403, 6, 421, 20, 169, 217, 274, 318, 366, 403},
+        BoardLayout{{.width = 1280, .height = 720},
+                    250,
+                    105,
+                    780,
+                    510,
+                    377,
+                    6,
+                    395,
+                    18,
+                    158,
+                    203,
+                    256,
+                    297,
+                    343,
+                    377},
+        BoardLayout{{.width = 1600, .height = 900},
+                    312,
+                    131,
+                    975,
+                    637,
+                    473,
+                    6,
+                    494,
+                    23,
+                    198,
+                    255,
+                    321,
+                    373,
+                    430,
+                    473},
+        BoardLayout{
+            {.width = 320, .height = 240}, 30, 35, 260, 170, 121, 6, 131, 6, 50, 65, 82, 95, 110, 121},
     };
     for (const BoardLayout& layout : layouts) {
         const cs::ScoreboardMetrics metrics = cs::scoreboardMetricsOf(layout.size, nx::Pixels{16}, 0);
@@ -117,8 +143,7 @@ TEST(ScoreboardLayoutTest, TheTwoColumnsStayWithinThePanelAtDifferentAspectRatio
             << layout.size.width << "x" << layout.size.height;
         EXPECT_EQ(metrics.rightTeamX, nx::Pixels{layout.rightTeamX})
             << layout.size.width << "x" << layout.size.height;
-        EXPECT_EQ(metrics.nameX, nx::Pixels{layout.nameX})
-            << layout.size.width << "x" << layout.size.height;
+        EXPECT_EQ(metrics.nameX, nx::Pixels{layout.nameX}) << layout.size.width << "x" << layout.size.height;
         EXPECT_EQ(metrics.statusX, nx::Pixels{layout.statusX})
             << layout.size.width << "x" << layout.size.height;
         EXPECT_EQ(metrics.healthEnd, nx::Pixels{layout.healthEnd})

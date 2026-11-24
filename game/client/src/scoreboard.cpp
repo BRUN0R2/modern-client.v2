@@ -54,11 +54,11 @@ constexpr nx::Pixels kTitleGap{1};         ///< Before the title's pen, after it
 constexpr nx::Pixels kLinesInset{6};       ///< From the panel's left to either team's line.
 constexpr nx::Pixels kLinesRightInset{7};  ///< From the last team's line to the panel's right.
 constexpr nx::Pixels kDividerThickness{1}; ///< Between the teams' columns.
-constexpr nx::Pixels kRowTextLift{1};       ///< Slightly above the vertical center of a player's row.
-constexpr nx::Pixels kBandUnderLine{2};     ///< From the team's line to the top of its first row's band.
-constexpr nx::Pixels kBandInset{3};         ///< From either side of a team column to a band.
-constexpr nx::Pixels kTextGap{3};           ///< Between a player's name and the status column.
-constexpr nx::Pixels kLineThickness{1};     ///< Of the border, the corners' steps and the lines under heads.
+constexpr nx::Pixels kRowTextLift{1};      ///< Slightly above the vertical center of a player's row.
+constexpr nx::Pixels kBandUnderLine{2};    ///< From the team's line to the top of its first row's band.
+constexpr nx::Pixels kBandInset{3};        ///< From either side of a team column to a band.
+constexpr nx::Pixels kTextGap{3};          ///< Between a player's name and the status column.
+constexpr nx::Pixels kLineThickness{1};    ///< Of the border, the corners' steps and the lines under heads.
 /// An inset on each side of the panel: left and right, top and bottom.
 constexpr std::int32_t kInsetSides = 2;
 /// What a length is divided by for its middle.
@@ -190,8 +190,8 @@ auto teamRowText(Team team, std::size_t count) -> std::string {
     return std::format("{}   -   {} {}", kTeamNames[team], count, count == 1 ? "player" : "players");
 }
 
-auto scoreboardMetricsOf(nx::rhi::Extent2d size, nx::Pixels lineHeight,
-                         std::size_t rowsPerTeam) noexcept -> ScoreboardMetrics {
+auto scoreboardMetricsOf(nx::rhi::Extent2d size, nx::Pixels lineHeight, std::size_t rowsPerTeam) noexcept
+    -> ScoreboardMetrics {
     const nx::Pixels height{nx::narrow<std::int32_t>(size.height)};
     const nx::Pixels screenWide{nx::narrow<std::int32_t>(size.width)};
     const FixedParts& fixed = height < kLargerFrom ? kSmallerParts : kLargerParts;
@@ -199,17 +199,15 @@ auto scoreboardMetricsOf(nx::rhi::Extent2d size, nx::Pixels lineHeight,
     const nx::Pixels requestedWide = unitsOf(kPanelWideUnits, height);
     const nx::Pixels wide = std::min(requestedWide, screenWide - (sideMargin * kInsetSides));
     const nx::Pixels teamGap = unitsOf(kTeamGapUnits, height);
-    const nx::Pixels innerWide =
-        std::max(nx::Pixels{}, wide - kLinesInset - kLinesRightInset - teamGap);
+    const nx::Pixels innerWide = std::max(nx::Pixels{}, wide - kLinesInset - kLinesRightInset - teamGap);
     const nx::Pixels teamWide = innerWide / kInsetSides;
     const nx::Pixels maxPanelTall =
         std::max(nx::Pixels{}, height - (unitsOf(kPanelVerticalMarginUnits, height) * kInsetSides));
     const nx::Pixels bottomInset = unitsOf(kPanelBottomInsetUnits, height);
     const nx::Pixels rowArea = std::max(nx::Pixels{}, maxPanelTall - fixed.teamLineY - bottomInset);
     const std::int32_t rowCount = nx::narrow<std::int32_t>(rowsPerTeam);
-    const nx::Pixels fittingPitch = rowsPerTeam > 0
-                                        ? nx::Pixels{rowArea.value() / rowCount}
-                                        : unitsOf(kRowPitchUnits, height);
+    const nx::Pixels fittingPitch =
+        rowsPerTeam > 0 ? nx::Pixels{rowArea.value() / rowCount} : unitsOf(kRowPitchUnits, height);
     const nx::Pixels pitch =
         rowsPerTeam > 0 ? std::min(unitsOf(kRowPitchUnits, height), std::max(lineHeight, fittingPitch))
                         : unitsOf(kRowPitchUnits, height);
@@ -341,8 +339,8 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const nx::ui
         writeColumnHead(kScoreHead, metrics.moneyEnd, metrics.scoreEnd);
         writeColumnHead(kDeathsHead, metrics.scoreEnd, metrics.deathsEnd);
         writeColumnHead(kLatencyHead, metrics.deathsEnd, metrics.latencyEnd);
-        painter.fill(
-            {.x = teamX, .y = metrics.teamLineY, .wide = metrics.teamWide, .tall = kLineThickness}, color);
+        painter.fill({.x = teamX, .y = metrics.teamLineY, .wide = metrics.teamWide, .tall = kLineThickness},
+                     color);
 
         nx::Pixels rowDown = metrics.teamLineY;
         for (const ScoreRow& row : team.rows) {
@@ -354,8 +352,7 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const nx::ui
                              kBandColor);
             }
             const nx::Pixels rowY = rowDown + metrics.rowTextUnderLine;
-            const nx::Pixels nameWide =
-                std::max(nx::Pixels{}, metrics.statusX - metrics.nameX - kTextGap);
+            const nx::Pixels nameWide = std::max(nx::Pixels{}, metrics.statusX - metrics.nameX - kTextGap);
             const std::string name = textThatFits(atlas, row.name, nameWide);
             write(name, teamX + metrics.nameX, rowY, color);
             if (row.isDead) {
