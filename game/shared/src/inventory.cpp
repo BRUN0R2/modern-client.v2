@@ -301,14 +301,15 @@ auto Inventory::maxSpeed() const noexcept -> nx::UnitsPerSecond {
     return m_held ? m_catalog->weapon(m_weapons[*m_held].weapon).maxSpeed : kUnarmedSpeed;
 }
 
-auto Inventory::takeSounds() -> std::vector<SoundMade> {
-    return std::exchange(m_sounds, {});
+void Inventory::prependSoundsTo(std::vector<SoundMade>& collector) {
+    collector.insert(collector.begin(), sounds.begin(), sounds.end());
+    sounds.clear();
 }
 
 void Inventory::removeAll() {
-    std::vector<SoundMade> sounds = std::move(m_sounds);
+    std::vector<SoundMade> made = std::move(sounds);
     *this = Inventory{*m_catalog};
-    m_sounds = std::move(sounds);
+    sounds = std::move(made);
 }
 
 auto Inventory::find(WeaponIndex weapon) const noexcept -> std::optional<std::size_t> {
@@ -333,7 +334,7 @@ void Inventory::takeRounds(std::size_t index, std::uint32_t rounds) {
 
 void Inventory::makeSound(const std::optional<GameSound>& sound, const nx::game::TickTime& time) {
     if (sound) {
-        m_sounds.push_back(SoundMade{.sound = &*sound, .at = time.now, .volume = sound->volume});
+        sounds.push_back(SoundMade{.sound = &*sound, .at = time.now, .volume = sound->volume});
     }
 }
 

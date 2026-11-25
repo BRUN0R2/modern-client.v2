@@ -78,7 +78,7 @@ says which sound it makes; `cs::ClientAudio` chooses the file and the pitch with
 own random numbers, as the original's client and engine choose them, so that hearing never changes
 what the game draws. A sound on a channel other than `auto` replaces the one the player's channel
 plays (§3): an AK-47's shot cuts the last one's tail, as on `CHAN_WEAPON`. The weapons make theirs
-(`Inventory::takeSounds`, docs/10 §7.2): their draw (the knife's `knife_deploy1` at 0.3), each
+(`Inventory::prependSoundsTo`, docs/10 §7.2): their draw (the knife's `knife_deploy1` at 0.3), each
 round fired (a burst's follow-ups too), the empty click (`dryfire_pistol` or `dryfire_rifle` at
 0.8, PlayEmptySound), and the knife's miss (`knife_slash1`/`2` at pitch 94) or its hit on the world
 (`knife_hitwall1` at 98 to 101), with ReGameDLL_CS's values. The guns' shots come from the

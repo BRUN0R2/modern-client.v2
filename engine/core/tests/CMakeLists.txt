@@ -19,6 +19,7 @@ nxAddTest(nxCoreTests
         hashTests.cpp
         randomTests.cpp
         memoryTests.cpp
+        bufferHandoverTests.cpp
         logTests.cpp
     DEPENDS
         nx::core

@@ -25,4 +25,5 @@ export import :flags;
 export import :hash;
 export import :random;
 export import :memory;
+export import :bufferHandover;
 export import :log;

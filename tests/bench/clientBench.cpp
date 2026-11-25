@@ -30,6 +30,10 @@ constexpr std::size_t kEntityLumpOffset = 4;
 constexpr std::size_t kGroupFileBytes = 1024UZ * 1024UZ;
 constexpr std::int64_t kManySequences = 64;
 constexpr std::int64_t kManyLights = 4096;
+/// What a tick makes of each thing a frame takes: a rifle's shots, its impacts and the blood they shed, of
+/// one player; and what a match of many does.
+constexpr std::int64_t kFewEvents = 8;
+constexpr std::int64_t kManyEvents = 256;
 constexpr nx::HammerUnits kLightReach{10000.0F};
 constexpr float kAimYaw = 191.25F;
 constexpr float kAimPitch = 63.75F;
@@ -107,10 +111,27 @@ private:
     return bytes;
 }
 
-[[nodiscard]] auto snapshotOf(const cs::WeaponCatalog& weapons, std::size_t count) -> cs::PlayerSnapshot {
+/// What the server tells after a tick of `count` players, with `events` of each thing a tick makes (none
+/// by default): the marks, the tracers and the sounds a frame takes.
+[[nodiscard]] auto snapshotOf(const cs::WeaponCatalog& weapons, std::size_t count, std::size_t events = 0)
+    -> cs::PlayerSnapshot {
     cs::PlayerSnapshot snapshot{.inventory = cs::Inventory{weapons}};
     const nx::assets::SequenceIndex aim{nx::test::playerSequenceIndex("ref_aim_knife")};
     const nx::assets::SequenceIndex gait{nx::test::playerSequenceIndex("idle1")};
+    const cs::GameSound sound{.files = {"benchmark.wav"}};
+    for (std::size_t index = 0; index < events; ++index) {
+        snapshot.sounds.push_back(cs::SoundMade{.sound = &sound, .at = snapshot.time});
+        snapshot.playerSounds.push_back(cs::PlayerSound{.player = cs::PlayerIndex{0}});
+        snapshot.impacts.push_back(cs::Impact{.position = {.x = static_cast<float>(index)}});
+        snapshot.bulletTracers.push_back(cs::BulletTracer{});
+        snapshot.bloodMarks.push_back(cs::BloodMark{});
+        snapshot.bloodSprays.push_back(cs::BloodSpray{});
+        snapshot.bloodStreams.push_back(cs::BloodStream{});
+        snapshot.streakSplashes.push_back(cs::StreakSplash{});
+        snapshot.damageDealt.push_back(cs::DamageDealt{});
+        snapshot.entitySteps.push_back(cs::EntityStep{});
+        snapshot.killNotices.push_back(cs::KillNotice{});
+    }
     for (std::size_t index = 0; index < count; ++index) {
         snapshot.players.push_back(
             cs::PlayerEntityState{.player = cs::PlayerIndex{nx::narrow<std::uint32_t>(index)},
@@ -146,6 +167,32 @@ void extractPlayers(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * state.range(0));
 }
 BENCHMARK(extractPlayers)->Arg(kUsualPlayers)->Arg(kManyPlayers)->Arg(kMostPlayers);
+
+/// What a tick made, taken by the frame: the sounds, the marks and the rest, each read where the tick wrote
+/// it rather than copied out, so that a tick of the same size allocates nothing once the buffers hold it.
+void takeTickEvents(benchmark::State& state) {
+    // The models the frame's game is told of: the box's, of no entity's, and the characters' alone.
+    ClientFiles files;
+    const nx::assets::Vfs vfs = files.mount();
+    const cs::WeaponCatalog weapons = emptyWeapons();
+    const std::vector<std::byte> bytes = boxMapBytes();
+    auto map = nx::assets::BspView::parse(bytes);
+    nx::invariant(map.has_value(), "clientBench: the synthetic map is valid");
+    const cs::MapModels models = cs::MapModels::read(vfs, *map);
+    const cs::PlayerModels players = cs::PlayerModels::read(vfs, {}, weapons);
+    cs::ClientGame client{models, players, snapshotOf(weapons, 0)};
+    const std::size_t count = nx::narrow<std::size_t>(state.range(0));
+    for ([[maybe_unused]] auto iteration : state) {
+        client.receive(snapshotOf(weapons, 0, count));
+        const std::span<const cs::SoundMade> sounds = client.takeSounds();
+        const std::span<const cs::Impact> impacts = client.takeImpacts();
+        const std::span<const cs::BloodMark> marks = client.takeBloodMarks();
+        const std::span<const cs::BulletTracer> tracers = client.takeBulletTracers();
+        benchmark::DoNotOptimize(sounds.size() + impacts.size() + marks.size() + tracers.size());
+    }
+    state.SetItemsProcessed(state.iterations() * state.range(0));
+}
+BENCHMARK(takeTickEvents)->Arg(kFewEvents)->Arg(kManyEvents);
 
 void extractPlacements(benchmark::State& state) {
     ClientFiles files;
