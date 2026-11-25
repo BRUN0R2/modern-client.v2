@@ -171,8 +171,16 @@ BENCHMARK(extractPlayers)->Arg(kUsualPlayers)->Arg(kManyPlayers)->Arg(kMostPlaye
 /// What a tick made, taken by the frame: the sounds, the marks and the rest, each read where the tick wrote
 /// it rather than copied out, so that a tick of the same size allocates nothing once the buffers hold it.
 void takeTickEvents(benchmark::State& state) {
+    // The models the frame's game is told of: the box's, of no entity's, and the characters' alone.
+    ClientFiles files;
+    const nx::assets::Vfs vfs = files.mount();
     const cs::WeaponCatalog weapons = emptyWeapons();
-    cs::ClientGame client{{}, {}, snapshotOf(weapons, 0)};
+    const std::vector<std::byte> bytes = boxMapBytes();
+    auto map = nx::assets::BspView::parse(bytes);
+    nx::invariant(map.has_value(), "clientBench: the synthetic map is valid");
+    const cs::MapModels models = cs::MapModels::read(vfs, *map);
+    const cs::PlayerModels players = cs::PlayerModels::read(vfs, {}, weapons);
+    cs::ClientGame client{models, players, snapshotOf(weapons, 0)};
     const std::size_t count = nx::narrow<std::size_t>(state.range(0));
     for ([[maybe_unused]] auto iteration : state) {
         client.receive(snapshotOf(weapons, 0, count));

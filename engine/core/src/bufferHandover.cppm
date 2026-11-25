@@ -7,7 +7,6 @@
 export module nx.core:bufferHandover;
 
 import std;
-import :contracts;
 
 export namespace nx {
 

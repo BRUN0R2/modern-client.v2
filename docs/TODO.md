@@ -153,7 +153,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] `function_ref` (own implementation of `std::function_ref`), when the first consumer exists
 - [ ] `OptionalRef<T>` (facade for `std::optional<T&>`), when the first consumer exists
 - [x] `FrameArena` with a typed failure (`Exhausted`); a bad alignment is a contract violation
-- [x] `BufferHandover<T>`, a vector a producer fills and a consumer reads with the storage kept from take to take, so that what a tick or a frame makes is read without being copied out: the client's eleven queues of what the ticks made (`cs::ClientGame`), the server's sounds of a tick and its weapons' (`cs::Inventory`, `cs::Game::tick`), which allocate nothing once warm, and a snapshot of a client's keeping what its producer had not handed over
+- [x] `BufferHandover<T>`, a vector a producer fills and a consumer reads with the storage kept from take to take, so that what a tick or a frame makes is read without being copied out: the client's eleven queues of what the ticks made (`cs::ClientGame`), the server's sounds of a tick, into which its weapons' move theirs at the head (`cs::Inventory::prependSoundsTo`, `cs::Game::tick`), which allocate nothing once warm, and a snapshot of a client's keeping what its producer had not handed over
 - [ ] Generic `PoolAllocator<T>` (the ECS chunks use the `World`'s own block pool) and `TrackedHeapAllocator`
 - [x] Lock-free SPSC queue with a typed queue-full error (`nx.jobs:spscQueue`), first used by the mixer's commands
 - [ ] Lock-free MPSC queue, when the first consumer exists (networking)

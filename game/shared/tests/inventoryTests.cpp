@@ -819,8 +819,10 @@ TEST(MeleeTest, AnAttackMeetsALineAheadThenADuckedHull) {
 
 /// The first file of each sound `inventory` made since the last call, in their order.
 [[nodiscard]] auto soundsOf(Inventory& inventory) -> std::vector<std::string> {
+    std::vector<cs::SoundMade> sounds;
+    inventory.prependSoundsTo(sounds);
     std::vector<std::string> files;
-    for (const cs::SoundMade& made : inventory.takeSounds()) {
+    for (const cs::SoundMade& made : sounds) {
         files.push_back(made.sound->files.front());
     }
     return files;
@@ -981,16 +983,57 @@ TEST(SoundTest, EachSoundTakenCarriesTheTickItWasMadeAt) {
     Inventory inventory = given(weapons, {kGlock});
     Shooter shooter = standing();
     std::ignore = frames(inventory, shooter, 0, kReady - 1);
-    std::ignore = inventory.takeSounds();
+    std::vector<cs::SoundMade> made;
+    inventory.prependSoundsTo(made);
+    made.clear(); // taken once, the draw's
     for (const std::int64_t press : {kReady, kReady + 20, kReady + 40}) {
         std::ignore = frames(inventory, shooter, press, press, {Button::Attack});
         std::ignore = frames(inventory, shooter, press + 1, press + 19);
     }
-    const std::vector<cs::SoundMade>& made = inventory.takeSounds();
+    inventory.prependSoundsTo(made);
     ASSERT_EQ(made.size(), 3U);
     EXPECT_EQ(made[0].at, nx::GameTime::atTick(kReady));
     EXPECT_EQ(made[1].at, nx::GameTime::atTick(kReady + 20));
     EXPECT_EQ(made[2].at, nx::GameTime::atTick(kReady + 40));
+}
+
+TEST(SoundTest, TheSoundsOfTheWeaponsGoBeforeThoseTheCollectorHolds) {
+    // A tick collects what the player made before its weapons ran, then its weapons' own sounds, which
+    // come before, as the original's come; each is taken once.
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife});
+    const cs::GameSound collected{.files = {"kept.wav"}};
+    std::vector<cs::SoundMade> sounds;
+    sounds.push_back(cs::SoundMade{.sound = &collected});
+    inventory.prependSoundsTo(sounds);
+
+    ASSERT_EQ(sounds.size(), 2U) << "what the collector held and the knife's draw";
+    EXPECT_EQ(sounds[0].sound->files.front(), "weapons/knife_deploy1.wav") << "the weapons' first";
+    EXPECT_EQ(sounds[1].sound, &collected);
+    std::vector<cs::SoundMade> next;
+    inventory.prependSoundsTo(next);
+    EXPECT_TRUE(next.empty()) << "taken once";
+}
+
+TEST(SoundTest, ASoundsBufferKeepsTheRoomItGrewTo) {
+    // A tick's collector hands the same buffer back to the next tick: moving the weapons' sounds in front
+    // of what it holds takes the room the buffer grew to, never a new one.
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife});
+    Shooter shooter = standing();
+    std::vector<cs::SoundMade> sounds;
+    sounds.reserve(16);
+    inventory.prependSoundsTo(sounds);
+    ASSERT_EQ(sounds.size(), 1U) << "the knife's draw";
+    const std::size_t room = sounds.capacity();
+
+    sounds.clear();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = frames(inventory, shooter, kReady, kReady, {Button::Attack});
+    inventory.prependSoundsTo(sounds);
+    ASSERT_EQ(sounds.size(), 1U) << "the slash, the tick before having taken the draw's";
+    EXPECT_EQ(sounds.front().sound->files.front(), "weapons/knife_slash1.wav") << "the miss";
+    EXPECT_EQ(sounds.capacity(), room) << "the room the collector's buffer already had";
 }
 
 TEST(SoundTest, AWeaponDrawnMakesItsDrawSoundAndTheSoundsAreTakenOnce) {
