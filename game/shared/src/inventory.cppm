@@ -234,12 +234,11 @@ public:
     /// How fast the weapon the player holds lets it run, kUnarmedSpeed with none (ResetMaxSpeed).
     [[nodiscard]] auto maxSpeed() const noexcept -> nx::UnitsPerSecond;
 
-    /// Puts the sounds the player's weapons made since the last call, in their order, before those
-    /// `sounds` already holds, and forgets them: each keeps the moment of its tick, as one was drawn,
-    /// fired, clicked empty, missed or met the world. A tick's collector passes the sounds the player
-    /// made of them, which the weapons' come before as they do in the original; the buffer of the call
-    /// keeps the room it grew to, so a tick's worth is moved without allocating once it holds one.
-    void prependSoundsTo(std::vector<SoundMade>& sounds);
+    /// Moves the sounds the weapons made since the last call, in their order, before those `collector`
+    /// already holds: a tick collects what the player made of them first, and its weapons' come before,
+    /// as they do in the original. The buffer keeps the room it grew to, so a tick's worth is moved
+    /// without allocating once it holds one.
+    void prependSoundsTo(std::vector<SoundMade>& collector);
 
 private:
     /// Where the player's `weapon` is among its weapons; none.
@@ -289,8 +288,11 @@ private:
     /// Until the weapon held does anything (the player's m_flNextAttack), counted down to -0.001
     /// second.
     nx::Seconds m_nextAttack{};
-    bool m_isReloading = false;      ///< (m_fInReload)
-    std::vector<SoundMade> m_sounds; ///< Made since the last prependSoundsTo.
+    bool m_isReloading = false; ///< (m_fInReload)
+    /// The sounds the weapons made since they were last taken, in their order, each with the moment of
+    /// its tick: as one was drawn, fired, clicked empty, missed or met the world. `prependSoundsTo`
+    /// moves them out and keeps the room they grew to.
+    std::vector<SoundMade> sounds;
 };
 
 } // namespace cs

@@ -129,7 +129,9 @@ public:
     }
     /// The sounds the player made since the last call, in the order of their ticks, each with its
     /// moment. What a call gave is read until the next one.
-    [[nodiscard]] inline auto takeSounds() -> std::span<const SoundMade> { return m_sounds.handToConsumer(); }
+    [[nodiscard]] inline auto takeSounds() -> std::span<const SoundMade> {
+        return soundQueue.handToConsumer();
+    }
     /// The sounds the other players made since the last call, in the order of their ticks, each with its
     /// moment and where it was made. What a call gave is read until the next one.
     [[nodiscard]] inline auto takePlayerSounds() -> std::span<const PlayerSound> {
@@ -142,7 +144,9 @@ public:
     }
     /// Where the shots met the world and the brush entities since the last call, in their order. What a
     /// call gave is read until the next one.
-    [[nodiscard]] inline auto takeImpacts() -> std::span<const Impact> { return m_impacts.handToConsumer(); }
+    [[nodiscard]] inline auto takeImpacts() -> std::span<const Impact> {
+        return impactQueue.handToConsumer();
+    }
     /// Where the blood the hits shed met the world and the brush entities since the last call, in their
     /// order: where it leaves its decal. What a call gave is read until the next one.
     [[nodiscard]] inline auto takeBloodMarks() -> std::span<const BloodMark> {
@@ -166,12 +170,12 @@ public:
     /// What the player's hits dealt since the last call, in their order: the numbers its client shows.
     /// What a call gave is read until the next one.
     [[nodiscard]] inline auto takeDamageDealt() -> std::span<const DamageDealt> {
-        return m_damageDealt.handToConsumer();
+        return damageDealtQueue.handToConsumer();
     }
     /// The steps the entities' bodies took since the last call, in their order: the marks its client
     /// shows. What a call gave is read until the next one.
     [[nodiscard]] inline auto takeEntitySteps() -> std::span<const EntityStep> {
-        return m_entitySteps.handToConsumer();
+        return entityStepQueue.handToConsumer();
     }
     /// Whose game it is.
     [[nodiscard]] inline auto self() const noexcept -> PlayerIndex { return m_last.self; }
@@ -216,17 +220,17 @@ private:
     std::optional<nx::EulerAngles> m_turnedView{}; ///< Since takeTurnedView.
     /// What the ticks made since the last frame took it, in a buffer of the take's own, so that what a
     /// frame reads is handed over rather than copied out: each keeps its storage from take to take.
-    nx::BufferHandover<SoundMade> m_sounds;          ///< Since takeSounds.
-    nx::BufferHandover<PlayerSound> playerSounds;    ///< Since takePlayerSounds.
-    nx::BufferHandover<BulletTracer> bulletTracers;  ///< Since takeBulletTracers.
-    nx::BufferHandover<Impact> m_impacts;            ///< Since takeImpacts.
-    nx::BufferHandover<BloodMark> bloodMarks;        ///< Since takeBloodMarks.
-    nx::BufferHandover<BloodSpray> bloodSprays;      ///< Since takeBloodSprays.
-    nx::BufferHandover<BloodStream> bloodStreams;    ///< Since takeBloodStreams.
-    nx::BufferHandover<StreakSplash> streakSplashes; ///< Since takeStreakSplashes.
-    nx::BufferHandover<DamageDealt> m_damageDealt;   ///< Since takeDamageDealt.
-    nx::BufferHandover<EntityStep> m_entitySteps;    ///< Since takeEntitySteps.
-    nx::BufferHandover<KillNotice> killNotices;      ///< Since takeKillNotices.
+    nx::BufferHandover<SoundMade> soundQueue;         ///< Since takeSounds.
+    nx::BufferHandover<PlayerSound> playerSounds;     ///< Since takePlayerSounds.
+    nx::BufferHandover<BulletTracer> bulletTracers;   ///< Since takeBulletTracers.
+    nx::BufferHandover<Impact> impactQueue;           ///< Since takeImpacts.
+    nx::BufferHandover<BloodMark> bloodMarks;         ///< Since takeBloodMarks.
+    nx::BufferHandover<BloodSpray> bloodSprays;       ///< Since takeBloodSprays.
+    nx::BufferHandover<BloodStream> bloodStreams;     ///< Since takeBloodStreams.
+    nx::BufferHandover<StreakSplash> streakSplashes;  ///< Since takeStreakSplashes.
+    nx::BufferHandover<DamageDealt> damageDealtQueue; ///< Since takeDamageDealt.
+    nx::BufferHandover<EntityStep> entityStepQueue;   ///< Since takeEntitySteps.
+    nx::BufferHandover<KillNotice> killNotices;       ///< Since takeKillNotices.
 };
 
 } // namespace cs

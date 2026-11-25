@@ -34,19 +34,19 @@ public:
 
     /// The buffer to append to what the consumer is to take next: the one it last returned, empty and
     /// with the room it grew to.
-    [[nodiscard]] auto bufferForProducer() noexcept -> std::vector<T>& { return m_produced; }
+    [[nodiscard]] auto bufferForProducer() noexcept -> std::vector<T>& { return produced; }
 
     /// Hands what the producer appended since the last take to the consumer, replacing what it read
     /// before, and returns it: empty when nothing was appended. The span is valid until the next take.
     [[nodiscard]] auto handToConsumer() noexcept -> std::span<const T> {
-        m_consumed.swap(m_produced);
-        m_produced.clear();
-        return m_consumed;
+        consumed.swap(produced);
+        produced.clear();
+        return consumed;
     }
 
 private:
-    std::vector<T> m_produced; ///< What the producer appends to, until the consumer takes it.
-    std::vector<T> m_consumed; ///< What the consumer reads, until it takes again.
+    std::vector<T> produced; ///< What the producer appends to, until the consumer takes it.
+    std::vector<T> consumed; ///< What the consumer reads, until it takes again.
 };
 
 } // namespace nx
