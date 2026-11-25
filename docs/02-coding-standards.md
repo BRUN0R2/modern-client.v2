@@ -483,6 +483,10 @@ With native contracts, the same checks become the declarations' own (`pre(&world
   prefer `std::optional<T&>`.
 - Specialized allocators (in `nx.core`):
   - `FrameArena`: linear per frame, reset at the end of the frame. For temporary job data.
+  - `BufferHandover<T>`: a vector a producer fills and a consumer reads, the two taking turns
+    over the storage. What is made every tick or every frame — the sounds, the marks and the
+    other events of a tick — goes to a frame through one of these rather than being copied out,
+    so that a repeated production allocates nothing once the buffer holds a tick's worth.
   - Planned, with their first consumers: `PoolAllocator<T>` (fixed-size blocks; the ECS chunks
     and the job pools have their own today) and `TrackedHeapAllocator` (memory accounted per
     category: assets, scripts, networking).

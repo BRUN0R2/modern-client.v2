@@ -22,6 +22,7 @@ nxAddModuleLibrary(nxCore
         src/hash.cppm
         src/random.cppm
         src/memory.cppm
+        src/bufferHandover.cppm
         src/log.cppm
     SOURCES
         src/debugging.cpp

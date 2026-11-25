@@ -128,43 +128,54 @@ public:
         return std::exchange(m_turnedView, std::nullopt);
     }
     /// The sounds the player made since the last call, in the order of their ticks, each with its
-    /// moment.
-    [[nodiscard]] inline auto takeSounds() -> std::vector<SoundMade> { return std::exchange(m_sounds, {}); }
+    /// moment. What a call gave is read until the next one.
+    [[nodiscard]] inline auto takeSounds() -> std::span<const SoundMade> {
+        return m_sounds.handToConsumer();
+    }
     /// The sounds the other players made since the last call, in the order of their ticks, each with its
-    /// moment and where it was made.
-    [[nodiscard]] inline auto takePlayerSounds() -> std::vector<PlayerSound> {
-        return std::exchange(playerSounds, {});
+    /// moment and where it was made. What a call gave is read until the next one.
+    [[nodiscard]] inline auto takePlayerSounds() -> std::span<const PlayerSound> {
+        return playerSounds.handToConsumer();
     }
-    /// The shot paths received since the last call, in the order they were fired.
-    [[nodiscard]] inline auto takeBulletTracers() -> std::vector<BulletTracer> {
-        return std::exchange(bulletTracers, {});
+    /// The shot paths received since the last call, in the order they were fired. What a call gave is
+    /// read until the next one.
+    [[nodiscard]] inline auto takeBulletTracers() -> std::span<const BulletTracer> {
+        return bulletTracers.handToConsumer();
     }
-    /// Where the shots met the world and the brush entities since the last call, in their order.
-    [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
+    /// Where the shots met the world and the brush entities since the last call, in their order. What a
+    /// call gave is read until the next one.
+    [[nodiscard]] inline auto takeImpacts() -> std::span<const Impact> {
+        return m_impacts.handToConsumer();
+    }
     /// Where the blood the hits shed met the world and the brush entities since the last call, in their
-    /// order: where it leaves its decal.
-    [[nodiscard]] inline auto takeBloodMarks() -> std::vector<BloodMark> {
-        return std::exchange(bloodMarks, {});
+    /// order: where it leaves its decal. What a call gave is read until the next one.
+    [[nodiscard]] inline auto takeBloodMarks() -> std::span<const BloodMark> {
+        return bloodMarks.handToConsumer();
     }
-    /// The blood the hits sprayed since the last call, in their order.
-    [[nodiscard]] inline auto takeBloodSprays() -> std::vector<BloodSpray> {
-        return std::exchange(bloodSprays, {});
+    /// The blood the hits sprayed since the last call, in their order. What a call gave is read until
+    /// the next one.
+    [[nodiscard]] inline auto takeBloodSprays() -> std::span<const BloodSpray> {
+        return bloodSprays.handToConsumer();
     }
-    /// The streams of blood the hits in the head made since the last call, in their order.
-    [[nodiscard]] inline auto takeBloodStreams() -> std::vector<BloodStream> {
-        return std::exchange(bloodStreams, {});
+    /// The streams of blood the hits in the head made since the last call, in their order. What a call
+    /// gave is read until the next one.
+    [[nodiscard]] inline auto takeBloodStreams() -> std::span<const BloodStream> {
+        return bloodStreams.handToConsumer();
     }
-    /// The splashes of streaks since the last call, in their order: the helmets' sparks.
-    [[nodiscard]] inline auto takeStreakSplashes() -> std::vector<StreakSplash> {
-        return std::exchange(streakSplashes, {});
+    /// The splashes of streaks since the last call, in their order: the helmets' sparks. What a call gave
+    /// is read until the next one.
+    [[nodiscard]] inline auto takeStreakSplashes() -> std::span<const StreakSplash> {
+        return streakSplashes.handToConsumer();
     }
     /// What the player's hits dealt since the last call, in their order: the numbers its client shows.
-    [[nodiscard]] inline auto takeDamageDealt() -> std::vector<DamageDealt> {
-        return std::exchange(m_damageDealt, {});
+    /// What a call gave is read until the next one.
+    [[nodiscard]] inline auto takeDamageDealt() -> std::span<const DamageDealt> {
+        return m_damageDealt.handToConsumer();
     }
-    /// The steps the entities' bodies took since the last call, in their order: the marks its client shows.
-    [[nodiscard]] inline auto takeEntitySteps() -> std::vector<EntityStep> {
-        return std::exchange(m_entitySteps, {});
+    /// The steps the entities' bodies took since the last call, in their order: the marks its client
+    /// shows. What a call gave is read until the next one.
+    [[nodiscard]] inline auto takeEntitySteps() -> std::span<const EntityStep> {
+        return m_entitySteps.handToConsumer();
     }
     /// Whose game it is.
     [[nodiscard]] inline auto self() const noexcept -> PlayerIndex { return m_last.self; }
@@ -174,10 +185,11 @@ public:
     [[nodiscard]] inline auto teamWins() const noexcept -> const nx::EnumArray<Team, std::uint32_t>& {
         return m_last.teamWins;
     }
-    /// The players' deaths the server told of since the last call, in their order: the kill feed's. Defined
-    /// in the implementation unit: a KillNotice is not trivially destructible, and Clang 23 crashes on the
-    /// importers that destroy one without naming it once an inline function instantiates their vector here.
-    [[nodiscard]] auto takeKillNotices() -> std::vector<KillNotice>;
+    /// The players' deaths the server told of since the last call, in their order: the kill feed's. What a
+    /// call gave is read until the next one. Defined in the implementation unit: a KillNotice is not
+    /// trivially destructible, and Clang 23 crashes on the importers that destroy one without naming it
+    /// once an inline function instantiates their vector here.
+    [[nodiscard]] auto takeKillNotices() -> std::span<const KillNotice>;
 
 private:
     /// The moment of the game a frame shows: a tick behind the game, by the time pending, as the eye is
@@ -206,17 +218,19 @@ private:
     nx::Seconds m_pending{};                       ///< Of the time given to the game, what no tick took.
     CommandNumber m_lastCommand{};                 ///< The number of the last command the player made.
     std::optional<nx::EulerAngles> m_turnedView{}; ///< Since takeTurnedView.
-    std::vector<SoundMade> m_sounds;               ///< Since takeSounds.
-    std::vector<PlayerSound> playerSounds;         ///< Since takePlayerSounds.
-    std::vector<BulletTracer> bulletTracers;       ///< Since takeBulletTracers.
-    std::vector<Impact> m_impacts;                 ///< Since takeImpacts.
-    std::vector<BloodMark> bloodMarks;             ///< Since takeBloodMarks.
-    std::vector<BloodSpray> bloodSprays;           ///< Since takeBloodSprays.
-    std::vector<BloodStream> bloodStreams;         ///< Since takeBloodStreams.
-    std::vector<StreakSplash> streakSplashes;      ///< Since takeStreakSplashes.
-    std::vector<DamageDealt> m_damageDealt;        ///< Since takeDamageDealt.
-    std::vector<EntityStep> m_entitySteps;         ///< Since takeEntitySteps.
-    std::vector<KillNotice> killNotices;           ///< Since takeKillNotices.
+    /// What the ticks made since the last frame took it, in a buffer of the take's own, so that what a
+    /// frame reads is handed over rather than copied out: each keeps its storage from take to take.
+    nx::BufferHandover<SoundMade> m_sounds;                 ///< Since takeSounds.
+    nx::BufferHandover<PlayerSound> playerSounds;           ///< Since takePlayerSounds.
+    nx::BufferHandover<BulletTracer> bulletTracers;         ///< Since takeBulletTracers.
+    nx::BufferHandover<Impact> m_impacts;                   ///< Since takeImpacts.
+    nx::BufferHandover<BloodMark> bloodMarks;               ///< Since takeBloodMarks.
+    nx::BufferHandover<BloodSpray> bloodSprays;             ///< Since takeBloodSprays.
+    nx::BufferHandover<BloodStream> bloodStreams;           ///< Since takeBloodStreams.
+    nx::BufferHandover<StreakSplash> streakSplashes;        ///< Since takeStreakSplashes.
+    nx::BufferHandover<DamageDealt> m_damageDealt;          ///< Since takeDamageDealt.
+    nx::BufferHandover<EntityStep> m_entitySteps;           ///< Since takeEntitySteps.
+    nx::BufferHandover<KillNotice> killNotices;             ///< Since takeKillNotices.
 };
 
 } // namespace cs

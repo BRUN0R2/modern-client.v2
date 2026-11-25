@@ -199,27 +199,52 @@ TEST_F(ClientGameTest, WhatTheTicksMadeIsKeptUntilTheFrameTakesIt) {
     client.receive(std::move(tick1));
     client.receive(std::move(tick2));
 
-    const std::vector<cs::SoundMade> sounds = client.takeSounds();
+    const std::span<const cs::SoundMade> sounds = client.takeSounds();
     ASSERT_EQ(sounds.size(), 2U);
     EXPECT_EQ(sounds[0].sound, &first);
     EXPECT_EQ(sounds[1].sound, &second);
     EXPECT_TRUE(client.takeSounds().empty());
-    const std::vector<cs::PlayerSound> heard = client.takePlayerSounds();
+    const std::span<const cs::PlayerSound> heard = client.takePlayerSounds();
     ASSERT_EQ(heard.size(), 1U);
     EXPECT_EQ(heard[0].player, cs::PlayerIndex{2});
     EXPECT_EQ(heard[0].made.sound, &second);
     EXPECT_FLOAT_EQ(heard[0].made.volume.value(), 0.5F);
     EXPECT_FLOAT_EQ(heard[0].position.x, 64.0F);
     EXPECT_TRUE(client.takePlayerSounds().empty());
-    const std::vector<cs::Impact> impacts = client.takeImpacts();
+    const std::span<const cs::Impact> impacts = client.takeImpacts();
     ASSERT_EQ(impacts.size(), 2U);
     EXPECT_FLOAT_EQ(impacts[1].position.x, 2.0F);
     EXPECT_EQ(client.takeTurnedView(), (nx::EulerAngles{.yaw = nx::Degrees{90.0F}}));
     EXPECT_FALSE(client.takeTurnedView().has_value());
-    const std::vector<cs::KillNotice> kills = client.takeKillNotices();
+    const std::span<const cs::KillNotice> kills = client.takeKillNotices();
     ASSERT_EQ(kills.size(), 2U);
     EXPECT_EQ(kills[1].victim.name, "Second");
     EXPECT_TRUE(client.takeKillNotices().empty());
+}
+
+TEST_F(ClientGameTest, ATicksEventsKeepTheirStorageForTheNextTickToFill) {
+    // A combat frame's sounds and marks are read where the ticks wrote them, rather than copied out: the
+    // buffer a take returns is the one the producer writes again, so a tick that makes as many allocates
+    // nothing once it holds a tick's worth.
+    cs::ClientGame client{models(), playerModels(), snapshotAt(0, {})};
+    const cs::GameSound sound{.files = {"shot.wav"}};
+    const auto tellOfOneSound = [this, &sound](std::int64_t tick) {
+        cs::PlayerSnapshot told = snapshotAt(tick, {});
+        told.sounds = {cs::SoundMade{.sound = &sound, .at = told.time}};
+        return told;
+    };
+    std::vector<const cs::SoundMade*> buffers;
+    for (std::int64_t tick = 1; tick < 6; ++tick) {
+        client.receive(tellOfOneSound(tick));
+        const std::span<const cs::SoundMade> sounds = client.takeSounds();
+        ASSERT_EQ(sounds.size(), 1U) << tick;
+        if (std::ranges::find(buffers, sounds.data()) == buffers.end()) {
+            buffers.push_back(sounds.data());
+        }
+        EXPECT_TRUE(client.takeSounds().empty())
+            << "a take hands over what has not been handed before, at tick " << tick;
+    }
+    EXPECT_LE(buffers.size(), 2U) << "the buffers of the handover, not one made anew each tick";
 }
 
 TEST_F(ClientGameTest, AFrameShowsTheMomentATickBehindTheGame) {

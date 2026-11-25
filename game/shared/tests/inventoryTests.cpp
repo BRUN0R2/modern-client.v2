@@ -986,7 +986,7 @@ TEST(SoundTest, EachSoundTakenCarriesTheTickItWasMadeAt) {
         std::ignore = frames(inventory, shooter, press, press, {Button::Attack});
         std::ignore = frames(inventory, shooter, press + 1, press + 19);
     }
-    const std::vector<cs::SoundMade> made = inventory.takeSounds();
+    const std::vector<cs::SoundMade>& made = inventory.takeSounds();
     ASSERT_EQ(made.size(), 3U);
     EXPECT_EQ(made[0].at, nx::GameTime::atTick(kReady));
     EXPECT_EQ(made[1].at, nx::GameTime::atTick(kReady + 20));

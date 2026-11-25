@@ -34,8 +34,8 @@ void hearSession(Session& session, cs::ClientAudio* audio, const cs::Hearing& he
     session.viewPose = session.client.viewModel();
     session.clientEvents = session.viewModelEvents.passed(
         session.viewPose ? session.level->viewModel(session.viewPose->weapon) : nullptr, session.viewPose);
-    const std::vector<cs::SoundMade> sounds = session.client.takeSounds();
-    const std::vector<cs::PlayerSound> heard = session.client.takePlayerSounds();
+    const std::span<const cs::SoundMade> sounds = session.client.takeSounds();
+    const std::span<const cs::PlayerSound> heard = session.client.takePlayerSounds();
     if (audio == nullptr) {
         return;
     }
@@ -61,8 +61,8 @@ void hearSession(Session& session, cs::ClientAudio* audio, const cs::Hearing& he
 }
 
 void stampMarks(Session& session, cs::Scene& scene, const cs::GameContent& content, nx::Random& bulletHoles) {
-    const std::vector<cs::Impact> impacts = session.client.takeImpacts();
-    const std::vector<cs::BloodMark> bloodMarks = session.client.takeBloodMarks();
+    const std::span<const cs::Impact> impacts = session.client.takeImpacts();
+    const std::span<const cs::BloodMark> bloodMarks = session.client.takeBloodMarks();
     const cs::Level& level = *session.level;
     const auto stamp = [&scene, &level](std::string_view name, nx::Vec3 position, const cs::StampTarget& on) {
         // One the installation lacks was reported as the level was read.
@@ -85,9 +85,9 @@ void stampMarks(Session& session, cs::Scene& scene, const cs::GameContent& conte
 
 void showNotices(Session& session, const FrameNotices& notices, const cs::WeaponCatalog& weapons,
                  nx::Seconds now) {
-    const std::vector<cs::DamageDealt> dealt = session.client.takeDamageDealt();
-    const std::vector<cs::EntityStep> steps = session.client.takeEntitySteps();
-    const std::vector<cs::KillNotice> kills = session.client.takeKillNotices();
+    const std::span<const cs::DamageDealt> dealt = session.client.takeDamageDealt();
+    const std::span<const cs::EntityStep> steps = session.client.takeEntitySteps();
+    const std::span<const cs::KillNotice> kills = session.client.takeKillNotices();
     if (notices.killFeed) {
         notices.killFeed->show(kills, weapons, now);
     }
@@ -106,9 +106,9 @@ void showNotices(Session& session, const FrameNotices& notices, const cs::Weapon
 
 void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent& content, nx::Seconds now,
                  nx::Seconds elapsed, bool showBulletTracers) {
-    const std::vector<cs::BloodSpray> sprays = session.client.takeBloodSprays();
-    const std::vector<cs::BloodStream> streams = session.client.takeBloodStreams();
-    const std::vector<cs::StreakSplash> splashes = session.client.takeStreakSplashes();
+    const std::span<const cs::BloodSpray> sprays = session.client.takeBloodSprays();
+    const std::span<const cs::BloodStream> streams = session.client.takeBloodStreams();
+    const std::span<const cs::StreakSplash> splashes = session.client.takeStreakSplashes();
     const cs::Level& level = *session.level;
     const nx::UnitsPerSecondSquared gravity = cs::MovementSettings{}.gravity;
     session.effects.update(now, elapsed, level.hulls(), gravity);
@@ -118,7 +118,7 @@ void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent
     for (const cs::StreakSplash& splash : splashes) {
         session.particles.splashStreaks(splash, now);
     }
-    const std::vector<cs::BulletTracer> tracers = session.client.takeBulletTracers();
+    const std::span<const cs::BulletTracer> tracers = session.client.takeBulletTracers();
     if (showBulletTracers) {
         for (const cs::BulletTracer& tracer : tracers) {
             session.particles.traceBullet(tracer, session.client.self(), now);

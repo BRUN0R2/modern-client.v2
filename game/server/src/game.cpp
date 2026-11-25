@@ -18,6 +18,12 @@ namespace cs {
 
 namespace {
 
+/// Appends what `made` holds to `sounds`, which the tick before left with its storage: a tick appends its
+/// own sounds to those of the weapons, which come first, without allocating once the buffer holds them.
+void appendSounds(std::vector<SoundMade>& sounds, const std::vector<SoundMade>& made) {
+    sounds.insert(sounds.end(), made.begin(), made.end());
+}
+
 /// The stream of random numbers a joining player's character is drawn from, and its models' animations'.
 constexpr std::string_view kAppearanceStream = "appearance";
 /// The stream of random numbers the team of a player joining by auto-select is drawn from.
@@ -242,7 +248,13 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     for (Player& player : playersIn(m_state.players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
-        player.sounds = std::exchange(player.soundsOfPurchases, {});
+        // What it bought since the last tick and what its weapons have made since they were last taken,
+        // in the buffer the tick before left: a tick appends a tick's worth, and allocates only until the
+        // buffer grows to hold it.
+        player.sounds.clear();
+        appendSounds(player.sounds, player.inventory.takeSounds());
+        appendSounds(player.sounds, player.soundsOfPurchases);
+        player.soundsOfPurchases.clear();
         player.hurtFrom.reset();
         player.damageDealt.clear();
     }
@@ -277,10 +289,6 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     nx::game::runPushers(m_state.world, hulls);
     for (Player& player : playersIn(m_state.players)) {
         player.movement.origin = m_state.world.get<nx::game::Transform>(player.body)->origin;
-        // Its weapons' sounds of the tick first, as they come before what the player makes of them.
-        std::vector<SoundMade> sounds = player.inventory.takeSounds();
-        std::ranges::move(player.sounds, std::back_inserter(sounds));
-        player.sounds = std::move(sounds);
     }
     nx::game::advanceTick(m_state.world);
     // Its rounds may have placed its bodies anew.

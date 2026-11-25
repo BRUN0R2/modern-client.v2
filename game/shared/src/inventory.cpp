@@ -301,8 +301,8 @@ auto Inventory::maxSpeed() const noexcept -> nx::UnitsPerSecond {
     return m_held ? m_catalog->weapon(m_weapons[*m_held].weapon).maxSpeed : kUnarmedSpeed;
 }
 
-auto Inventory::takeSounds() -> std::vector<SoundMade> {
-    return std::exchange(m_sounds, {});
+auto Inventory::takeSounds() -> const std::vector<SoundMade>& {
+    return m_sounds;
 }
 
 void Inventory::removeAll() {

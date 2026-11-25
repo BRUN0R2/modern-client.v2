@@ -236,7 +236,7 @@ public:
 
     /// The sounds the player's weapons made since the last call, in their order, from the catalog, each
     /// with the moment of its tick: as one was drawn, fired, clicked empty, missed or met the world.
-    [[nodiscard]] auto takeSounds() -> std::vector<SoundMade>;
+    [[nodiscard]] auto takeSounds() -> const std::vector<SoundMade>&;
 
 private:
     /// Where the player's `weapon` is among its weapons; none.
