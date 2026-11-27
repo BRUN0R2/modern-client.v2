@@ -72,6 +72,7 @@ using cs::TextsError;
         "lastWeapon = \"x\"\n"
         "buyMenu = \"x\"\n"
         "buyEquipment = \"x\"\n"
+        "chooseTeam = \"x\"\n"
         "buyPrimaryAmmo = \"x\"\n"
         "buyPistolAmmo = \"x\"\n"
         "rebuy = \"x\"\n"
@@ -79,7 +80,15 @@ using cs::TextsError;
         "toggleConsole = \"x\"\n"
         "noclip = \"x\"\n"
         "defaultKeys = \"x\"\n"
-        "restore = \"x\"\n",
+        "restore = \"x\"\n"
+        "[scoreboard]\n"
+        "terrorists = \"x\"\ncounterTerrorists = \"x\"\nplayer = \"x\"\nhealth = \"x\"\n"
+        "money = \"x\"\nkills = \"x\"\ndeaths = \"x\"\nalive = \"x\"\nplayers = \"x\"\nonePlayer = \"x\"\n"
+        "dead = \"x\"\n"
+        "[teamMenu]\n"
+        "chooseTeam = \"x\"\nterrorists = \"x\"\ncounterTerrorists = \"x\"\nautoSelect = \"x\"\n"
+        "chooseCharacter = \"x\"\ncancel = \"x\"\nterroristsFull = \"x\"\ncounterTerroristsFull = \"x\"\n"
+        "tooManyTerrorists = \"x\"\ntooManyCounterTerrorists = \"x\"\nonlyOneTeamChange = \"x\"\n",
         quit);
 }
 

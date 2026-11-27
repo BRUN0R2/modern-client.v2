@@ -18,7 +18,7 @@ namespace {
 
 TEST(NavigationProfileTest, ThePlayersProfileIsTheMovementsPlayer) {
     const std::filesystem::path file =
-        std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "navigation.toml";
+        nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "navigation.toml";
     auto text = nx::platform::readTextFile(file);
     ASSERT_TRUE(text.has_value());
     const auto read = nx::game::readNavigationData(*text, "navigation.toml");

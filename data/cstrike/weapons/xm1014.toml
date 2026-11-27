@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The XM1014 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "xm1014"
+classname = "weapon_xm1014"
+name = "Leone YG1265 Auto Shotgun" # as the original's buy menu shows it
+slot = "primary"
+position = 12
+weight = 20
+maxSpeed = 240.0
+
+[purchase]
+buyers = "everyone"
+price = 3000
+commands = ["xm1014", "autoshotgun"]
+menu = { tab = "shotguns", key = 2, picture = "gfx/vgui/xm1014.tga" }
+
+[magazine]
+ammo = "buckshot"
+clipSize = 7
+
+[models]
+view = "models/v_xm1014.mdl"
+player = "models/p_xm1014.mdl"
+playerAnimation = "m249"
+viewHand = "left"
+
+[view] # sequences of models/v_xm1014.mdl
+drawSequences = [6] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
+idlesWhenEmpty = true
+
+[firing]
+cycle = 0.25
+reach = 3048.0 # how far its rounds go
+damage = 20.0
+rangeModifier = 1.0
+penetration = 1
+isAutomatic = true
+idleAfterShot = 2.25
+shootSequences = [1, 2]
+pellets = { count = 6, cone = 0.0725 } # FireBullets' buckshot
+
+[firing.accuracy] # paced, held at 1: its spread alone
+initial = 1.0
+paced = { threshold = 0.0, rate = 0.0, minimum = 1.0, maximum = 1.0 }
+
+[firing.spread]
+movingAbove = 0.0
+air = { base = 0.0, scale = 0.0 }
+moving = { base = 0.0, scale = 0.0 }
+standing = { base = 0.0, scale = 0.0 }
+
+[firing.recoil]
+random = { upMinimum = 3.0, upMaximum = 5.0, airUpMinimum = 7.0, airUpMaximum = 10.0, isWhole = true }
+
+[firing.sound]
+files = ["weapons/xm1014-1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 0.3
+sequences = [3] # insert
+shells = { startSequence = 5, startTime = 0.55, shellTime = 0.3, pumpSequence = 4, pumpTime = 1.5 }
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.0
+largeFlinch = false

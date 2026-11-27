@@ -22,6 +22,9 @@
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
       "architecture": { "value": "x64", "strategy": "external" },
       "toolset": { "value": "host=x64", "strategy": "external" },
+      "environment": {
+        "VSLANG": "1033"
+      },
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "cl",
         "VCPKG_TARGET_TRIPLET": "x64-windows-nx",

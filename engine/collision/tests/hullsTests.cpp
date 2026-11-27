@@ -378,7 +378,7 @@ TEST(HullTraceTest, RefusesBrokenTrees) {
 TEST(HullTraceTest, ReadsTheHullsOfAMap) {
     // The fuzz corpus's box: 64 units, its floor at z = 0.
     auto file =
-        nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp");
+        nx::platform::readFile(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" / "boxEmbedded.bsp");
     ASSERT_TRUE(file.has_value()) << nx::describe(file.error());
     const auto map = nx::assets::BspView::parse(*file);
     ASSERT_TRUE(map.has_value()) << nx::describe(map.error());

@@ -20,10 +20,17 @@ enum class CharacterError : std::uint8_t {
     DataInvalid, ///< The file breaks its schema or its rules (cause: the DataError, when there is one).
 };
 
-/// A character a player plays as: its name, which names its model, and its team.
+/// A character a player plays as: its name, which names its model, its team, and what the appearance menu
+/// calls it (its name when it has none).
 struct Character {
     std::string name{};
     Team team{};
+    std::optional<std::string> title{};
+
+    /// What the appearance menu calls it.
+    [[nodiscard]] inline auto shownName() const noexcept -> std::string_view {
+        return title ? std::string_view{*title} : std::string_view{name};
+    }
 };
 
 /// A character of the game's, by its order.
@@ -59,6 +66,7 @@ struct nx::meta::Description<cs::Character> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::Character::name>("name"),
         nx::meta::field<&cs::Character::team>("team"),
+        nx::meta::field<&cs::Character::title>("title"),
     };
 };
 

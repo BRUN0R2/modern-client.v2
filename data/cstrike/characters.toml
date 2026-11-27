@@ -6,33 +6,41 @@
 # models/player/<name>/<name>.mdl.
 
 [[characters]]
-name = "terror"   # Phoenix Connexion
+name = "terror"
 team = "terrorists"
+title = "Phoenix Connexion"
 
 [[characters]]
-name = "leet"     # Elite Crew
+name = "leet"
 team = "terrorists"
+title = "Elite Crew"
 
 [[characters]]
-name = "arctic"   # Arctic Avengers
+name = "arctic"
 team = "terrorists"
+title = "Arctic Avengers"
 
 [[characters]]
-name = "guerilla" # Guerilla Warfare
+name = "guerilla"
 team = "terrorists"
+title = "Guerilla Warfare"
 
 [[characters]]
-name = "urban"    # Seal Team 6
+name = "urban"
 team = "counterTerrorists"
+title = "Seal Team 6"
 
 [[characters]]
-name = "gsg9"     # GSG-9
+name = "gsg9"
 team = "counterTerrorists"
+title = "GSG-9"
 
 [[characters]]
-name = "sas"      # SAS
+name = "sas"
 team = "counterTerrorists"
+title = "SAS"
 
 [[characters]]
-name = "gign"     # GIGN
+name = "gign"
 team = "counterTerrorists"
+title = "GIGN"

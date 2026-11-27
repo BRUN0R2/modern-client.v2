@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The M3 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "m3"
+classname = "weapon_m3"
+name = "Leone 12 Gauge Super" # as the original's buy menu shows it
+slot = "primary"
+position = 5
+weight = 20
+maxSpeed = 230.0
+
+[purchase]
+buyers = "everyone"
+price = 1700
+commands = ["m3", "12gauge"]
+menu = { tab = "shotguns", key = 1, picture = "gfx/vgui/m3.tga" }
+
+[magazine]
+ammo = "buckshot"
+clipSize = 8
+
+[models]
+view = "models/v_m3.mdl"
+player = "models/p_m3.mdl"
+playerAnimation = "shotgun"
+viewHand = "left"
+
+[view] # sequences of models/v_m3.mdl
+drawSequences = [6] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
+idlesWhenEmpty = true
+
+[firing]
+cycle = 0.875
+reach = 3000.0 # how far its rounds go
+damage = 20.0
+rangeModifier = 1.0
+penetration = 1
+isAutomatic = true
+idleAfterShot = 2.5
+shootSequences = [1, 2]
+pellets = { count = 9, cone = 0.0675 } # FireBullets' buckshot
+
+[firing.accuracy] # paced, held at 1: its spread alone
+initial = 1.0
+paced = { threshold = 0.0, rate = 0.0, minimum = 1.0, maximum = 1.0 }
+
+[firing.spread]
+movingAbove = 0.0
+air = { base = 0.0, scale = 0.0 }
+moving = { base = 0.0, scale = 0.0 }
+standing = { base = 0.0, scale = 0.0 }
+
+[firing.recoil]
+random = { upMinimum = 4.0, upMaximum = 6.0, airUpMinimum = 8.0, airUpMaximum = 11.0, isWhole = true }
+
+[firing.sound]
+files = ["weapons/m3-1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 0.45
+sequences = [3] # insert
+shells = { startSequence = 5, startTime = 0.55, shellTime = 0.45, pumpSequence = 4, pumpTime = 1.5 }
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.0
+largeFlinch = true

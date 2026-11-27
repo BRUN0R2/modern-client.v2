@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The M249 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "m249"
+classname = "weapon_m249"
+name = "ES M249 Para" # as the original's buy menu shows it
+slot = "primary"
+position = 4
+weight = 25
+maxSpeed = 220.0
+
+[purchase]
+buyers = "everyone"
+price = 5750
+commands = ["m249"]
+menu = { tab = "machineGuns", key = 1, picture = "gfx/vgui/m249.tga" }
+
+[magazine]
+ammo = "556NatoBox"
+clipSize = 100
+
+[models]
+view = "models/v_m249.mdl"
+player = "models/p_m249.mdl"
+playerAnimation = "m249"
+viewHand = "left"
+
+[view] # sequences of models/v_m249.mdl
+drawSequences = [4] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle1
+idlesWhenEmpty = true
+
+[firing]
+cycle = 0.1
+reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 32.0 # FireBullets3's iDamage
+rangeModifier = 0.97 # its damage times this for each 500 units it went
+penetration = 2 # how many things a round may meet
+isAutomatic = true
+idleAfterShot = 1.6
+shootSequences = [1, 2] # shoot1, shoot2
+
+[firing.accuracy] # bursts: the shots cubed over 175, in whole numbers, plus 0.4, at most 0.9
+initial = 0.2
+burst = { divisor = 175, offset = 0.4, maximum = 0.9 }
+
+[firing.spread] # base plus scale times the accuracy
+movingAbove = 140.0
+air = { base = 0.045, scale = 0.5 }
+moving = { base = 0.045, scale = 0.095 }
+standing = { base = 0.0, scale = 0.03 }
+
+[firing.recoil.kicks] # in the air first, then moving
+moving = { upBase = 1.1, lateralBase = 0.5, upModifier = 0.3, lateralModifier = 0.06, upMax = 4.0, lateralMax = 3.0, directionChange = 8 }
+air = { upBase = 1.8, lateralBase = 0.65, upModifier = 0.45, lateralModifier = 0.125, upMax = 5.0, lateralMax = 3.5, directionChange = 8 }
+ducked = { upBase = 0.75, lateralBase = 0.325, upModifier = 0.25, lateralModifier = 0.025, upMax = 3.5, lateralMax = 2.5, directionChange = 9 }
+standing = { upBase = 0.8, lateralBase = 0.35, upModifier = 0.3, lateralModifier = 0.03, upMax = 3.75, lateralMax = 3.0, directionChange = 9 }
+airFirst = true
+
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
+files = ["weapons/m249-1.wav", "weapons/m249-2.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 4.7
+sequences = [3] # reload
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.5
+largeFlinch = false

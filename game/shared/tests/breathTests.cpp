@@ -35,7 +35,7 @@ const PlayerHarmRules kHarm{};
 
 /// The repository's data/cstrike/breath.toml, read.
 [[nodiscard]] auto repositoryRules() -> BreathRules {
-    const std::filesystem::path file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "breath.toml";
+    const std::filesystem::path file = nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "breath.toml";
     auto text = nx::platform::readTextFile(file);
     EXPECT_TRUE(text.has_value());
     auto rules = cs::readBreathRules(text.value_or(std::string{}), "breath.toml");

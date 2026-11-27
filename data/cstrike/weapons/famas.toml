@@ -1,0 +1,123 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The FAMAS (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "famas"
+classname = "weapon_famas"
+name = "Clarion 5.56" # as the original's buy menu shows it
+slot = "primary"
+position = 18
+weight = 75
+maxSpeed = 240.0
+
+[purchase]
+buyers = "counterTerrorists"
+price = 2250
+commands = ["famas", "clarion"]
+menu = { tab = "rifles", key = 1, picture = "gfx/vgui/famas.tga" }
+
+[magazine]
+ammo = "556Nato"
+clipSize = 25
+
+[models]
+view = "models/v_famas.mdl"
+player = "models/p_famas.mdl"
+playerAnimation = "carbine"
+viewHand = "left"
+
+[view] # sequences of models/v_famas.mdl
+drawSequences = [2] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
+idlesWhenEmpty = true
+
+[firing] # automatic: FamasFire adds 0.01 to the spread
+cycle = 0.0825
+reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 30.0 # FireBullets3's iDamage
+rangeModifier = 0.96 # its damage times this for each 500 units it went
+penetration = 2 # how many things a round may meet
+isAutomatic = true
+idleAfterShot = 1.1
+shootSequences = [3, 4, 5] # shoot1, shoot2, shoot3
+
+[firing.accuracy] # bursts: the shots cubed over 215, in whole numbers, plus 0.3, at most 1
+initial = 0.2
+burst = { divisor = 215, offset = 0.3, maximum = 1.0 }
+
+[firing.spread] # base plus scale times the accuracy, and 0.01
+movingAbove = 140.0
+air = { base = 0.04, scale = 0.3 }
+moving = { base = 0.04, scale = 0.07 }
+standing = { base = 0.01, scale = 0.02 }
+
+[firing.recoil.kicks]
+moving = { upBase = 1.0, lateralBase = 0.45, upModifier = 0.275, lateralModifier = 0.05, upMax = 4.0, lateralMax = 2.5, directionChange = 7 }
+air = { upBase = 1.25, lateralBase = 0.45, upModifier = 0.22, lateralModifier = 0.18, upMax = 5.5, lateralMax = 4.0, directionChange = 5 }
+ducked = { upBase = 0.575, lateralBase = 0.325, upModifier = 0.2, lateralModifier = 0.011, upMax = 3.25, lateralMax = 2.0, directionChange = 8 }
+standing = { upBase = 0.625, lateralBase = 0.375, upModifier = 0.25, lateralModifier = 0.0125, upMax = 3.5, lateralMax = 2.25, directionChange = 8 }
+
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
+files = ["weapons/famas-1.wav", "weapons/famas-2.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 3.3
+sequences = [1] # reload
+
+[alternate] # the burst: 3 rounds a press, 0.55 seconds apart (WPNSTATE_FAMAS_BURST_MODE)
+switchTime = 0.3
+
+[alternate.firing] # FamasFire in burst: no 0.01 more to the spread, its first round of 34
+cycle = 0.55
+reach = 8192.0
+damage = 34.0 # m_flBaseDamageBurst
+rangeModifier = 0.96
+penetration = 2
+isAutomatic = true # in burst, holding the button fires again
+idleAfterShot = 1.1
+shootSequences = [3, 4, 5]
+# the 2 after the first 0.05 then 0.1 seconds apart, of its spread and of 30 (FireRemaining)
+followUps = { rounds = 2, rangeModifier = 0.96, delays = [0.05, 0.1], damage = 30.0 }
+
+[alternate.firing.accuracy]
+initial = 0.2
+burst = { divisor = 215, offset = 0.3, maximum = 1.0 }
+
+[alternate.firing.spread]
+movingAbove = 140.0
+air = { base = 0.03, scale = 0.3 }
+moving = { base = 0.03, scale = 0.07 }
+standing = { base = 0.0, scale = 0.02 }
+
+[alternate.firing.recoil.kicks]
+moving = { upBase = 1.0, lateralBase = 0.45, upModifier = 0.275, lateralModifier = 0.05, upMax = 4.0, lateralMax = 2.5, directionChange = 7 }
+air = { upBase = 1.25, lateralBase = 0.45, upModifier = 0.22, lateralModifier = 0.18, upMax = 5.5, lateralMax = 4.0, directionChange = 5 }
+ducked = { upBase = 0.575, lateralBase = 0.325, upModifier = 0.2, lateralModifier = 0.011, upMax = 3.25, lateralMax = 2.0, directionChange = 8 }
+standing = { upBase = 0.625, lateralBase = 0.375, upModifier = 0.25, lateralModifier = 0.0125, upMax = 3.5, lateralMax = 2.25, directionChange = 8 }
+
+[alternate.firing.sound]
+files = ["weapons/famas-1.wav", "weapons/famas-2.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[alternate.firing.emptySound]
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.4
+largeFlinch = true

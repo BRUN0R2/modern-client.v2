@@ -94,7 +94,7 @@ private:
 
 [[nodiscard]] auto boxMapBytes(std::string_view entities = {}) -> std::vector<std::byte> {
     auto read =
-        nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp");
+        nx::platform::readFile(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" / "boxEmbedded.bsp");
     nx::invariant(read.has_value(), "clientBench: the synthetic map can be read");
     std::vector<std::byte> bytes = std::move(*read);
     if (!entities.empty()) {

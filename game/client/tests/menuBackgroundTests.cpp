@@ -119,27 +119,4 @@ TEST(MenuBackgroundTest, WhatCannotBeReadSaysWhy) {
     EXPECT_EQ(errorOf("../outside.txt"), cs::MenuBackgroundError::Invalid);
 }
 
-TEST(MenuBackgroundTest, CoversAScreenOfAnyShapeWithoutChangingItsOwn) {
-    constexpr nx::rhi::Extent2d kPicture{.width = 800, .height = 600};
-    const nx::render::ScreenRect same = cs::coveringRect(kPicture, {.width = 1600, .height = 1200});
-    EXPECT_FLOAT_EQ(same.x, 0.0F);
-    EXPECT_FLOAT_EQ(same.y, 0.0F);
-    EXPECT_FLOAT_EQ(same.width, 1600.0F);
-    EXPECT_FLOAT_EQ(same.height, 1200.0F);
-
-    const nx::render::ScreenRect wide = cs::coveringRect(kPicture, {.width = 1920, .height = 1080});
-    EXPECT_FLOAT_EQ(wide.width, 1920.0F);
-    EXPECT_FLOAT_EQ(wide.height, 1440.0F) << "its own shape kept";
-    EXPECT_FLOAT_EQ(wide.x, 0.0F);
-    EXPECT_FLOAT_EQ(wide.y, -180.0F) << "what is too tall left off the top and the foot alike";
-
-    const nx::render::ScreenRect tall = cs::coveringRect(kPicture, {.width = 600, .height = 1200});
-    EXPECT_FLOAT_EQ(tall.height, 1200.0F);
-    EXPECT_FLOAT_EQ(tall.width, 1600.0F);
-    EXPECT_FLOAT_EQ(tall.x, -500.0F);
-
-    const nx::render::ScreenRect none = cs::coveringRect({}, {.width = 600, .height = 1200});
-    EXPECT_FLOAT_EQ(none.width, 0.0F) << "a picture of no size covers nothing";
-}
-
 } // namespace

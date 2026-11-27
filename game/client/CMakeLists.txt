@@ -48,6 +48,9 @@ nxAddModuleLibrary(csClient
         src/buyMenuLayout.cppm
         src/buyMenu.cppm
         src/buyMenuPanel.cppm
+        src/teamMenu.cppm
+        src/teamMenuPanel.cppm
+        src/sniperScope.cppm
         src/mainMenuLayout.cppm
         src/optionsPage.cppm
         src/mainMenu.cppm
@@ -94,6 +97,9 @@ nxAddModuleLibrary(csClient
         src/buyMenuLayout.cpp
         src/buyMenu.cpp
         src/buyMenuPanel.cpp
+        src/teamMenu.cpp
+        src/teamMenuPanel.cpp
+        src/sniperScope.cpp
         src/mainMenuLayout.cpp
         src/optionsPage.cpp
         src/mainMenu.cpp

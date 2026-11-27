@@ -19,7 +19,7 @@ namespace {
 constexpr std::uint32_t kDraws = 3000;
 
 [[nodiscard]] auto repositoryText() -> std::string {
-    return nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "blood.toml")
+    return nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "blood.toml")
         .value_or(std::string{});
 }
 

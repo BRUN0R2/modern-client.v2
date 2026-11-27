@@ -1,0 +1,87 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The Scout (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "scout"
+classname = "weapon_scout"
+name = "Schmidt Scout" # as the original's buy menu shows it
+slot = "primary"
+position = 9
+weight = 30
+maxSpeed = 260.0
+
+[purchase]
+buyers = "everyone"
+price = 2750
+commands = ["scout"]
+menu = { tab = "rifles", key = 3, counterTerroristKey = 2, picture = "gfx/vgui/scout.tga" }
+
+[magazine]
+ammo = "762Nato"
+clipSize = 10
+
+[models]
+view = "models/v_scout.mdl"
+player = "models/p_scout.mdl"
+playerAnimation = "rifle"
+viewHand = "left"
+
+[view] # sequences of models/v_scout.mdl
+drawSequences = [4] # draw
+idles = [{ sequence = 0, wait = 60.0, share = 1.0 }] # idle
+idlesWhenEmpty = false
+
+[firing]
+cycle = 1.25
+reach = 8192.0 # how far its rounds go
+damage = 75.0
+rangeModifier = 0.98
+penetration = 3
+isAutomatic = true
+idleAfterShot = 1.8
+shootSequences = [1, 2]
+
+[firing.accuracy] # paced, held at 1: its spread alone
+initial = 1.0
+paced = { threshold = 0.0, rate = 0.0, minimum = 1.0, maximum = 1.0 }
+
+[firing.spread]
+movingAbove = 170.0
+air = { base = 0.2, scale = 0.0 }
+moving = { base = 0.075, scale = 0.0 }
+ducked = { base = 0.0, scale = 0.0 }
+standing = { base = 0.007, scale = 0.0 }
+
+[firing.recoil]
+punch = 2.0
+
+[firing.sound]
+files = ["weapons/scout_fire-1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 2.0
+sequences = [3] # reload
+
+[zoom] # SecondaryAttack: its sights
+fovs = [40, 15]
+switchTime = 0.3
+maxSpeed = 220.0
+sound = { files = ["weapons/zoom.wav"], channel = "item", volume = 0.2 }
+unzoomedSpread = { base = 0.025, scale = 0.0 }
+unzoomsOnShot = true
+hasScope = true
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.7
+largeFlinch = true

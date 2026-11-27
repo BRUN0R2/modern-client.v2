@@ -64,6 +64,12 @@ struct OwnedWeapon {
     std::uint32_t slashes{}; ///< The slashes it made, which play their sequences in turn (m_iSwing).
     std::uint32_t stabs{};
     std::uint32_t followUpsLeft{}; ///< The rounds its last shot still fires, one a frame.
+    /// Until the next of them fires, by its delay (m_flFamasShoot), counted down to -0.001 second.
+    nx::Seconds nextFollowUp{};
+    float followUpSpread{}; ///< How much its last shot strayed, its follow-ups' too (m_fBurstSpread).
+    bool firesLeft{};       ///< Its left hand fires next (WPNSTATE_ELITE_LEFT).
+    std::uint32_t zoomLevel{};  ///< Of its sights' fovs, from 1; 0 out of them (m_iFOV).
+    std::uint32_t resumeZoom{}; ///< The level a shot took it out of, to look through again (m_iLastZoom).
 };
 
 /// What a player's view model plays: a sequence of the weapon it holds, since when.
@@ -112,6 +118,9 @@ struct ShotRound {
     std::uint32_t penetration{};
     std::uint32_t penetrationPower{};
     nx::HammerUnits penetrationDistance{};
+    /// A shotgun's pellet (BULLET_PLAYER_BUCKSHOT): traced once, its damage times 1 less how far it went
+    /// of the shot's reach, through nothing.
+    bool isPellet{};
 };
 
 /// A shot fired: from where, the way it goes, how far its bullet may stray, how far it goes, and its
@@ -233,6 +242,10 @@ public:
     [[nodiscard]] inline auto isHeldBack() const noexcept -> bool { return m_nextAttack > nx::Seconds{}; }
     /// How fast the weapon the player holds lets it run, kUnarmedSpeed with none (ResetMaxSpeed).
     [[nodiscard]] auto maxSpeed() const noexcept -> nx::UnitsPerSecond;
+    /// The fov the player looks through its weapon's sights at; none out of them.
+    [[nodiscard]] auto fov() const noexcept -> std::optional<std::uint32_t>;
+    /// Whether it looks through a scope drawn over its view (WeaponZoom::hasScope).
+    [[nodiscard]] auto isScoped() const noexcept -> bool;
 
     /// The sounds the player's weapons made since the last call, in their order, from the catalog, each
     /// with the moment of its tick: as one was drawn, fired, clicked empty, missed or met the world.
@@ -250,7 +263,15 @@ private:
     /// The held `owned`, of `weapon`, fires at `time` (PrimaryAttack, and the guns' Fire): its shot, if
     /// a round left it.
     auto fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter, std::uint32_t seed,
-              const nx::game::TickTime& time, nx::Random& random) -> std::optional<Shot>;
+              const nx::game::TickTime& time, nx::Random& random) -> std::vector<Shot>;
+    /// The held `owned`, of `weapon`, turns its sights to their next fov, or out of them (SecondaryAttack).
+    void switchZoom(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time);
+    /// The held `owned`, of `weapon`, reloads a shell at a time (DefaultShotgunReload): starts, plays a
+    /// shell's sequence, or puts a shell in, as far as it got.
+    void reloadShells(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time,
+                      nx::Random& random);
+    /// Whether the weapon `owned`, of `weapon`, is reloaded a shell at a time.
+    [[nodiscard]] auto isShellReloaded(const OwnedWeapon& owned, const Weapon& weapon) const -> bool;
     /// The held `owned`, of `weapon`, fires the next of its last shot's follow-up rounds at `time`
     /// (FireRemaining): its shot, if a round was left for it.
     auto fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Shooter& shooter, std::uint32_t seed,
@@ -287,6 +308,8 @@ private:
     /// second.
     nx::Seconds m_nextAttack{};
     bool m_isReloading = false;      ///< (m_fInReload)
+    /// Of a reload a shell at a time (m_fInSpecialReload): none, started, or a shell's sequence playing.
+    std::uint32_t m_shellReload = 0;
     std::vector<SoundMade> m_sounds; ///< Made since takeSounds.
 };
 

@@ -10,6 +10,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.assets;
+import nx.platform;
 import nx.ecs;
 import nx.render;
 import nx.game;
@@ -75,7 +76,7 @@ TEST(BulletMarkTest, AMarkLeavesOneOfItsDecalsAtRandom) {
     -> nx::assets::Vfs {
     if (hasDecals) {
         std::error_code error;
-        std::filesystem::copy_file(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "wad" / "textures.wad",
+        std::filesystem::copy_file(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "wad" / "textures.wad",
                                    folder.path() / "decals.wad", error);
         EXPECT_FALSE(error) << error.message();
     }

@@ -13,7 +13,7 @@ weight = 5
 maxSpeed = 250.0
 
 [purchase]
-buyers = "everyone"
+buyers = "counterTerrorists"
 price = 500
 commands = ["usp", "km45"]
 menu = { tab = "pistols", key = 2, picture = "gfx/vgui/usp45.tga" }

@@ -53,6 +53,9 @@ public:
     /// Reads the sounds of the player's feet, breath, harm, use and purchases of `content`, so that none
     /// waits on its file. One that cannot be read is logged, and the game plays on.
     void readPlayer(const cs::GameContent& content);
+    /// Plays the menu's sound `name` (a file under `sound/`), heard everywhere at full gain; nothing without
+    /// an output, and one that cannot be played is logged.
+    void playMenu(std::string_view name);
 
 private:
     /// Plays the sound `name` names at `volume`, heard everywhere, as `play` and `playvol` do; without an

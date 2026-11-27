@@ -16,7 +16,7 @@ namespace {
 
 TEST(WorldLightStylesTest, TheProjectDataSetsTheWorldsPatterns) {
     const std::filesystem::path file =
-        std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "lightStyles.toml";
+        nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "lightStyles.toml";
     const auto text = nx::platform::readTextFile(file);
     ASSERT_TRUE(text.has_value());
     const auto world = cs::readWorldLightStyles(*text, "lightStyles.toml");
@@ -65,7 +65,7 @@ TEST(WorldLightStylesTest, SwitchableLightsStartAsTheirEntitiesSay) {
 TEST(WorldLightStylesTest, InvalidLightStyleDataPreventsTheGameContentFromOpening) {
     nx::test::TemporaryDirectory data;
     std::error_code error;
-    std::filesystem::copy(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike", data.path() / "cstrike",
+    std::filesystem::copy(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike", data.path() / "cstrike",
                           std::filesystem::copy_options::recursive, error);
     ASSERT_FALSE(error) << error.message();
     data.write("cstrike/lightStyles.toml", "[[styles]]\nstyle = 0\npattern = \"invalid!\"");

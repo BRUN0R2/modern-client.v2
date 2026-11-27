@@ -17,7 +17,7 @@ namespace {
 
 /// data/cstrike/navigation.toml, which the test needs.
 [[nodiscard]] auto repositoryNavigation() -> nx::game::NavigationData {
-    const auto file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "navigation.toml";
+    const auto file = nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "navigation.toml";
     auto navigation = nx::game::readNavigationData(nx::platform::readTextFile(file).value_or(std::string{}),
                                                    "navigation.toml");
     EXPECT_TRUE(navigation.has_value()) << (navigation ? "" : nx::describe(navigation.error()));

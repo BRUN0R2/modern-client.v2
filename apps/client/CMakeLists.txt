@@ -11,6 +11,7 @@ nxAddModuleLibrary(appClient
         src/client.cppm
         src/clientSettings.cppm
         src/clientBuyMenu.cppm
+        src/clientTeamMenu.cppm
         src/clientMainMenu.cppm
         src/clientOptions.cppm
         src/clientBots.cppm
@@ -32,6 +33,7 @@ nxAddModuleLibrary(appClient
         src/sessionFrame.cpp
         src/clientSettings.cpp
         src/clientBuyMenu.cpp
+        src/clientTeamMenu.cpp
         src/clientMainMenu.cpp
         src/clientOptions.cpp
         src/clientBots.cpp

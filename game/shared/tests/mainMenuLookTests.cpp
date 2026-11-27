@@ -23,12 +23,16 @@ constexpr std::string_view kResume = "[[items]]\naction = \"resumeGame\"\nlisted
 
 TEST(MainMenuLookTest, TheRepositorysReads) {
     const auto text =
-        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "mainMenu.toml");
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "mainMenu.toml");
     ASSERT_TRUE(text.has_value());
     const auto look = cs::readMainMenuLook(*text, "mainMenu.toml");
     ASSERT_TRUE(look.has_value()) << (look ? "" : nx::describe(look.error()));
     EXPECT_EQ(look->font.regular, "Barlow");
     EXPECT_EQ(look->font.strong, "Barlow SemiBold");
+    ASSERT_TRUE(look->originalFont.has_value());
+    EXPECT_EQ(look->originalFont->regular, "Tahoma") << "the original's windows'";
+    EXPECT_EQ(look->originalFont->strong, "Trebuchet MS") << "the original's items'";
+    EXPECT_EQ(look->originalLogo, "resource/logo_game.tga");
     EXPECT_EQ(look->background, "resource/BackgroundLayout.txt") << "the original's own";
     const std::vector<MainMenuItem> expected{
         {.action = MainMenuAction::ResumeGame, .listed = MainMenuListing::InGame},
@@ -53,6 +57,11 @@ TEST(MainMenuLookTest, WhatTheMenuCouldNotShowIsRefused) {
     EXPECT_TRUE(
         refused("font = { regular = \"Barlow\", strong = \"Barlow SemiBold\" }\nbackground = \"\"\n" + quit))
         << "no background";
+    EXPECT_FALSE(refused(fonts + "originalFont = { regular = \"Tahoma\", strong = \"Trebuchet MS\" }\n" +
+                         "originalLogo = \"resource/logo_game.tga\"\n" + quit));
+    EXPECT_TRUE(refused(fonts + "originalFont = { regular = \"Tahoma\", strong = \"\" }\n" + quit))
+        << "an original font half named";
+    EXPECT_TRUE(refused(fonts + "originalLogo = \"\"\n" + quit)) << "an original logo of no path";
     EXPECT_TRUE(refused(fonts + quit + quit)) << "one action twice";
     EXPECT_TRUE(refused(fonts + resume)) << "nothing listed without a map";
     EXPECT_TRUE(refused(fonts)) << "no items";

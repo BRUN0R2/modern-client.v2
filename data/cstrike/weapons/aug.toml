@@ -1,0 +1,85 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The AUG (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "aug"
+classname = "weapon_aug"
+name = "Bullpup" # as the original's buy menu shows it
+slot = "primary"
+position = 14
+weight = 25
+maxSpeed = 240.0
+
+[purchase]
+buyers = "counterTerrorists"
+price = 3500
+commands = ["aug", "bullpup"]
+menu = { tab = "rifles", key = 4, picture = "gfx/vgui/aug.tga" }
+
+[magazine]
+ammo = "556Nato"
+clipSize = 30
+
+[models]
+view = "models/v_aug.mdl"
+player = "models/p_aug.mdl"
+playerAnimation = "carbine"
+viewHand = "left"
+
+[view] # sequences of models/v_aug.mdl
+drawSequences = [2] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
+idlesWhenEmpty = true
+
+[firing]
+cycle = 0.0825
+reach = 8192.0 # how far its rounds go
+damage = 32.0
+rangeModifier = 0.96
+penetration = 2
+isAutomatic = true
+idleAfterShot = 1.9
+shootSequences = [3, 4, 5]
+
+[firing.accuracy] # bursts: the shots cubed over 215, in whole numbers, plus 0.3, at most 1
+initial = 0.2
+burst = { divisor = 215, offset = 0.3, maximum = 1.0 }
+
+[firing.spread]
+movingAbove = 140.0
+air = { base = 0.035, scale = 0.4 }
+moving = { base = 0.035, scale = 0.07 }
+standing = { base = 0.0, scale = 0.02 }
+
+[firing.recoil.kicks]
+moving = { upBase = 1.0, lateralBase = 0.45, upModifier = 0.275, lateralModifier = 0.05, upMax = 4.0, lateralMax = 2.5, directionChange = 7 }
+air = { upBase = 1.25, lateralBase = 0.45, upModifier = 0.22, lateralModifier = 0.18, upMax = 5.5, lateralMax = 4.0, directionChange = 5 }
+ducked = { upBase = 0.575, lateralBase = 0.325, upModifier = 0.2, lateralModifier = 0.011, upMax = 3.25, lateralMax = 2.0, directionChange = 8 }
+standing = { upBase = 0.625, lateralBase = 0.375, upModifier = 0.25, lateralModifier = 0.0125, upMax = 3.5, lateralMax = 2.25, directionChange = 8 }
+
+[firing.sound]
+files = ["weapons/aug-1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 3.3
+sequences = [1] # reload
+
+[zoom] # SecondaryAttack: its sights
+fovs = [55]
+switchTime = 0.3
+cycle = 0.135
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.4
+largeFlinch = true

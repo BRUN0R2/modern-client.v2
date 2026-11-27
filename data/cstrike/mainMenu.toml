@@ -4,11 +4,15 @@
 # What the main menu lists (docs/12-ui-hud-and-console.md, section 4), read into cs::MainMenuLook: the
 # project's own, as the original's resource/GameMenu.res lists its menu's.
 # `font` is what it writes in, of the project's own fonts (data/fonts/): `regular` for its text, `strong` for
-# what stands out. `background` is the layout of the picture behind it, among the game's files: the original's,
+# what stands out. `originalFont` are the original's families among the system's fonts (resource/TrackerScheme.res:
+# `strong` its items', `regular` its windows'), written in instead where the system has them; `originalLogo` is the
+# original's logo among the game's files, shown instead of the project's where the game has it. `background` is the layout of the picture behind it, among the game's files: the original's,
 # which places the pictures of its own menu's background. `items` are its items from the top: `action`, what the item does (`resumeGame`, `disconnect`,
 # `newGame`, `options`, `quit`), none twice; and `listed`, when the menu lists it: `always`, or `inGame` for over a map played alone.
 
 font = { regular = "Barlow", strong = "Barlow SemiBold" }
+originalFont = { regular = "Tahoma", strong = "Trebuchet MS" }
+originalLogo = "resource/logo_game.tga"
 background = "resource/BackgroundLayout.txt"
 
 [[items]]

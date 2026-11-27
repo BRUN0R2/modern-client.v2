@@ -47,13 +47,14 @@ void paintMenuOutline(nx::ui::PanelPainter& painter, const nx::ui::PixelRect& re
                  color);
 }
 
-auto makeMenuFace(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
-                  nx::rhi::CommandList& commands, const MenuFontFamilies& families, MenuFontSize size,
-                  std::uint32_t screenHeight, std::string_view label)
-    -> nx::Result<MenuFace, MenuPanelError> {
+auto makeMenuAtlas(nx::ui::FontCatalog& fonts, const MenuFontFamilies& families, MenuFontSize size,
+                   std::uint32_t screenHeight) -> nx::Result<nx::ui::GlyphAtlas, MenuPanelError> {
     const std::string& family = size.isStrong ? families.strong : families.regular;
     const std::optional<nx::ui::FontChoice> choice =
-        fonts.choose({.family = family, .weight = size.isStrong ? kStrongWeight : kRegularWeight});
+        fonts.choose({.family = family,
+                      .weight = size.weight != 0 ? size.weight
+                                : size.isStrong  ? kStrongWeight
+                                                 : kRegularWeight});
     if (!choice) {
         return nx::fail(MenuPanelError::NoFont, family);
     }
@@ -69,8 +70,20 @@ auto makeMenuFace(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen
     if (!atlas) {
         return nx::fail(MenuPanelError::Unusable, family, std::move(atlas.error()));
     }
+    return std::move(*atlas);
+}
+
+auto makeMenuFace(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
+                  nx::rhi::CommandList& commands, const MenuFontFamilies& families, MenuFontSize size,
+                  std::uint32_t screenHeight, std::string_view label)
+    -> nx::Result<MenuFace, MenuPanelError> {
+    auto atlas = makeMenuAtlas(fonts, families, size, screenHeight);
+    if (!atlas) {
+        return std::unexpected{std::move(atlas.error())};
+    }
     auto image = screen.loadImage(commands, atlas->texels(), atlas->width(), atlas->height(), label);
     if (!image) {
+        const std::string& family = size.isStrong ? families.strong : families.regular;
         return nx::fail(MenuPanelError::GpuFailed, family, std::move(image.error()));
     }
     return MenuFace{.atlas = std::move(*atlas), .image = std::move(*image)};

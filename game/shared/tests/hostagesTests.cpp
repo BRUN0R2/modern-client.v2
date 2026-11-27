@@ -94,7 +94,7 @@ private:
 [[nodiscard]] auto repositoryHitGroups() -> const cs::HitGroupRules& {
     static const cs::HitGroupRules rules = [] {
         const std::filesystem::path file =
-            std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "hitGroups.toml";
+            nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "hitGroups.toml";
         auto text = nx::platform::readTextFile(file);
         EXPECT_TRUE(text.has_value());
         auto read = cs::readHitGroupRules(text.value_or(std::string{}), "hitGroups.toml");

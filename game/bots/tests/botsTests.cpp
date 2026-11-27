@@ -75,7 +75,7 @@ constexpr float kAboveTheFloor = 200.0F;
 class BotsTest : public ::testing::Test {
 protected:
     explicit BotsTest(std::uint32_t workers = 0) {
-        const std::filesystem::path data{NX_DATA_DIRECTORY};
+        const std::filesystem::path data = nx::platform::fromUtf8(NX_DATA_DIRECTORY);
         auto characters = cs::readCharacters(
             nx::platform::readTextFile(data / "cstrike" / "characters.toml").value_or(std::string{}),
             "characters.toml");

@@ -5,9 +5,7 @@ module cs.client;
 
 import std;
 import nx.core;
-import nx.rhi;
 import nx.assets;
-import nx.render;
 
 namespace cs {
 
@@ -16,8 +14,6 @@ namespace {
 /// A pixel no picture covers: black, opaque.
 constexpr std::array<std::byte, nx::assets::kRgbaBytes> kUncovered{std::byte{0}, std::byte{0}, std::byte{0},
                                                                    std::byte{255}};
-/// What the room left is divided by to put a thing halfway into it.
-constexpr float kMiddleDivisor = 2.0F;
 
 /// The bytes of the file at `path` among those of `vfs`. Errors: Unreadable, Invalid (a path of no file).
 [[nodiscard]] auto readFile(const nx::assets::Vfs& vfs, std::string_view path)
@@ -90,25 +86,6 @@ auto readMenuBackground(const nx::assets::Vfs& vfs, std::string_view layoutPath)
         tiles.push_back(std::move(*tile));
     }
     return composeBackground(*layout, tiles);
-}
-
-auto coveringRect(nx::rhi::Extent2d picture, nx::rhi::Extent2d screen) noexcept -> nx::render::ScreenRect {
-    const auto pictureWide = static_cast<float>(picture.width);
-    const auto pictureTall = static_cast<float>(picture.height);
-    const auto screenWide = static_cast<float>(screen.width);
-    const auto screenTall = static_cast<float>(screen.height);
-    if (picture.width == 0 || picture.height == 0) {
-        return {};
-    }
-    // The side that fills the screen is the screen's own, to the pixel; the other follows the picture's
-    // shape.
-    const bool fillsAcross = screenWide * pictureTall >= screenTall * pictureWide;
-    const float wide = fillsAcross ? screenWide : pictureWide * screenTall / pictureTall;
-    const float tall = fillsAcross ? pictureTall * screenWide / pictureWide : screenTall;
-    return {.x = (screenWide - wide) / kMiddleDivisor,
-            .y = (screenTall - tall) / kMiddleDivisor,
-            .width = wide,
-            .height = tall};
 }
 
 } // namespace cs

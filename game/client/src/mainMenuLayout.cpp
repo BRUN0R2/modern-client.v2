@@ -16,7 +16,7 @@ namespace {
 constexpr MenuUnits kLeftUnits{84};
 constexpr MenuUnits kLogoAboveItems{102};
 constexpr MenuUnits kItemWideUnits{320};
-constexpr MenuUnits kItemTallUnits{42};
+constexpr MenuUnits kItemTallUnits{48};
 constexpr MenuUnits kItemGapUnits{2};
 constexpr MenuUnits kUnderItemsUnits{122}; ///< From the last item's foot to the screen's.
 constexpr MenuUnits kHintsFootUnits{74};   ///< From the top of the keys' line to the screen's foot.

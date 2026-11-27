@@ -5,7 +5,12 @@ rem SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Except
 setlocal
 pushd "%~dp0" || exit /b 1
 
-set "game=build\dev-windows-msvc\bin\next.exe"
+rem O Release, otimizado, quando compilado; senao o Debug, muito mais lento com bots e jogadores.
+set "game=build\release-windows-msvc\bin\next.exe"
+if not exist "%game%" (
+    set "game=build\dev-windows-msvc\bin\next.exe"
+    echo Aviso: abrindo o build Debug, lento com bots. Compile o Release: buildMenu.cmd, opcao 1.
+)
 if not exist "%game%" goto missing
 
 "%game%" %*
@@ -20,7 +25,7 @@ exit /b %gameExit%
 
 :missing
 echo Jogo compilado nao encontrado em "%game%".
-echo Use buildMenu.cmd e selecione a opcao 2 para compilar.
+echo Use buildMenu.cmd e selecione a opcao 1 (Release) para compilar.
 pause
 popd
 exit /b 1

@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The P228 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "p228"
+classname = "weapon_p228"
+name = "228 Compact" # as the original's buy menu shows it
+slot = "secondary"
+position = 3
+weight = 5
+maxSpeed = 250.0
+
+[purchase]
+buyers = "everyone"
+price = 600
+commands = ["p228", "228compact"]
+menu = { tab = "pistols", key = 3, picture = "gfx/vgui/p228.tga" }
+
+[magazine]
+ammo = "357SIG"
+clipSize = 13
+
+[models]
+view = "models/v_p228.mdl"
+player = "models/p_p228.mdl"
+playerAnimation = "onehanded"
+viewHand = "left"
+
+[view] # sequences of models/v_p228.mdl
+drawSequences = [6] # draw
+idles = [{ sequence = 0, wait = 3.0625, share = 1.0 }] # idle1
+idlesWhenEmpty = false
+
+[firing]
+cycle = 0.15 # semi-automatic: the original's 0.2 less 0.05
+reach = 4096.0 # how far its rounds go (FireBullets3)
+damage = 32.0 # FireBullets3's iDamage
+rangeModifier = 0.8 # its damage times this for each 500 units it went
+penetration = 1 # how many things a round may meet
+isAutomatic = false
+idleAfterShot = 2.0
+shootSequences = [1, 2, 3] # shoot1, shoot2, shoot3
+lastShotSequence = 4 # shoot_empty
+
+[firing.accuracy] # paced: each shot takes (0.325 - the time since the last) x 0.3, within 0.6 and 0.9
+initial = 0.9
+paced = { threshold = 0.325, rate = 0.3, minimum = 0.6, maximum = 0.9 }
+
+[firing.spread] # scale times 1 less the accuracy
+movingAbove = 0.0
+air = { base = 0.0, scale = 1.5 }
+moving = { base = 0.0, scale = 0.255 }
+ducked = { base = 0.0, scale = 0.075 }
+standing = { base = 0.0, scale = 0.15 }
+
+[firing.recoil]
+punch = 2.0
+
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
+files = ["weapons/p228-1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_pistol.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 2.7
+sequences = [5] # reload
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.25
+largeFlinch = false

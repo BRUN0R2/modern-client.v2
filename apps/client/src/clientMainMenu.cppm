@@ -18,6 +18,16 @@ import :client;
 
 namespace app {
 
+/// What the original's menu sounds as an event changes it (its `sound/UI/` files).
+enum class MenuFeedback : std::uint8_t {
+    None,
+    Rollover, ///< Another item, row or value is armed: `buttonrollover`.
+    Click,    ///< An item or button is pressed, a page or tab opened: `buttonclick`.
+};
+
+/// The file under `sound/` that `feedback` plays; none for MenuFeedback::None.
+[[nodiscard]] auto menuSoundOf(MenuFeedback feedback) noexcept -> std::optional<std::string_view>;
+
 /// The main menu: what it shows (cs::MainMenu), what draws it (cs::MainMenuPanel), and what its items do,
 /// by the console's commands as the original's menu does.
 class ClientMainMenu {
@@ -42,9 +52,11 @@ public:
 
     /// What `event` does to the menu, open, while `game`, the mouse at `mouse` on a screen of `size`: the
     /// item it chooses goes back to the map played, or queues its command in `console` (`disconnect`,
-    /// `quit`, `map <name>` for a new game on the map chosen), which runs it in its turn.
-    void handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition mouse,
-                nx::rhi::Extent2d size, cs::MenuGame game, nx::console::Console& console);
+    /// `quit`, `map <name>` for a new game on the map chosen), which runs it in its turn. Returns what the
+    /// menu sounds as it changed.
+    [[nodiscard]] auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition mouse,
+                              nx::rhi::Extent2d size, cs::MenuGame game, nx::console::Console& console)
+        -> MenuFeedback;
 
     /// Puts what draws it on the GPU in `list` with `screen`, its faces from `fonts`, for a screen of `size`,
     /// when they are not there for that height, and its logo from `data` and background the first time.

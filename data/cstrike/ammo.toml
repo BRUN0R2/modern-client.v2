@@ -11,7 +11,7 @@
 # into what it meets to go on, less as what it meets is made of, and through nothing once it went
 # `penetrationDistance` (FireBullets3, by the bullet type of the weapons that fire it).
 #
-# Today: the ammo of the Glock 18, the USP, the AK-47 and the M4A1.
+# Today: the ammo of the pistols, the submachine guns, the AK-47, the M4A1, the Galil and the M249.
 
 [[ammo]]
 id = "9mm"
@@ -52,3 +52,63 @@ boxRounds = 30
 picture = { sprite = "sprites/640hud7.spr", x = 72, y = 72, width = 24, height = 24 }
 penetrationPower = 39 # BULLET_PLAYER_762MM
 penetrationDistance = 5000.0
+
+[[ammo]]
+id = "357SIG"
+name = ".357 SIG"
+maxCarried = 52
+boxPrice = 50
+boxRounds = 13
+picture = { sprite = "sprites/640hud7.spr", x = 120, y = 72, width = 24, height = 24 }
+penetrationPower = 25 # BULLET_PLAYER_357SIG
+penetrationDistance = 800.0
+
+[[ammo]]
+id = "50AE"
+name = ".50 AE"
+maxCarried = 35
+boxPrice = 40
+boxRounds = 7
+picture = { sprite = "sprites/640hud7.spr", x = 24, y = 72, width = 24, height = 24 }
+penetrationPower = 30 # BULLET_PLAYER_50AE
+penetrationDistance = 1000.0
+
+[[ammo]]
+id = "57mm"
+name = "5.7 mm"
+maxCarried = 100
+boxPrice = 50
+boxRounds = 50
+picture = { sprite = "sprites/640hud7.spr", x = 120, y = 96, width = 24, height = 24 }
+penetrationPower = 30 # BULLET_PLAYER_57MM
+penetrationDistance = 2000.0
+
+[[ammo]]
+id = "556NatoBox"
+name = "5.56 NATO box"
+maxCarried = 200
+boxPrice = 60
+boxRounds = 30
+picture = { sprite = "sprites/640hud7.spr", x = 0, y = 96, width = 24, height = 24 }
+penetrationPower = 35 # BULLET_PLAYER_556MM
+penetrationDistance = 4000.0
+
+[[ammo]]
+id = "buckshot"
+name = "12 gauge"
+maxCarried = 32
+boxPrice = 65
+boxRounds = 8
+picture = { sprite = "sprites/640hud7.spr", x = 0, y = 72, width = 24, height = 24 }
+penetrationPower = 0 # BULLET_PLAYER_BUCKSHOT: its pellets go through nothing
+penetrationDistance = 0.0
+
+[[ammo]]
+id = "338Magnum"
+name = ".338 Lapua Magnum"
+maxCarried = 30
+boxPrice = 125
+boxRounds = 10
+picture = { sprite = "sprites/640hud7.spr", x = 24, y = 96, width = 24, height = 24 }
+penetrationPower = 45 # BULLET_PLAYER_338MAG
+penetrationDistance = 8000.0

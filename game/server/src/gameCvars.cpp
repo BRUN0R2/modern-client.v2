@@ -18,6 +18,9 @@ constexpr nx::console::CvarFlags kServerCvar{nx::console::CvarFlag::Notify};
 constexpr nx::Seconds kDefaultFreezeTime{6.0F};
 constexpr nx::Minutes kDefaultRoundTime{5.0F};
 constexpr nx::Minutes kDefaultBuyTime{1.5F};
+/// mp_limitteams' default, and the most it is held to.
+constexpr float kDefaultTeamsLimit = 2.0F;
+constexpr float kMostTeamsLimit = 20.0F;
 
 /// Six hexadecimal digits in RRGGBB order, with no prefix.
 [[nodiscard]] auto tracerColorOf(std::string_view text) noexcept -> std::optional<nx::assets::PaletteColor> {
@@ -61,8 +64,10 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
         server("mp_friendlyfire", 0.0F, "Whether a player's attacks hurt its teammates: any value but 0.");
     auto buyTime = server("mp_buytime", kDefaultBuyTime.count(),
                           "The minutes each round's players buy for after its freeze: at least 0.25.");
+    auto limitTeams = server("mp_limitteams", kDefaultTeamsLimit,
+                             "How many players more than the other's a team may have: 0 to 20, 0 for no limit.");
     for (auto* const registered : {&freezeTime, &roundTime, &startMoney, &restartRound, &restart, &footsteps,
-                                   &friendlyFire, &buyTime}) {
+                                   &friendlyFire, &buyTime, &limitTeams}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -87,6 +92,7 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                      .footsteps = *footsteps,
                      .friendlyFire = *friendlyFire,
                      .buyTime = *buyTime,
+                     .limitTeams = *limitTeams,
                      .tracerColor = *tracerColor};
 }
 
@@ -129,6 +135,12 @@ auto GameCvars::takeRestart() const -> std::optional<nx::Seconds> {
         }
     }
     return delay;
+}
+
+auto GameCvars::teamsLimit() const -> std::uint32_t {
+    // ReadMultiplayCvars holds it between 0 and 20.
+    const float limit = std::clamp(limitTeams.value(), 0.0F, kMostTeamsLimit);
+    return static_cast<std::uint32_t>(limit);
 }
 
 auto GameCvars::doStepsSound() const -> bool {

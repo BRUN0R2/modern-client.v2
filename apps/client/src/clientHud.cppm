@@ -24,6 +24,7 @@ struct HudFrame {
     const Session& session;
     const cs::GameContent& content;
     const ClientSettings& settings;
+    const cs::Texts& texts; ///< In the player's language.
     nx::render::Camera view; ///< The player's, turned by the kick its weapon gave it.
     nx::Seconds now;         ///< Since the map started.
     nx::rhi::Extent2d size;  ///< Of the screen.
@@ -35,9 +36,10 @@ struct HudFrame {
 class ClientHud {
 public:
     /// Opens what writes in the fonts of the installation's windows, `fonts`, and of `catalog`, for a screen
-    /// `screenHeight` tall, in the looks of `content`.
+    /// `screenHeight` tall, in the looks of `content`, the pictures of the project's own from the first of
+    /// `pictureFolders` that has each.
     void open(const cs::WindowFonts& fonts, nx::ui::FontCatalog& catalog, const cs::GameContent& content,
-              std::uint32_t screenHeight);
+              std::uint32_t screenHeight, std::span<const std::filesystem::path> pictureFolders);
     /// Puts on the GPU in `list` with `screen` the HUD's pictures of `content` (loadPictures), and what
     /// opened. Errors: GpuFailed, with the cause.
     [[nodiscard]] auto load(const cs::GameContent& content, nx::render::ScreenRenderer& screen,
@@ -70,7 +72,7 @@ private:
     std::optional<cs::DamageNumbers> damageNumbers; ///< None when its font could not be had.
     std::optional<cs::StepIndicator> stepIndicator; ///< Once the window's text is open.
     std::optional<cs::KillFeed> killFeed;           ///< None when its font or its pictures could not be had.
-    std::optional<cs::Scoreboard> scoreboard;       ///< None when its font could not be had.
+    std::optional<cs::Scoreboard> scoreboard;       ///< None when its fonts could not be had.
 };
 
 } // namespace app
