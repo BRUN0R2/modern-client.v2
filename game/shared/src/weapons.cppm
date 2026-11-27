@@ -132,7 +132,7 @@ struct WeaponPurchase {
 /// The ammo a weapon fires, and how much of it its clip holds.
 struct WeaponMagazine {
     std::string ammo{}; ///< The id of an AmmoType.
-    std::uint32_t clipSize{};
+    std::uint32_t clipSize{}; ///< 0 for none: a grenade, its count the rounds of its ammo carried.
 };
 
 /// An idle of a weapon's view model: the sequence it plays, and how long before it idles again.
@@ -389,6 +389,34 @@ struct WeaponReload {
     std::optional<ShellReload> shells{};    ///< None: the clip is filled at once, `time` after.
 };
 
+/// What a grenade does as it goes off.
+enum class GrenadeKind : std::uint8_t {
+    Explosive, ///< Hurts who is near (Explode3, RadiusDamage).
+    Flash,     ///< Blinds who sees it (Explode, RadiusFlash).
+    Smoke,     ///< Clouds where it lies (SG_Detonate, SG_Smoke).
+    Count,
+};
+
+/// A grenade, as its holder throws it (the grenades' PrimaryAttack and WeaponIdle, CGrenade::ShootTimed):
+/// its pin pulled by `+attack` (`pinSequence`, 0.5 seconds at least), thrown as the button goes up
+/// (`throwSequence`), along the view turned up 10 degrees, as fast as the view is up, 750 at most, its
+/// holder's velocity added; it flies at `gravity` of the world's, bounces as `friction` says, and goes off
+/// `fuse` after it was thrown, a smoke grenade once it lies still too: hurting, blinding or clouding within
+/// `radius`, as much as `damage` at its middle.
+struct WeaponThrow {
+    GrenadeKind kind{};
+    nx::Seconds fuse{};
+    std::string model{}; ///< What shows of it flying: "models/w_hegrenade.mdl".
+    std::uint32_t pinSequence{};
+    std::uint32_t throwSequence{};
+    float gravity{};
+    float friction{};
+    nx::Damage damage{};
+    nx::HammerUnits radius{};
+    std::optional<GameSound> bounceSound{};
+    std::optional<GameSound> sound{}; ///< As it goes off.
+};
+
 /// A weapon's sights (SecondaryAttack): `+attack2` turns them to each of `fovs` in turn, then back to the
 /// view's own, `switchTime` apart, `sound` heard. Zoomed, its holder runs at most `maxSpeed`, it fires every
 /// `cycle` when given (the SG552's and the AUG's 0.135), and the scope is drawn over the view when
@@ -495,6 +523,8 @@ struct Weapon {
     std::optional<WeaponMelee> melee{};         ///< None: it has no melee attacks.
     WeaponHarm harm{};
     std::optional<WeaponZoom> zoom{}; ///< None: it has no sights.
+    /// None: it is not thrown. Thrown, its count is the rounds of its magazine's ammo the player carries.
+    std::optional<WeaponThrow> throwing{};
 };
 
 /// A weapon of a catalog, by its place in it, which it keeps.
@@ -679,7 +709,7 @@ struct nx::meta::Description<cs::WeaponMagazine> {
     static constexpr std::string_view kName = "cs::WeaponMagazine";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::WeaponMagazine::ammo>("ammo"),
-        nx::meta::field<&cs::WeaponMagazine::clipSize>("clipSize", nx::data::Range{.minimum = 1.0}),
+        nx::meta::field<&cs::WeaponMagazine::clipSize>("clipSize", nx::data::Range{.minimum = 0.0}),
     };
 };
 
@@ -1044,5 +1074,24 @@ struct nx::meta::Description<cs::Weapon> {
         nx::meta::field<&cs::Weapon::melee>("melee"),
         nx::meta::field<&cs::Weapon::harm>("harm"),
         nx::meta::field<&cs::Weapon::zoom>("zoom"),
+        nx::meta::field<&cs::Weapon::throwing>("throwing"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponThrow> {
+    static constexpr std::string_view kName = "cs::WeaponThrow";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponThrow::kind>("kind"),
+        nx::meta::field<&cs::WeaponThrow::fuse>("fuse", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponThrow::model>("model"),
+        nx::meta::field<&cs::WeaponThrow::pinSequence>("pinSequence"),
+        nx::meta::field<&cs::WeaponThrow::throwSequence>("throwSequence"),
+        nx::meta::field<&cs::WeaponThrow::gravity>("gravity", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponThrow::friction>("friction", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::WeaponThrow::damage>("damage", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponThrow::radius>("radius", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponThrow::bounceSound>("bounceSound"),
+        nx::meta::field<&cs::WeaponThrow::sound>("sound"),
     };
 };

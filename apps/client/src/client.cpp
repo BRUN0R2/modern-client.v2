@@ -264,6 +264,8 @@ private:
     /// console's window when open.
     void appendScreen(nx::rhi::Extent2d size);
     void appendMenuCursor(nx::rhi::Extent2d size);
+    /// While a flash blinds the player: the screen white over the HUD, fading out (UTIL_ScreenFade).
+    void appendFlash(nx::rhi::Extent2d size);
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
 
     const ClientOptions* m_options;
@@ -314,6 +316,13 @@ private:
     std::optional<ClientMainMenu> mainMenu; ///< Made with the game's content and the texts.
     std::optional<ClientTeamMenu> teamMenu; ///< Made with the game's content and the texts.
     cs::SniperScope sniperScope;            ///< Its pictures read as the first map is played.
+    std::vector<cs::ShownProp> m_props;     ///< The grenades the frame shows.
+    /// A flash's blinding: since when, how long it holds, how long it fades, how white (UTIL_ScreenFade).
+    struct Flash {
+        nx::Seconds start{};
+        cs::Blinding blinding{};
+    };
+    std::optional<Flash> flash;
     nx::log::RateLimit cursorWarnings{std::chrono::seconds{1}};
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
@@ -1179,6 +1188,10 @@ auto Client::sessionView() -> cs::SceneView {
     Session& session = *mapChange.played();
     session.client.writePlacements(m_placements);
     session.client.writeHostages(m_hostages);
+    m_props.clear();
+    for (const cs::ShownGrenade& grenade : session.client.grenades()) {
+        m_props.push_back(cs::ShownProp{.prop = grenade.weapon.value, .origin = grenade.origin});
+    }
     session.client.writeCorpses(m_content->entities, settings->corpses.stayTime(), m_jobs.get(),
                                 shownEntities);
     const nx::Seconds time{m_mapClock.elapsed()};
@@ -1187,6 +1200,7 @@ auto Client::sessionView() -> cs::SceneView {
             .lightStyles = session.client.lightStylesAt(time),
             .placements = m_placements,
             .hostages = m_hostages,
+            .props = m_props,
             .players = m_players,
             .entities = shownEntities,
             .crowd = session.client.crowd(),
@@ -1228,6 +1242,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         teamMenu->append(m_screenQuads, size);
         buyMenu->appendNotice(m_screenQuads, size);
     }
+    appendFlash(size);
     mainMenu->append(m_screenQuads, size, menuGame());
     if (const std::optional<std::string_view> asked = mapChange.askedMap()) {
         mainMenu->appendLoading(m_screenQuads, size, *asked);
@@ -1237,6 +1252,37 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         m_consoleWindow->paint(m_screenQuads, size);
     }
     appendMenuCursor(size);
+}
+
+void Client::appendFlash(nx::rhi::Extent2d size) {
+    Session* const session = mapChange.played();
+    if (session == nullptr) {
+        flash.reset();
+        return;
+    }
+    const nx::Seconds now{m_mapClock.elapsed()};
+    if (const std::optional<cs::Blinding> blinded = session->client.takeBlinding()) {
+        flash = Flash{.start = now, .blinding = *blinded};
+    }
+    if (!flash) {
+        return;
+    }
+    // White, as opaque as the flash made it while it holds, then fading out.
+    const float since = (now - flash->start).count();
+    const float hold = flash->blinding.hold.count();
+    const float fade = flash->blinding.fade.count();
+    float share = 1.0F;
+    if (since > hold) {
+        share = fade > 0.0F ? 1.0F - ((since - hold) / fade) : 0.0F;
+    }
+    if (share <= 0.0F) {
+        flash.reset();
+        return;
+    }
+    const auto alpha = static_cast<std::uint8_t>(static_cast<float>(flash->blinding.alpha) * share);
+    nx::ui::PanelPainter{m_screenQuads, size}.fill(
+        {.wide = nx::Pixels{nx::narrow<std::int32_t>(size.width)}, .tall = nx::Pixels{nx::narrow<std::int32_t>(size.height)}},
+        nx::render::ScreenColor{.red = 255, .green = 255, .blue = 255, .alpha = alpha});
 }
 
 void Client::appendMenuCursor(nx::rhi::Extent2d size) {

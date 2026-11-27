@@ -15,6 +15,7 @@ nxAddModuleLibrary(csServer
         src/playerPose.cppm
         src/playerSpawns.cppm
         src/purchases.cppm
+        src/grenades.cppm
         src/playerSnapshots.cppm
         src/gameRules.cppm
         src/playerHarms.cppm
@@ -33,6 +34,7 @@ nxAddModuleLibrary(csServer
         src/playerPose.cpp
         src/playerSpawns.cpp
         src/purchases.cpp
+        src/grenades.cpp
         src/playerSnapshots.cpp
         src/gameRules.cpp
         src/playerHarms.cpp

@@ -178,6 +178,10 @@ template <class Item>
         return nx::fail(WeaponError::DataInvalid,
                         std::format("{}: {:?} fires no kind of ammo", where, weapon.id));
     }
+    if (weapon.magazine && weapon.magazine->clipSize == 0 && !weapon.throwing) {
+        return nx::fail(WeaponError::DataInvalid,
+                        std::format("{}: {:?} has a clip of no rounds, and is no grenade", where, weapon.id));
+    }
     if (weapon.models.playerAnimation.empty()) {
         return nx::fail(WeaponError::DataInvalid,
                         std::format("{}: {:?} without its player's animation", where, weapon.id));

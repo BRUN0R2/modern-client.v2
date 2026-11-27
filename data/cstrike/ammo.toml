@@ -112,3 +112,33 @@ boxRounds = 10
 picture = { sprite = "sprites/640hud7.spr", x = 24, y = 96, width = 24, height = 24 }
 penetrationPower = 45 # BULLET_PLAYER_338MAG
 penetrationDistance = 8000.0
+
+[[ammo]]
+id = "HEGrenade"
+name = "HE Grenade"
+maxCarried = 1 # MAX_AMMO_HEGRENADE
+boxPrice = 300
+boxRounds = 1
+picture = { sprite = "sprites/640hud7.spr", x = 72, y = 96, width = 24, height = 24 }
+penetrationPower = 0
+penetrationDistance = 0.0
+
+[[ammo]]
+id = "Flashbang"
+name = "Flashbang"
+maxCarried = 2 # MAX_AMMO_FLASHBANG
+boxPrice = 200
+boxRounds = 1
+picture = { sprite = "sprites/640hud7.spr", x = 48, y = 96, width = 24, height = 24 }
+penetrationPower = 0
+penetrationDistance = 0.0
+
+[[ammo]]
+id = "SmokeGrenade"
+name = "Smoke Grenade"
+maxCarried = 1 # MAX_AMMO_SMOKEGRENADE
+boxPrice = 300
+boxRounds = 1
+picture = { sprite = "sprites/640hud7.spr", x = 144, y = 96, width = 24, height = 24 }
+penetrationPower = 0
+penetrationDistance = 0.0

@@ -81,6 +81,12 @@ auto snapshotFor(GameState& game, PlayerIndex index) -> PlayerSnapshot {
                               .gaitSequence = shown.animation.gaitSequence,
                               .isDead = shown.movement.isDead});
     }
+    std::ranges::copy(game.events.grenadeSounds, std::back_inserter(heard));
+    std::vector<ShownGrenade> grenades;
+    grenades.reserve(game.grenades.size());
+    for (const LiveGrenade& grenade : game.grenades) {
+        grenades.push_back(ShownGrenade{.weapon = grenade.weapon, .origin = grenade.origin});
+    }
     const nx::game::TickTime& time = nx::game::tickTimeOf(game.world);
     return PlayerSnapshot{.time = time.now,
                           .rate = time.rate,
@@ -111,7 +117,10 @@ auto snapshotFor(GameState& game, PlayerIndex index) -> PlayerSnapshot {
                           .hostages = hostageStatesOf(game.world),
                           .players = std::move(others),
                           .entities = entityStatesNow(game),
-                          .lightStyles = game.lightStyles};
+                          .lightStyles = game.lightStyles,
+                          .grenades = std::move(grenades),
+                          .grenadeBlasts = game.events.grenadeBlasts,
+                          .blinding = player.blinding};
 }
 
 } // namespace cs

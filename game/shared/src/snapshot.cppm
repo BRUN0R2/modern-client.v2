@@ -243,6 +243,26 @@ struct ShownCrowd {
 /// what the tick did to it and made it make; the sounds the other players made; where the tick's shots
 /// and the blood they shed met what is solid, and the blood they sprayed; and the world
 /// it sees: the brush entities, the hostages, the other players and the light-style patterns.
+/// A grenade flying or lying, as a client draws it: which, and where.
+struct ShownGrenade {
+    WeaponIndex weapon{};
+    nx::Vec3 origin{};
+};
+
+/// A grenade going off: its kind, and where.
+struct GrenadeBlast {
+    GrenadeKind kind{};
+    nx::Vec3 position{};
+};
+
+/// How a flash blinds a player (UTIL_ScreenFade): white, `alpha` of 255 opaque, for `hold`, then fading
+/// out over `fade`.
+struct Blinding {
+    nx::Seconds hold{};
+    nx::Seconds fade{};
+    std::uint8_t alpha = 0;
+};
+
 struct PlayerSnapshot {
     nx::GameTime time{}; ///< After the tick.
     nx::TickRate rate{nx::kDefaultTickRate};
@@ -282,6 +302,9 @@ struct PlayerSnapshot {
     std::vector<PlayerEntityState> players{};
     EntityStates entities{};
     MapLightStyles lightStyles{}; ///< The server's current patterns, evaluated by the client.
+    std::vector<ShownGrenade> grenades{};      ///< Flying or lying, after the tick.
+    std::vector<GrenadeBlast> grenadeBlasts{}; ///< Of the tick, in their order.
+    std::optional<Blinding> blinding{};        ///< A flash blinded it in the tick.
 };
 
 } // namespace cs

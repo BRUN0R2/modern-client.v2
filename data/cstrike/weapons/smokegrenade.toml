@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The smoke grenade (docs/10, section 7.3), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3): its count the rounds of its ammo the player carries.
+
+id = "smokegrenade"
+classname = "weapon_smokegrenade"
+name = "Smoke Grenade"
+slot = "grenade"
+position = 3
+weight = 1
+maxSpeed = 250.0
+
+[purchase]
+buyers = "everyone"
+price = 300
+commands = ["sgren"]
+menu = { tab = "equipment", key = 5, picture = "gfx/vgui/smokegrenade.tga" }
+
+[magazine] # its count is the rounds of it the player carries
+ammo = "SmokeGrenade"
+clipSize = 0
+
+[models]
+view = "models/v_smokegrenade.mdl"
+player = "models/p_smokegrenade.mdl"
+playerAnimation = "grenade"
+viewHand = "left"
+
+[view] # sequences of models/v_smokegrenade.mdl
+drawSequences = [3] # deploy
+idles = [{ sequence = 0, wait = 12.5, share = 1.0 }] # idle, 10 to 15 seconds apart
+idlesWhenEmpty = true
+
+[throwing] # SG_Detonate: a cloud where it lies
+kind = "smoke"
+fuse = 1.5
+model = "models/w_smokegrenade.mdl"
+pinSequence = 1 # pullpin
+throwSequence = 2 # throw
+gravity = 0.5
+friction = 0.8
+damage = 0.0
+radius = 0.0
+bounceSound = { files = ["weapons/grenade_hit1.wav", "weapons/grenade_hit2.wav", "weapons/grenade_hit3.wav"], channel = "item", volume = 0.25 }
+sound = { files = ["weapons/sg_explode.wav"], channel = "auto", volume = 1.0 }
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.0
+largeFlinch = false

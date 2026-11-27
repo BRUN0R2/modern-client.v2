@@ -171,6 +171,7 @@ void postThink(GameState& game, Player& player, const UserCommand& command, cons
             (movement.velocity.x * movement.velocity.x) + (movement.velocity.y * movement.velocity.y)}))},
         .isOnGround = movement.isOnGround,
         .isDucked = movement.isDucked,
+        .velocity = movement.velocity,
         .canAttack = !game.rounds.isFrozen()};
     const nx::game::TickTime& time = nx::game::tickTimeOf(game.world);
     // What the attacks meet: what is solid but the player itself, the world, the brush entities, the
@@ -204,6 +205,9 @@ void postThink(GameState& game, Player& player, const UserCommand& command, cons
     }
     if (attacks.motions.test(HolderMotion::Reloaded)) {
         animate(game, player, PlayerAction::Reload);
+    }
+    for (const Throw& thrown : attacks.throws) {
+        throwGrenade(game, player, thrown);
     }
     for (const Blow& blow : attacks.blows) {
         attackEntity(game, player, blow.entity,
