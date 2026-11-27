@@ -29,8 +29,18 @@
 
 **Today** (`cs.shared:characters`, `data/cstrike/characters.toml`): each team's four characters, in the
 order its menu offers them, each playing the model `models/player/<name>/<name>.mdl`; a player that
-joins a team is given one of its characters at random, as the menu's auto-select gives one (the menus
-come with the menus). Its model plays as ReGameDLL_CS's `CBasePlayer` animates it
+joins a team is given one of its characters at random, as the menu's auto-select gives one, until it
+chooses one on the appearance menu (`cs::Game::chooseCharacter`, HandleMenu_ChooseAppearance: 1 to 4 its
+team's in their order, a slot of none one at random); `title` names it there.
+
+**Today**, the team a player chooses (`cs::Game::chooseTeam`, HandleMenu_ChooseTeam): refused when that
+team, another than its own, has as many players as the map has spawn points for it (TeamFull), or would have
+more than `mp_limitteams` (2, 0 to 20, 0 for no limit) more than the other, counting the player leaving it
+(TeamStacked), or when the player is dead and changed teams this round already (`m_bTeamChanged`, forgotten
+as a round restarts). The client's player joins a map in the team of its first spawn point until it chooses:
+then it moves to the team chosen as a player joining does, spawned at its spawn when it may, with no death.
+A player that chose already and is alive dies as it changes (`Kill`: a death and a frag less) and plays for
+the new team from the next round. Spectating comes with the spectator mode (§10). Its model plays as ReGameDLL_CS's `CBasePlayer` animates it
 (`cs.shared:playerAnimation`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)): its
 torso's sequence by what it does and the weapon it holds (`SetAnimation`, `GetAnimDesired`:
 `ref_aim_<weapon>`, `crouch_shoot_<weapon>`, `ref_reload_<weapon>`, the weapon's `playerAnimation`),
@@ -259,8 +269,8 @@ plugins); the bomb's and the hostages' rescue money come with them. A kill's mon
 | Category | Weapon | Team |
 |----------|--------|------|
 | Knife | Knife | Both |
-| Pistols | Glock 18 | Both (T default) |
-| | USP .45 | Both (CT default) |
+| Pistols | Glock 18 | T (the project's choice: both in the original) |
+| | USP .45 | CT (the project's choice: both in the original) |
 | | P228 | Both |
 | | Desert Eagle | Both |
 | | Dual Elites | T |
@@ -444,7 +454,9 @@ original's `GiveDefaultItems`): the terrorists a knife, a Glock 18 and 40 rounds
 counter-terrorists a knife, a USP and 24 rounds of 45ACP, each weapon with a clip's worth.
 An addon's `loadouts.toml` can replace both teams' spawn loadouts, using ids in the combined catalog.
 
-**Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1, how the guns fire and are
+**Today:** the knife, the Glock 18, the USP, the P228, the Desert Eagle, the Dual Elites, the Five-SeveN, the
+MAC-10, the TMP, the MP5 Navy, the UMP45, the P90, the Galil, the FAMAS, the AK-47, the M4A1 and the M249, how
+the guns fire and are
 reloaded, their silencers and burst, the knife's attacks, and the loadouts. Each next part of the
 weapons brings the data its code reads: damage, range modifier and penetration, the knife's damage
 and back stab, and the armor ratio.
@@ -497,12 +509,14 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - **Spread:** a per-weapon function reproducing the original, depending on movement, being
   in the air, crouching, zoom and accumulated accuracy.
   **Today:** the data's terms (section 7.2), of the accuracy before the shot changes it: a burst's
-  shots cubed over its divisor in whole numbers, as the original divides them (the AK-47's 0.35 up
-  to the fifth shot, 1.25 from the sixth); a paced one losing (threshold less the time since the
+  shots cubed (or squared, its `power`: the submachine guns') over its divisor, in whole numbers for a
+  whole divisor as the original's int divides them (the AK-47's 0.35 up to the fifth shot, 1.25 from
+  the sixth), else as its double does (the MP5's 220.1); a paced one losing (threshold less the time since the
   last shot) times its rate a shot.
 - **Recoil:** *punch angle* and accumulation over consecutive shots, with recovery.
-  **Today:** the rifles' `KickBack` (moving at all, else in the air, else ducked, else standing;
-  its side turned over once in `directionChange` + 1 shots), the USP's 2 degrees up; the punch
+  **Today:** the automatic guns' `KickBack` (moving at all, else in the air, else ducked, else standing;
+  in the air first for the submachine guns and the M249, `airFirst`;
+  its side turned over once in `directionChange` + 1 shots), the pistols' 2 degrees up; the punch
   drops back in the movement (`PM_DropPunchAngle`) and turns the view `next` draws.
 - **Special modes:** burst (Glock, FAMAS), silencer (USP, M4A1, with different damage and
   sound), one- or two-level zoom, shield with pistols.
@@ -511,7 +525,12 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   and spread), the M4A1's (2 seconds), each drawn and reloaded as they are; the Glock's burst (0.3
   seconds, no sequence), which fires two more rounds on the next two weapon frames, as the
   original's does with no time between them (`FireRemaining`), and fires again while held, every
-  0.5 seconds. A weapon without an alternate ignores `+attack2`. The message the Glock's switch
+  0.5 seconds; the FAMAS's burst (0.3 seconds), of a first round of 34 every 0.55 seconds and without
+  the 0.01 its automatic fire adds to the spread, its two more rounds 0.05 then 0.1 seconds apart
+  (`m_flFamasShoot`), each as astray as the first (`m_fBurstSpread`) and of 30 (`FollowUps`'s `delays`,
+  `damage`, and no `spread`). A weapon without an alternate ignores `+attack2`. The Dual Elites fire
+  each hand in turn (`DualHands`, ELITEFire): the left first when drawn with an even clip, each its own
+  sequences and its last as the clip empties, its round from 5 units to its side of the eye. The message the Glock's switch
   prints comes with the HUD's center text.
 - **Penetration:** depends on the weapon's power, the distance and the surface material
   (`materials.txt`).

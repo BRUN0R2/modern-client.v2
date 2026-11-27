@@ -290,32 +290,26 @@ client has them: they need a second player, and that build's game has no bots ([
 own client of today (build 10210) draws the same rows at those resolutions, up to a pixel at 1024x768, where
 its `EngineFont` writes its capitals one lower, and prints `<victim> died` in the console.
 
-**The scoreboard** (`cs.client:scoreboard`, a layout of the project's own, [ADR-0020](adr/0020-in-house-ui-toolkit.md)):
-while `+showscores` is held (`TAB`), over the HUD whether `hud_draw` draws it or not, a panel with the
-teams of players, each under its row, of the most wins first (the terrorists of as many) and each of its
-players from the most frags, of as many the fewest deaths, of as many by its slot; what it shows is
-[10 §7.4](10-counter-strike-gameplay.md#74-damage)'s scores. **Observed** (Valve's client of today, build
-10210; a player alone on its team, alive and after `kill`, at 800x600, 1024x768, 1280x720, 1280x960 and
-1600x900), with H the screen's height and Y(n) = n × H / 480 in whole pixels, each place from the panel's
-top left:
+**The scoreboard** (`cs.client:scoreboard`, a look of the project's own, [ADR-0020](adr/0020-in-house-ui-toolkit.md),
+a departure the user chose (2026-11-25) from the original's measured panel): while `+showscores` is held
+(`TAB`), over the HUD whether `hud_draw` draws it or not, in the menus' fonts and lengths
+([§4](#4-game-menus-and-screens), `cs.client:menuDesign`, a design 1080 lines tall), its texts in the player's language
+(`[scoreboard]` of `data/cstrike/locale/<language>.toml`):
 
-| Part | Where |
-|------|-------|
-| The panel | Y(520) wide, Y(340) tall, in the middle across, Y(70) from the top: black at half opacity over the scene; its border and the line under the heads (188, 112, 0) at half opacity over that; its corners cut by 5, 4, 2, 2 and 1 pixels |
-| The heads | The server's name (`hostname`) from Y(5) and a pixel; `HP`, `Money`, `Score`, `Deaths` and `Latency` ending at Y(310), Y(367), Y(412), Y(458) and Y(508); all in (255, 176, 0) |
-| What changes with the fonts | Under 768 lines the line under the heads at 23, the team's line at 51 and the names from 45; from 768 at 24, 53 and 61 |
-| A team's row | `Terrorists   -   1 player` over its line, its wins ending in the score's column, in its color: (255, 64, 64) for the terrorists, (153, 204, 255) for the counter-terrorists; the line opaque, from 6 to 8 before the panel's right |
-| A player's row | Its name, `Dead` from Y(215), its health and `$` and its money while the server tells them, its score and its deaths ending in their columns; its line of text Y(12) under the team's line less half the line's height and a pixel |
-| The player's own row | White at 25 of 255 over the panel, Y(21) tall, from 2 under the team's line, 5 in from each side of the panel |
+| Part | What it shows |
+|------|---------------|
+| The header | The server's name (`hostname`), the map under it, and how many play, in a box at its right |
+| The teams' banners | Side by side, the counter-terrorists on the left in blue and the terrorists on the right in orange, either with no player too: its emblem, its name, how many of it live (`3/4 alive`) and its wins, large |
+| A team's table | Its players from the most frags, of as many the fewest deaths, of as many by their slots ([10 §7.4](10-counter-strike-gameplay.md#74-damage)'s scores): a tile with the initial of the name, the name (cut with `...` where it would not fit), the health over a bar of it (red from 25 down) and the money, where the server tells them (its teammates' alone, so a team of none has neither column), `DEAD` for a dead player, kills and deaths |
+| The player's own row | Lighter, a bar of its team's color at its left |
 
-`hostname` is `Counter-Strike 1.6` until it is set, the game the project plays, a departure the user chose
-(2026-11-02) from the original's `Half-Life`. The rows of more players are not measured, for that build's game
-has no bots: the next row is drawn Y(21)
-under the last, as tall as the band, and a next team's line two of them under its last row ([TODO](TODO.md)),
-as the order of the teams and of their players, which come from the original's rules. The original writes
-all of it in bitmap fonts of its own (`gfx/vgui/fonts/<size>_Scoreboard Text.tga` and its title's), which
-`next` writes in `EngineFont` until it reads them. The room of the avatar of Steam's (at 16 under 768 lines,
-21 from them) stays empty, and `Latency` has no numbers yet.
+Rows are 50 units apart, closer when a team's would not fit on the screen. The emblems are TGA files,
+white over clear and tinted as drawn: `cstrike/scoreboardCounterTerrorists.tga` and
+`cstrike/scoreboardTerrorists.tga`, read from the player's folder first, where a player may put pictures of
+their own, else from `data/`, which has the project's (`scripts/makeScoreboardEmblems.py` draws those and
+turns a player's pictures into theirs). `hostname` is `Counter-Strike 1.6` until it is set, the game the
+project plays, a departure the user chose (2026-11-02) from the original's `Half-Life`. There is no avatar
+picture yet, and no latency.
 
 **The damage numbers** (`cs.client:damageNumbers`), the project's own, nothing of the original's, as
 action games show the damage a hit deals: while `hud_damagenumbers` is 1 and `hud_draw` draws the HUD,
@@ -411,21 +405,22 @@ Without the historical limits on text channels and message size:
 | MOTD | **Restricted and safe** text or HTML (a subset rendered by the UI, no scripts). External links open in the system browser after confirmation |
 
 **The main menu** (`cs.client:mainMenu`, `:mainMenuLayout`, `:mainMenuPanel`): the original's pattern in the
-project's own look. Its items are data, `data/cstrike/mainMenu.toml`, as the original lists its menu's in
+original's look, Counter-Strike 1.6's on Steam. Its items are data, `data/cstrike/mainMenu.toml`, as the original lists its menu's in
 `resource/GameMenu.res`: what each does (`action`) and when the menu lists it (`listed`: `always`, or `inGame` for
 over a map played alone), from the top. Today it lists going back to the map played and leaving it, both over a map
 alone, a new game, the options, and ending the game; the server browser comes with what it opens. It shows
-the project's logo (`data/cstrike/modernClientLogo.tga`) over a column of text rows near the lower left, with
-keyboard hints underneath and the selected row in gold. The navigation stands over the active background at
+the original's logo (`originalLogo`: `resource/logo_game.tga` among the game's files), or the project's
+(`data/cstrike/modernClientLogo.tga`) where the game has none, over a column of text rows near the lower left: the
+original's items, orange (its `TrackerScheme.res`'s `MenuColor`, 238 174 0), the one selected brighter
+(`ArmedMenuColor`, 255 186 0), casting a drop shadow, and no keys told, as the original tells none. The navigation stands over the active background at
 startup and over the darkened scene during a game. The loading screen uses the same logo.
 
 Its background is the active content's own: `background` in the menu's data names a background layout among the
 game's files, the original's `resource/BackgroundLayout.txt`, which places the pictures of the original's menu
 (`resource/background/800_<row>_<column>_loading.tga`, twelve tiles of a screen of 800 by 600) on a screen of
 its own size (`nx.assets:backgroundLayout`). They are put together into one picture as the menu is first drawn
-(`cs.client:menuBackground`), which covers the screen whole without changing its shape, its middle on the
-screen's and what is too wide or too tall left off the edges, where the original stretches it; and it is
-darkened, so that what the menu writes reads over it. A background that cannot be read is logged, and the menu
+(`cs.client:menuBackground`), which is stretched over the screen whole, as the original stretches it, and not
+darkened. A background that cannot be read is logged, and the menu
 shows over its own dark ground, as in a content that has none.
 
 Up and Down select the item before and the one after, around the ends; Enter chooses the one selected; the mouse
@@ -434,10 +429,15 @@ when no map is played, and comes back to it as the map is left; over a map playe
 bound to that key, as in the original, the keys held for the game let go and the cursor shown. The keys bound to
 `toggleconsole` open the console's window over it; the other keys run no bind while it is open. An item does what
 the console's command does, queued as a bind queues its own (`app.client:mainMenu`): `disconnect`, `quit`. The
-fonts it writes in are the project's own; a client that cannot have them does not start. What it writes is in
+fonts it writes in are the original's among the system's (`originalFont`: Trebuchet MS, bold, for its items,
+as its `MenuLarge`; Tahoma for its windows, as its `Default`), else the project's own (`font`); a client that
+cannot have the project's does not start. What it writes is in
 the player's language ([§7](#7-localization)).
 
-An item that has more to ask opens a centered panel and dims the menu behind it. **A
+An item that has more to ask opens a centered window in the original's classic Steam look, the colors of its
+`TrackerScheme.res`: olive controls (`ControlBG`) edged light at the top left and dark at the foot and right, its
+title in white, recessed lists and fields (`WindowBG`), the row selected in `SelectionBG`, a check in
+`BrightControlText`, a slider's dark track, and the default button outlined in black. **A
 new game** lists the game's maps, the `maps/<name>.bsp` of its own folders (`cs::mapNamesOf`: the user's content
 and the installation's `cstrike/`, not those of its base, `valve/`), in the order of the alphabet: Up, Down, Page Up, Page Down, Home and End select one, the list following it; the wheel scrolls the list,
 three rows a notch, and a thumb down its right shows how far; the mouse selects the map it is pressed on. Enter, or
@@ -512,6 +512,20 @@ same point of the frame by `disconnect` (`MapSwitch`); each loading and each cha
 **The menus' look** (`cs.client:menuDesign`) is one for the project's own menus: a design 1080 lines tall, its
 lengths `cs::MenuUnits`, made as large as the screen (`MenuScale`, which turns them into `nx::Pixels`); the sizes of text made of the families a menu's data names for that height
 (`makeMenuFace`); and the colors, warm white text and gold over dark glass.
+
+**The team and appearance menus** (`cs.client:teamMenu`, `:teamMenuPanel`, `app.client:teamMenu`): the
+original's choices and keys, in the buy menu's look: its title over a line, a row for each choice down its
+left with its key's badge, its label and the original's picture (`gfx/vgui/<character>.tga`,
+`t_random.tga` and `ct_random.tga` for auto-select), and the picture of the row selected large on their right,
+named in its team's accent. The team menu opens as a map starts, as the original asks a player joining, and
+by `chooseteam` (bound to `m`), but over the appearance menu: 1 the terrorists, 2 the counter-terrorists, 5
+auto-select (the team of fewer players, `SelectDefaultTeam`) and, for a player who chose a team already, 0
+or Escape to cancel. Why a team is refused ([10 §2](10-counter-strike-gameplay.md#2-teams-and-characters)'s rules: full,
+too many, one change) is written in red under the
+rows, the menu staying open. A team joined opens the appearance menu of that team: 1 to 4 its characters, 5,
+or Escape, auto-select. Up and Down select a row, Enter and the left button choose it, the mouse selects the
+row it is over; the console's key opens the console, and every other key is the menu's while it is open,
+the keys held let go. It sounds as the main menu does (`UI/buttonrollover.wav`, `UI/buttonclick.wav`).
 
 **The buy menu** (`cs.client:buyMenu`, `:buyMenuLayout`, `:buyMenuPanel`): the project's own look, where the
 original has a key menu and a VGUI one, and the original's keys. `buy` (`b`) opens it, or closes it; `buyequip`

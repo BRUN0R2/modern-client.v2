@@ -41,7 +41,7 @@ constexpr HitGroup kGeneric = HitGroup::Generic;
 /// The repository's data/cstrike/playerHarm.toml, read.
 [[nodiscard]] auto repositoryRules() -> PlayerHarmRules {
     const std::filesystem::path file =
-        std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "playerHarm.toml";
+        nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "playerHarm.toml";
     auto text = nx::platform::readTextFile(file);
     EXPECT_TRUE(text.has_value());
     auto rules = cs::readPlayerHarmRules(text.value_or(std::string{}), "playerHarm.toml");

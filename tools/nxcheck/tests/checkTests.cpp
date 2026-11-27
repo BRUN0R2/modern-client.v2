@@ -19,7 +19,7 @@ using nxcheck::FileResult;
 using nxcheck::Format;
 
 /// The seeds of the fuzz targets: one small valid file of every format, and a few broken ones.
-const std::filesystem::path kCorpus{NX_FUZZ_CORPUS_DIRECTORY};
+const std::filesystem::path kCorpus = nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY);
 
 /// Where the header of an MDL keeps its texture count.
 constexpr std::size_t kTextureCountOffset = 180;

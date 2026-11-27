@@ -38,7 +38,7 @@ constexpr float kRestingHeight = 0.03125F;
 
 [[nodiscard]] auto repositoryLook() -> cs::BloodSprayLook {
     auto rules = cs::readBloodRules(
-        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "blood.toml")
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "blood.toml")
             .value_or(std::string{}),
         "blood.toml");
     EXPECT_TRUE(rules.has_value());

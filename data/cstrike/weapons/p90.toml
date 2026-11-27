@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The P90 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "p90"
+classname = "weapon_p90"
+name = "ES C90" # as the original's buy menu shows it
+slot = "primary"
+position = 8
+weight = 26
+maxSpeed = 245.0
+
+[purchase]
+buyers = "everyone"
+price = 2350
+commands = ["p90", "c90"]
+menu = { tab = "submachineGuns", key = 4, picture = "gfx/vgui/p90.tga" }
+
+[magazine]
+ammo = "57mm"
+clipSize = 50
+
+[models]
+view = "models/v_p90.mdl"
+player = "models/p_p90.mdl"
+playerAnimation = "carbine"
+viewHand = "left"
+
+[view] # sequences of models/v_p90.mdl
+drawSequences = [2] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
+idlesWhenEmpty = true
+
+[firing]
+cycle = 0.066
+reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 21.0 # FireBullets3's iDamage
+rangeModifier = 0.885 # its damage times this for each 500 units it went
+penetration = 1 # how many things a round may meet
+isAutomatic = true
+idleAfterShot = 2.0
+shootSequences = [3, 4, 5] # shoot1, shoot2, shoot3
+
+[firing.accuracy] # bursts: the shots squared over 175, in whole numbers, plus 0.45, at most 1.0
+initial = 0.2
+burst = { divisor = 175, offset = 0.45, maximum = 1.0, power = 2 }
+
+[firing.spread] # base plus scale times the accuracy
+movingAbove = 170.0
+air = { base = 0.0, scale = 0.3 }
+moving = { base = 0.0, scale = 0.115 }
+standing = { base = 0.0, scale = 0.045 }
+
+[firing.recoil.kicks] # in the air first, then moving
+moving = { upBase = 0.45, lateralBase = 0.3, upModifier = 0.2, lateralModifier = 0.0275, upMax = 4.0, lateralMax = 2.25, directionChange = 7 }
+air = { upBase = 0.9, lateralBase = 0.45, upModifier = 0.35, lateralModifier = 0.04, upMax = 5.25, lateralMax = 3.5, directionChange = 4 }
+ducked = { upBase = 0.275, lateralBase = 0.2, upModifier = 0.125, lateralModifier = 0.02, upMax = 3.0, lateralMax = 1.0, directionChange = 9 }
+standing = { upBase = 0.3, lateralBase = 0.225, upModifier = 0.125, lateralModifier = 0.02, upMax = 3.25, lateralMax = 1.25, directionChange = 8 }
+airFirst = true
+
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
+files = ["weapons/p90-1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 3.4
+sequences = [1] # reload
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.5
+largeFlinch = false

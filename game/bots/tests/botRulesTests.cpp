@@ -12,7 +12,7 @@ import cs.bots;
 namespace {
 
 [[nodiscard]] auto repositoryRules() -> std::string {
-    return nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "bots.toml")
+    return nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "bots.toml")
         .value_or(std::string{});
 }
 

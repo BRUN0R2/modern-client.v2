@@ -22,7 +22,8 @@ constexpr nx::log::Category kLog{"client"};
 } // namespace
 
 void ClientHud::open(const cs::WindowFonts& fonts, nx::ui::FontCatalog& catalog,
-                     const cs::GameContent& content, std::uint32_t screenHeight) {
+                     const cs::GameContent& content, std::uint32_t screenHeight,
+                     std::span<const std::filesystem::path> pictureFolders) {
     if (auto label = cs::FpsLabel::open(fonts, screenHeight); label) {
         fpsLabel.emplace(std::move(*label));
     } else {
@@ -39,7 +40,7 @@ void ClientHud::open(const cs::WindowFonts& fonts, nx::ui::FontCatalog& catalog,
     } else {
         nx::log::warning(kLog, "the kill feed shows nothing: {}", nx::describe(feed.error()));
     }
-    if (auto board = cs::Scoreboard::open(fonts, screenHeight); board) {
+    if (auto board = cs::Scoreboard::open(catalog, content.mainMenu.font, screenHeight, pictureFolders); board) {
         scoreboard.emplace(std::move(*board));
     } else {
         nx::log::warning(kLog, "the scoreboard shows nothing: {}", nx::describe(board.error()));
@@ -163,10 +164,14 @@ void ClientHud::appendPanels(std::vector<nx::render::ScreenQuad>& quads, const H
     if (scoreboard && frame.settings.scoreboard.shown.isDown()) {
         // One of the client's panels, over the HUD whether it is drawn or not.
         const std::string hostname = frame.settings.scoreboard.hostname.value();
-        scoreboard->append(
-            quads,
-            {.hostname = hostname, .rows = client.scores(), .self = client.self(), .wins = client.teamWins()},
-            frame.size);
+        scoreboard->append(quads,
+                           {.hostname = hostname,
+                            .map = frame.session.map->name(),
+                            .rows = client.scores(),
+                            .self = client.self(),
+                            .wins = client.teamWins(),
+                            .texts = &frame.texts.scoreboard},
+                           frame.size);
     }
     if (fpsLabel && framesPerSecond && frame.settings.client.video.showFps.value()) {
         fpsLabel->append(quads, *framesPerSecond);

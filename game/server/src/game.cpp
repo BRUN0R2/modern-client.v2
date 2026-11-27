@@ -24,6 +24,8 @@ constexpr std::string_view kAppearanceStream = "appearance";
 constexpr std::string_view kDefaultTeamStream = "default team";
 /// The teams a player may join, which SelectDefaultTeam draws one of.
 constexpr std::uint32_t kPlayingTeams = 2;
+/// The bits a player's index takes of the seed its character is drawn from, the tick's above them.
+constexpr std::uint32_t kPlayerBits = 8;
 
 } // namespace
 
@@ -107,6 +109,87 @@ void Game::leave(PlayerIndex index) {
     m_state.moves->areBoxesStale = true;
     m_state.players[index.value].reset();
     checkWinConditions(m_state);
+}
+
+auto Game::chooseTeam(PlayerIndex index, Team team) -> nx::Result<void, TeamRefusal> {
+    Player& player = playerAt(m_state, index);
+    const bool isJoining = !player.hasChosenTeam;
+    const bool isAlive = player.status.isAlive();
+    if (!isJoining && !isAlive && player.hasChangedTeam) {
+        return nx::fail(TeamRefusal::OnlyOneChange);
+    }
+    if (team != player.team) {
+        const TeamCounts counts = teamCountsOf(m_state);
+        const Team other = team == Team::Terrorists ? Team::CounterTerrorists : Team::Terrorists;
+        // TeamFull: as many players as the map has spawn points for the team.
+        if (counts[team].players() >= m_state.map.spawnPoints(team).size()) {
+            return nx::fail(TeamRefusal::TeamFull);
+        }
+        // TeamStacked, the player leaving the other team: one more than the other's, less itself, and the limit.
+        const std::uint32_t limit = m_state.cvars.teamsLimit();
+        if (limit != 0 && counts[team].players() + 1 > counts[other].players() + limit - 1) {
+            return nx::fail(TeamRefusal::TeamStacked);
+        }
+    }
+    player.hasChosenTeam = true;
+    const Team left = std::exchange(player.team, team);
+    nx::log::info(kGameLog, "{} chooses the {}", player.name, nx::enumName(team));
+    if (team != left) {
+        drawCharacter(index, player);
+    }
+    if (isJoining) {
+        if (team != left) {
+            // As it joins (JoiningThink): spawned at its team's spawn when it may, else watching from it.
+            // The team it was put in until it chose does not count: as if it joined now.
+            player.inventory.removeAll();
+            player.status.health = nx::HitPoints{};
+            player.spawnsThisRound = 0;
+            if (canSpawn(m_state, player)) {
+                spawn(m_state, player);
+            } else {
+                observe(m_state, player);
+            }
+            m_state.moves->areBoxesStale = true;
+        }
+    } else {
+        if (isAlive) {
+            player.team = left; // killed as the team it played for, before the change
+            player.status.health = nx::HitPoints{}; // Kill: no health left, then Killed
+            die(m_state, player, &player);
+            player.team = team;
+        }
+        player.hasChangedTeam = true;
+    }
+    checkWinConditions(m_state);
+    return {};
+}
+
+void Game::chooseCharacter(PlayerIndex index, std::uint32_t slot) {
+    Player& player = playerAt(m_state, index);
+    const std::vector<CharacterIndex> characters = m_state.content.characters.ofTeam(player.team);
+    if (slot >= 1 && slot <= characters.size()) {
+        player.character = characters[slot - 1];
+    } else {
+        drawCharacter(index, player); // a slot out of range: one at random (HandleMenu_ChooseAppearance)
+    }
+    nx::log::info(kGameLog, "{} plays as {}", player.name,
+                  m_state.content.characters.character(player.character).name);
+}
+
+auto Game::hasChosenTeam(PlayerIndex index) const -> bool {
+    return playerAt(m_state, index).hasChosenTeam;
+}
+
+auto Game::teamOf(PlayerIndex index) const -> Team {
+    return playerAt(m_state, index).team;
+}
+
+void Game::drawCharacter(PlayerIndex index, Player& player) {
+    const std::vector<CharacterIndex> characters = m_state.content.characters.ofTeam(player.team);
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_state.world);
+    nx::Random appearance{(std::bit_cast<std::uint64_t>(time.now.tick()) << kPlayerBits) | index.value,
+                          kAppearanceStream};
+    player.character = characters.at(appearance.below(characters.size()));
 }
 
 auto Game::defaultTeam() const -> Team {

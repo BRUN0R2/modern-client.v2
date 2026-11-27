@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The G3SG1 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "g3sg1"
+classname = "weapon_g3sg1"
+name = "D3/AU-1" # as the original's buy menu shows it
+slot = "primary"
+position = 3
+weight = 20
+maxSpeed = 210.0
+
+[purchase]
+buyers = "terrorists"
+price = 5000
+commands = ["g3sg1", "d3au1"]
+menu = { tab = "rifles", key = 6, picture = "gfx/vgui/g3sg1.tga" }
+
+[magazine]
+ammo = "762Nato"
+clipSize = 20
+
+[models]
+view = "models/v_g3sg1.mdl"
+player = "models/p_g3sg1.mdl"
+playerAnimation = "mp5"
+viewHand = "left"
+
+[view] # sequences of models/v_g3sg1.mdl
+drawSequences = [4] # draw
+idles = [{ sequence = 0, wait = 60.0, share = 1.0 }] # idle
+idlesWhenEmpty = false
+
+[firing]
+cycle = 0.25
+reach = 8192.0 # how far its rounds go
+damage = 80.0
+rangeModifier = 0.98
+penetration = 3
+isAutomatic = true
+idleAfterShot = 1.8
+shootSequences = [1, 2]
+
+[firing.accuracy] # timed: the seconds since the last shot x 0.3, plus 0.55, at most 0.98; of this shot
+initial = 0.2
+timed = { rate = 0.3, offset = 0.55, maximum = 0.98, firstShot = 0.98, isOfThisShot = true }
+
+[firing.spread]
+movingAbove = 0.0
+air = { base = 0.0, scale = 0.45 }
+moving = { base = 0.0, scale = 0.15 }
+ducked = { base = 0.0, scale = 0.035 }
+standing = { base = 0.0, scale = 0.055 }
+
+[firing.recoil]
+random = { upMinimum = 0.75, upMaximum = 1.75, punchShare = 0.25, lateral = 0.75 }
+
+[firing.sound]
+files = ["weapons/g3sg1-1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 3.5
+sequences = [3] # reload
+
+[zoom] # SecondaryAttack: its sights
+fovs = [40, 15]
+switchTime = 0.3
+maxSpeed = 150.0
+sound = { files = ["weapons/zoom.wav"], channel = "item", volume = 0.2 }
+unzoomedSpread = { base = 0.0, scale = 0.025 }
+hasScope = true
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.65
+largeFlinch = true

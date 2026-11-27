@@ -157,6 +157,15 @@ void ClientSounds::readPlayer(const cs::GameContent& content) {
     }
 }
 
+void ClientSounds::playMenu(std::string_view name) {
+    if (output == nullptr) {
+        return;
+    }
+    if (auto played = output->playLocal(name, nx::kFullGain); !played) {
+        nx::log::warning(kLog, "the menu's sound {} is not heard: {}", name, nx::describe(played.error()));
+    }
+}
+
 auto ClientSounds::play(nx::console::Console& console, std::string_view name, nx::Gain volume)
     -> nx::Result<void, ConsoleError> {
     if (output == nullptr) {

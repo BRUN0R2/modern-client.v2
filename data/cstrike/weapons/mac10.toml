@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The MAC-10 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "mac10"
+classname = "weapon_mac10"
+name = "Ingram MAC-10" # as the original's buy menu shows it
+slot = "primary"
+position = 13
+weight = 25
+maxSpeed = 250.0
+
+[purchase]
+buyers = "terrorists"
+price = 1400
+commands = ["mac10"]
+menu = { tab = "submachineGuns", key = 1, picture = "gfx/vgui/mac10.tga" }
+
+[magazine]
+ammo = "45ACP"
+clipSize = 30
+
+[models]
+view = "models/v_mac10.mdl"
+player = "models/p_mac10.mdl"
+playerAnimation = "onehanded"
+viewHand = "left"
+
+[view] # sequences of models/v_mac10.mdl
+drawSequences = [2] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle1
+idlesWhenEmpty = true
+
+[firing]
+cycle = 0.07
+reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 29.0 # FireBullets3's iDamage
+rangeModifier = 0.82 # its damage times this for each 500 units it went
+penetration = 1 # how many things a round may meet
+isAutomatic = true
+idleAfterShot = 2.0
+shootSequences = [3, 4, 5] # shoot1, shoot2, shoot3
+
+[firing.accuracy] # bursts: the shots cubed over 200, in whole numbers, plus 0.6, at most 1.65
+initial = 0.15
+burst = { divisor = 200, offset = 0.6, maximum = 1.65 }
+
+[firing.spread] # base plus scale times the accuracy
+movingAbove = 0.0
+air = { base = 0.0, scale = 0.375 }
+moving = { base = 0.0, scale = 0.03 }
+standing = { base = 0.0, scale = 0.03 }
+
+[firing.recoil.kicks] # in the air first, then moving
+moving = { upBase = 0.9, lateralBase = 0.45, upModifier = 0.25, lateralModifier = 0.035, upMax = 3.5, lateralMax = 2.75, directionChange = 7 }
+air = { upBase = 1.3, lateralBase = 0.55, upModifier = 0.4, lateralModifier = 0.05, upMax = 4.75, lateralMax = 3.75, directionChange = 5 }
+ducked = { upBase = 0.75, lateralBase = 0.4, upModifier = 0.175, lateralModifier = 0.03, upMax = 2.75, lateralMax = 2.5, directionChange = 10 }
+standing = { upBase = 0.775, lateralBase = 0.425, upModifier = 0.2, lateralModifier = 0.03, upMax = 3.0, lateralMax = 2.75, directionChange = 9 }
+airFirst = true
+
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
+files = ["weapons/mac10-1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 3.15
+sequences = [1] # reload
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 0.95
+largeFlinch = false

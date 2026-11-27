@@ -36,7 +36,7 @@ constexpr nx::assets::FaceIndex kSquare{6};
 constexpr nx::assets::ModelIndex kWall{1};
 
 [[nodiscard]] auto readSeed(std::string_view name) -> std::vector<std::byte> {
-    auto bytes = nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / name);
+    auto bytes = nx::platform::readFile(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" / name);
     EXPECT_TRUE(bytes.has_value()) << nx::describe(bytes.error());
     return bytes.value_or(std::vector<std::byte>{});
 }

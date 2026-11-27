@@ -23,7 +23,7 @@ using cs::TeamAccounts;
 
 /// The repository's data/cstrike/economy.toml, read.
 [[nodiscard]] auto repositoryRules() -> EconomyRules {
-    const std::filesystem::path file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "economy.toml";
+    const std::filesystem::path file = nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "economy.toml";
     auto text = nx::platform::readTextFile(file);
     EXPECT_TRUE(text.has_value());
     auto rules = cs::readEconomyRules(text.value_or(std::string{}), "economy.toml");

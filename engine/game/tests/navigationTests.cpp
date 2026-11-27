@@ -27,7 +27,7 @@ using nx::navigation::Geometry;
 using nx::navigation::GeometryTriangle;
 
 [[nodiscard]] auto readSeed(std::string_view name) -> std::vector<std::byte> {
-    auto bytes = nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / name);
+    auto bytes = nx::platform::readFile(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" / name);
     EXPECT_TRUE(bytes.has_value());
     return bytes.value_or(std::vector<std::byte>{});
 }
@@ -36,7 +36,7 @@ using nx::navigation::GeometryTriangle;
 void spawnEntitiesOf(const nx::assets::BspView& map, nx::ecs::World& world) {
     EXPECT_TRUE(nx::game::registerComponents(world).has_value());
     auto text =
-        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "entities.toml");
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "entities.toml");
     EXPECT_TRUE(text.has_value());
     const auto classes = nx::game::readEntityClasses(text.value_or(""), "entities.toml");
     EXPECT_TRUE(classes.has_value());
@@ -62,7 +62,7 @@ void spawnEntitiesOf(const nx::assets::BspView& map, nx::ecs::World& world) {
 
 TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     const std::filesystem::path file =
-        std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "navigation.toml";
+        nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "navigation.toml";
     auto text = nx::platform::readTextFile(file);
     ASSERT_TRUE(text.has_value());
     const auto read = nx::game::readNavigationData(*text, "navigation.toml");

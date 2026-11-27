@@ -89,6 +89,7 @@ void thinkRules(GameState& game) {
         // RestartRound counts the spawns of the round anew before the players spawn again.
         for (Player& player : playersIn(game.players)) {
             player.spawnsThisRound = 0;
+            player.hasChangedTeam = false; // m_bTeamChanged, with m_iNumSpawns
         }
         for (Player& player : playersIn(game.players)) {
             spawn(game, player);

@@ -14,7 +14,7 @@ import cs.shared;
 namespace {
 
 [[nodiscard]] auto repositoryText() -> std::string {
-    return nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" /
+    return nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" /
                                       "stepIndicator.toml")
         .value_or(std::string{});
 }

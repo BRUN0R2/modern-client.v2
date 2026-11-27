@@ -207,23 +207,34 @@ struct SpreadTerm {
     float scale{};
 };
 
+/// A spread between moving and standing still: `term` above `above`.
+struct WalkingSpread {
+    nx::UnitsPerSecond above{};
+    SpreadTerm term{};
+};
+
 /// How far a weapon's shots spread as its holder moves: in the air, else moving faster than
-/// `movingAbove`, else ducked (as standing when not given), else standing (the guns' PrimaryAttack).
+/// `movingAbove`, else (when given) faster than its walking's, else ducked (as standing when not given),
+/// else standing (the guns' PrimaryAttack).
 struct WeaponSpread {
     nx::UnitsPerSecond movingAbove{};
     SpreadTerm air{};
     SpreadTerm moving{};
     std::optional<SpreadTerm> ducked{};
     SpreadTerm standing{};
+    /// Slower than `movingAbove`, faster than its own: its term (the AWP's 0.1 above 10).
+    std::optional<WalkingSpread> walking{};
 };
 
-/// An accuracy each shot of a burst worsens: the shots of the burst cubed over `divisor`, in whole
-/// numbers as the original divides them, plus `offset`, at most `maximum`. The weapon's inaccuracy
-/// is the accuracy itself.
+/// An accuracy each shot of a burst worsens: the shots of the burst to the `power` (3, cubed, when not
+/// given; the submachine guns' 2, squared) over `divisor`, plus `offset`, at most `maximum`. A whole
+/// divisor divides in whole numbers, as the original's int divides them; another, as its double does
+/// (the MP5's 220.1). The weapon's inaccuracy is the accuracy itself.
 struct BurstAccuracy {
-    std::uint32_t divisor{};
+    double divisor{};
     float offset{};
     float maximum{};
+    std::optional<std::uint32_t> power{};
 };
 
 /// An accuracy the time between shots restores: each shot after the first takes (`threshold` less
@@ -236,11 +247,24 @@ struct PacedAccuracy {
     float maximum{};
 };
 
-/// How a weapon's accuracy changes as it fires: by bursts or by pace, one of them.
+/// An accuracy the time since the last shot makes (the G3SG1's and the SG550's): that time times `rate`,
+/// plus `offset`, at most `maximum`; `firstShot` for a shot with none before it, when given (else it stays
+/// as it is). The weapon's inaccuracy is 1 less the accuracy, of this shot's when `isOfThisShot` (the
+/// G3SG1 strays by the accuracy it computes as it fires), else of the one before.
+struct TimedAccuracy {
+    float rate{};
+    float offset{};
+    float maximum{};
+    std::optional<float> firstShot{};
+    std::optional<bool> isOfThisShot{};
+};
+
+/// How a weapon's accuracy changes as it fires: by bursts, by pace or by time, one of them.
 struct WeaponAccuracy {
     float initial{}; ///< As it is given, drawn and reloaded.
     std::optional<BurstAccuracy> burst{};
     std::optional<PacedAccuracy> paced{};
+    std::optional<TimedAccuracy> timed{};
 };
 
 /// The kick a shot gives its holder's view (KickBack): up by `upBase`, and by `upModifier` more a
@@ -256,26 +280,68 @@ struct Kick {
     std::uint32_t directionChange{};
 };
 
-/// A weapon's kicks as its holder moves: moving, else in the air, else ducked, else standing.
+/// A weapon's kicks as its holder moves: moving, else in the air, else ducked, else standing; or, as the
+/// submachine guns and the M249 weigh them (`airFirst`), in the air first, then moving.
 struct KickByMovement {
     Kick moving{};
     Kick air{};
     Kick ducked{};
     Kick standing{};
+    std::optional<bool> airFirst{};
 };
 
-/// How a weapon's shots kick its holder's view: by its kicks, or up by `punch` alone; with neither,
-/// not at all.
+/// A kick up by an angle at random (UTIL_SharedRandomFloat, or UTIL_SharedRandomLong when `isWhole`):
+/// between `upMinimum` and `upMaximum`, between the air's in the air when given (the shotguns'); plus
+/// `punchShare` of the punch's pitch already (the G3SG1's 0.25); and to a side at random up to `lateral`.
+struct RandomKick {
+    nx::Degrees upMinimum{};
+    nx::Degrees upMaximum{};
+    std::optional<nx::Degrees> airUpMinimum{};
+    std::optional<nx::Degrees> airUpMaximum{};
+    std::optional<float> punchShare{};
+    std::optional<nx::Degrees> lateral{};
+    std::optional<bool> isWhole{};
+};
+
+/// How a weapon's shots kick its holder's view: by its kicks, up by `punch` alone, or at random; with
+/// none, not at all.
 struct WeaponRecoil {
     std::optional<KickByMovement> kicks{};
     std::optional<nx::Degrees> punch{};
+    std::optional<RandomKick> random{};
 };
 
-/// The rounds a shot fires after it on its own, one a weapon frame (the Glock's burst: FireRemaining).
+/// A shotgun's pellets (FireBullets): `count` of them, each along its own way, strayed at random within
+/// a circle of `cone` (two even draws each way, drawn again while out of it), traced once through
+/// nothing, its damage the firing's times 1 less how far it went of the reach (BULLET_PLAYER_BUCKSHOT).
+struct Pellets {
+    std::uint32_t count{};
+    float cone{};
+};
+
+/// The rounds a shot fires after it on its own (FireRemaining): one a weapon frame (the Glock's burst), or
+/// each after its delay (the FAMAS's).
 struct FollowUps {
     std::uint32_t rounds{};
-    float spread{};            ///< Each strays this much, whatever the accuracy and the movement.
+    /// Each strays this much, whatever the accuracy and the movement; none: as much as the shot did
+    /// (the FAMAS's m_fBurstSpread).
+    std::optional<float> spread{};
     nx::Scale rangeModifier{}; ///< Each one's (FireRemaining's), instead of its firing's.
+    /// The first after the shot by the first, each later one after the one before by the next, the last
+    /// for those left (m_flFamasShoot): it fires once its delay is past. None: one a weapon frame.
+    std::optional<std::vector<nx::Seconds>> delays{};
+    std::optional<nx::Damage> damage{}; ///< Each one's, instead of its firing's (the FAMAS's 30, not 34).
+};
+
+/// A weapon in each hand, which fire in turn (the Elites, ELITEFire): each its own sequences, the last as it
+/// fires the clip's last round, and its round from `offset` to its side of the eye. The left fires first
+/// when the weapon is drawn with an even clip (Deploy's m_iClip & 1).
+struct DualHands {
+    std::vector<std::uint32_t> leftSequences{};
+    std::vector<std::uint32_t> rightSequences{};
+    std::uint32_t leftLastSequence{};
+    std::uint32_t rightLastSequence{};
+    nx::HammerUnits offset{};
 };
 
 /// How a gun fires.
@@ -296,6 +362,9 @@ struct WeaponFiring {
     WeaponSpread spread{};
     WeaponRecoil recoil{};
     std::optional<FollowUps> followUps{}; ///< None: a shot fires one round.
+    /// Its hands, firing in turn; none: one gun, its shoot sequences above.
+    std::optional<DualHands> hands{};
+    std::optional<Pellets> pellets{}; ///< None: a round through FireBullets3.
     /// As it fires a round, a follow-up's too: the original's client event plays it, which chooses
     /// among the files the original has, to be measured on it (TODO.md).
     std::optional<GameSound> sound{};
@@ -303,9 +372,38 @@ struct WeaponFiring {
 };
 
 /// How a weapon is reloaded (DefaultReload).
+/// A reload a shell at a time (DefaultShotgunReload): `startSequence` and `startTime` first, then each
+/// shell's sequence (the reload's) and `shellTime`, a shell in once it is over; firing stops it, and once
+/// the clip is full or nothing is left to load, `pumpSequence` plays and holds the idle `pumpTime`.
+struct ShellReload {
+    std::uint32_t startSequence{};
+    nx::Seconds startTime{};
+    nx::Seconds shellTime{};
+    std::uint32_t pumpSequence{};
+    nx::Seconds pumpTime{};
+};
+
 struct WeaponReload {
     nx::Seconds time{};
     std::vector<std::uint32_t> sequences{}; ///< One of them, at random, as it reloads.
+    std::optional<ShellReload> shells{};    ///< None: the clip is filled at once, `time` after.
+};
+
+/// A weapon's sights (SecondaryAttack): `+attack2` turns them to each of `fovs` in turn, then back to the
+/// view's own, `switchTime` apart, `sound` heard. Zoomed, its holder runs at most `maxSpeed`, it fires every
+/// `cycle` when given (the SG552's and the AUG's 0.135), and the scope is drawn over the view when
+/// `hasScope`; not zoomed, its shots stray by `unzoomedSpread` more (the AWP's 0.08). `unzoomsOnShot`: a
+/// shot takes it out of its sights, which it looks through again once it may fire (m_bResumeZoom). Drawn,
+/// reloaded or put away, it is out of them.
+struct WeaponZoom {
+    std::vector<std::uint32_t> fovs{};
+    nx::Seconds switchTime{};
+    std::optional<nx::UnitsPerSecond> maxSpeed{};
+    std::optional<GameSound> sound{};
+    std::optional<SpreadTerm> unzoomedSpread{};
+    std::optional<nx::Seconds> cycle{};
+    std::optional<bool> unzoomsOnShot{};
+    std::optional<bool> hasScope{};
 };
 
 /// How long a melee attack holds the weapon's attacks: `+attack`'s, and `+attack2`'s.
@@ -396,6 +494,7 @@ struct Weapon {
     std::optional<WeaponAlternate> alternate{}; ///< None: `+attack2` switches nothing.
     std::optional<WeaponMelee> melee{};         ///< None: it has no melee attacks.
     WeaponHarm harm{};
+    std::optional<WeaponZoom> zoom{}; ///< None: it has no sights.
 };
 
 /// A weapon of a catalog, by its place in it, which it keeps.
@@ -653,6 +752,16 @@ struct nx::meta::Description<cs::WeaponSpread> {
         nx::meta::field<&cs::WeaponSpread::moving>("moving"),
         nx::meta::field<&cs::WeaponSpread::ducked>("ducked"),
         nx::meta::field<&cs::WeaponSpread::standing>("standing"),
+        nx::meta::field<&cs::WeaponSpread::walking>("walking"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WalkingSpread> {
+    static constexpr std::string_view kName = "cs::WalkingSpread";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WalkingSpread::above>("above", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WalkingSpread::term>("term"),
     };
 };
 
@@ -663,6 +772,7 @@ struct nx::meta::Description<cs::BurstAccuracy> {
         nx::meta::field<&cs::BurstAccuracy::divisor>("divisor", nx::data::Range{.minimum = 1.0}),
         nx::meta::field<&cs::BurstAccuracy::offset>("offset"),
         nx::meta::field<&cs::BurstAccuracy::maximum>("maximum"),
+        nx::meta::field<&cs::BurstAccuracy::power>("power", nx::data::Range{.minimum = 1.0, .maximum = 3.0}),
     };
 };
 
@@ -684,6 +794,19 @@ struct nx::meta::Description<cs::WeaponAccuracy> {
         nx::meta::field<&cs::WeaponAccuracy::initial>("initial"),
         nx::meta::field<&cs::WeaponAccuracy::burst>("burst"),
         nx::meta::field<&cs::WeaponAccuracy::paced>("paced"),
+        nx::meta::field<&cs::WeaponAccuracy::timed>("timed"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::TimedAccuracy> {
+    static constexpr std::string_view kName = "cs::TimedAccuracy";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::TimedAccuracy::rate>("rate"),
+        nx::meta::field<&cs::TimedAccuracy::offset>("offset"),
+        nx::meta::field<&cs::TimedAccuracy::maximum>("maximum"),
+        nx::meta::field<&cs::TimedAccuracy::firstShot>("firstShot"),
+        nx::meta::field<&cs::TimedAccuracy::isOfThisShot>("isOfThisShot"),
     };
 };
 
@@ -709,6 +832,7 @@ struct nx::meta::Description<cs::KickByMovement> {
         nx::meta::field<&cs::KickByMovement::air>("air"),
         nx::meta::field<&cs::KickByMovement::ducked>("ducked"),
         nx::meta::field<&cs::KickByMovement::standing>("standing"),
+        nx::meta::field<&cs::KickByMovement::airFirst>("airFirst"),
     };
 };
 
@@ -718,6 +842,30 @@ struct nx::meta::Description<cs::WeaponRecoil> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::WeaponRecoil::kicks>("kicks"),
         nx::meta::field<&cs::WeaponRecoil::punch>("punch"),
+        nx::meta::field<&cs::WeaponRecoil::random>("random"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::RandomKick> {
+    static constexpr std::string_view kName = "cs::RandomKick";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::RandomKick::upMinimum>("upMinimum"),
+        nx::meta::field<&cs::RandomKick::upMaximum>("upMaximum"),
+        nx::meta::field<&cs::RandomKick::airUpMinimum>("airUpMinimum"),
+        nx::meta::field<&cs::RandomKick::airUpMaximum>("airUpMaximum"),
+        nx::meta::field<&cs::RandomKick::punchShare>("punchShare"),
+        nx::meta::field<&cs::RandomKick::lateral>("lateral", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::RandomKick::isWhole>("isWhole"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::Pellets> {
+    static constexpr std::string_view kName = "cs::Pellets";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::Pellets::count>("count", nx::data::Range{.minimum = 1.0}),
+        nx::meta::field<&cs::Pellets::cone>("cone", nx::data::Range{.minimum = 0.0}),
     };
 };
 
@@ -725,9 +873,23 @@ template <>
 struct nx::meta::Description<cs::FollowUps> {
     static constexpr std::string_view kName = "cs::FollowUps";
     static constexpr std::tuple kFields{
-        nx::meta::field<&cs::FollowUps::rounds>("rounds", nx::data::Range{.minimum = 1.0}),
+        nx::meta::field<&cs::FollowUps::rounds>("rounds"),
         nx::meta::field<&cs::FollowUps::spread>("spread", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::FollowUps::rangeModifier>("rangeModifier", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::FollowUps::delays>("delays"),
+        nx::meta::field<&cs::FollowUps::damage>("damage", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::DualHands> {
+    static constexpr std::string_view kName = "cs::DualHands";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::DualHands::leftSequences>("leftSequences"),
+        nx::meta::field<&cs::DualHands::rightSequences>("rightSequences"),
+        nx::meta::field<&cs::DualHands::leftLastSequence>("leftLastSequence"),
+        nx::meta::field<&cs::DualHands::rightLastSequence>("rightLastSequence"),
+        nx::meta::field<&cs::DualHands::offset>("offset", nx::data::Range{.minimum = 0.0}),
     };
 };
 
@@ -748,6 +910,8 @@ struct nx::meta::Description<cs::WeaponFiring> {
         nx::meta::field<&cs::WeaponFiring::spread>("spread"),
         nx::meta::field<&cs::WeaponFiring::recoil>("recoil"),
         nx::meta::field<&cs::WeaponFiring::followUps>("followUps"),
+        nx::meta::field<&cs::WeaponFiring::hands>("hands"),
+        nx::meta::field<&cs::WeaponFiring::pellets>("pellets"),
         nx::meta::field<&cs::WeaponFiring::sound>("sound"),
         nx::meta::field<&cs::WeaponFiring::emptySound>("emptySound"),
     };
@@ -759,6 +923,34 @@ struct nx::meta::Description<cs::WeaponReload> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::WeaponReload::time>("time", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::WeaponReload::sequences>("sequences"),
+        nx::meta::field<&cs::WeaponReload::shells>("shells"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::ShellReload> {
+    static constexpr std::string_view kName = "cs::ShellReload";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::ShellReload::startSequence>("startSequence"),
+        nx::meta::field<&cs::ShellReload::startTime>("startTime", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::ShellReload::shellTime>("shellTime", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::ShellReload::pumpSequence>("pumpSequence"),
+        nx::meta::field<&cs::ShellReload::pumpTime>("pumpTime", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponZoom> {
+    static constexpr std::string_view kName = "cs::WeaponZoom";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponZoom::fovs>("fovs"),
+        nx::meta::field<&cs::WeaponZoom::switchTime>("switchTime", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponZoom::maxSpeed>("maxSpeed", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponZoom::sound>("sound"),
+        nx::meta::field<&cs::WeaponZoom::unzoomedSpread>("unzoomedSpread"),
+        nx::meta::field<&cs::WeaponZoom::cycle>("cycle", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponZoom::unzoomsOnShot>("unzoomsOnShot"),
+        nx::meta::field<&cs::WeaponZoom::hasScope>("hasScope"),
     };
 };
 
@@ -851,5 +1043,6 @@ struct nx::meta::Description<cs::Weapon> {
         nx::meta::field<&cs::Weapon::alternate>("alternate"),
         nx::meta::field<&cs::Weapon::melee>("melee"),
         nx::meta::field<&cs::Weapon::harm>("harm"),
+        nx::meta::field<&cs::Weapon::zoom>("zoom"),
     };
 };

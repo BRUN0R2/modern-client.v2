@@ -14,7 +14,7 @@ import cs.shared;
 namespace {
 
 TEST(UseRulesTest, TheRepositorysUseSoundsAreTheOriginals) {
-    const std::filesystem::path file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "use.toml";
+    const std::filesystem::path file = nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "use.toml";
     auto text = nx::platform::readTextFile(file);
     ASSERT_TRUE(text.has_value());
     auto rules = cs::readUseRules(*text, "use.toml");

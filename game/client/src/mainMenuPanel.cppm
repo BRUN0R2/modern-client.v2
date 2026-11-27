@@ -23,6 +23,7 @@ enum class MainMenuFont : std::uint8_t {
     Item,
     Row,
     Hint,
+    Title, ///< A window's title.
     Count,
 };
 
@@ -87,6 +88,7 @@ private:
     nx::EnumArray<MainMenuFont, std::optional<MenuFace>> faces;
     bool isBackgroundRead = false; ///< Whether load looked for the picture behind the menu.
     std::optional<nx::render::ScreenImage> logo;
+    bool isOriginalLogo = false; ///< Whether `logo` is the original's (MainMenuLook::originalLogo).
     std::optional<nx::render::ScreenImage> background; ///< None for one that could not be read.
     nx::render::RetainedQuads<Shown> shown;
     nx::render::RetainedQuads<ShownLoading> shownLoading;

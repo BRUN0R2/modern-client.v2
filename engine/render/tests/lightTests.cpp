@@ -46,7 +46,7 @@ constexpr std::int32_t kNoLightmap = -1;
 
 [[nodiscard]] auto readSeed() -> std::vector<std::byte> {
     auto bytes =
-        nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp");
+        nx::platform::readFile(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" / "boxEmbedded.bsp");
     EXPECT_TRUE(bytes.has_value()) << nx::describe(bytes.error());
     return bytes.value_or(std::vector<std::byte>{});
 }

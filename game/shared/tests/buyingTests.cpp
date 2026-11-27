@@ -53,7 +53,7 @@ template <class Value>
 }
 
 TEST(BuyingRulesTest, TheRepositorysAreTheOriginals) {
-    const std::filesystem::path file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "buying.toml";
+    const std::filesystem::path file = nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "buying.toml";
     auto text = nx::platform::readTextFile(file);
     ASSERT_TRUE(text.has_value());
     auto rules = cs::readBuyingRules(*text, "buying.toml");
@@ -344,7 +344,7 @@ TEST(BuyingStateTest, ItsTimeOverIsNoneLeftAndARefusal) {
 
 TEST(BuyMenuLookTest, TheRepositorysReads) {
     const auto text =
-        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "buyMenu.toml");
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "buyMenu.toml");
     ASSERT_TRUE(text.has_value());
     const auto look = cs::readBuyMenuLook(*text, "buyMenu.toml");
     ASSERT_TRUE(look.has_value()) << (look ? "" : nx::describe(look.error()));

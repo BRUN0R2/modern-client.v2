@@ -1,0 +1,80 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The Dual Elites (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "elite"
+classname = "weapon_elite"
+name = ".40 Dual Elites" # as the original's buy menu shows it
+slot = "secondary"
+position = 5
+weight = 5
+maxSpeed = 250.0
+
+[purchase]
+buyers = "terrorists"
+price = 800
+commands = ["elites"]
+menu = { tab = "pistols", key = 5, picture = "gfx/vgui/elites.tga" }
+
+[magazine]
+ammo = "9mm"
+clipSize = 30
+
+[models]
+view = "models/v_elite.mdl"
+player = "models/p_elite.mdl"
+playerAnimation = "dualpistols"
+viewHand = "left"
+
+[view] # sequences of models/v_elite.mdl
+drawSequences = [15] # draw
+idles = [{ sequence = 0, wait = 60.0, share = 1.0 }] # idle
+idlesWhenEmpty = false
+
+[firing]
+cycle = 0.075 # semi-automatic: the original's 0.2 less 0.125
+reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 36.0 # FireBullets3's iDamage
+rangeModifier = 0.75 # its damage times this for each 500 units it went
+penetration = 1 # how many things a round may meet
+isAutomatic = false
+idleAfterShot = 2.0
+shootSequences = [2, 3, 4, 5, 6] # shoot_left1 to shoot_left5; its hands choose (ELITEFire)
+# each hand in turn, from 5 units to its side of the eye (v_right * 5)
+hands = { leftSequences = [2, 3, 4, 5, 6], rightSequences = [8, 9, 10, 11, 12], leftLastSequence = 7, rightLastSequence = 13, offset = 5.0 }
+
+[firing.accuracy] # paced: each shot takes (0.325 - the time since the last) x 0.275, within 0.55 and 0.88
+initial = 0.88
+paced = { threshold = 0.325, rate = 0.275, minimum = 0.55, maximum = 0.88 }
+
+[firing.spread] # scale times 1 less the accuracy
+movingAbove = 0.0
+air = { base = 0.0, scale = 1.3 }
+moving = { base = 0.0, scale = 0.175 }
+ducked = { base = 0.0, scale = 0.08 }
+standing = { base = 0.0, scale = 0.1 }
+
+[firing.recoil]
+punch = 2.0
+
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
+files = ["weapons/elite_fire.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_pistol.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 4.5
+sequences = [14] # reload
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.05
+largeFlinch = false

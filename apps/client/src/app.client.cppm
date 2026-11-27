@@ -12,6 +12,7 @@ export import :commandLine;
 export import :client;
 export import :settings;
 export import :buyMenu;
+export import :teamMenu;
 export import :mainMenu;
 export import :options;
 export import :bots;

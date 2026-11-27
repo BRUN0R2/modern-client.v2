@@ -129,11 +129,19 @@ public:
     return nx::narrow<std::size_t>(video.decals.value());
 }
 
+/// What the mouse turns the view by through a weapon's sights, times their fov over the view's own
+/// (the original's zoom_sensitivity_ratio, at its default).
+constexpr float kZoomSensitivityRatio = 1.2F;
+
 /// Turns `view` by the mouse's `moved` as the original's mouse does: sensitivity times m_yaw degrees
-/// a count across, sensitivity times m_pitch down, up to the pitch the view stops at.
-void look(nx::EulerAngles& view, const nx::platform::MouseMoved& moved,
-          const nx::settings::MouseCvars& mouse) {
-    const float sensitivity = mouse.sensitivity.value();
+/// a count across, sensitivity times m_pitch down, up to the pitch the view stops at; through sights of
+/// `fov`, times it over the view's own and kZoomSensitivityRatio.
+void look(nx::EulerAngles& view, const nx::platform::MouseMoved& moved, const nx::settings::MouseCvars& mouse,
+          std::optional<std::uint32_t> fov = std::nullopt) {
+    float sensitivity = mouse.sensitivity.value();
+    if (fov) {
+        sensitivity *= static_cast<float>(*fov) / nx::render::kDefaultFieldOfView.value() * kZoomSensitivityRatio;
+    }
     view.yaw = nx::normalizeAngle(view.yaw - nx::Degrees{moved.dx * sensitivity * mouse.yaw.value()});
     view.pitch = nx::Degrees{std::clamp(view.pitch.value() + (moved.dy * sensitivity * mouse.pitch.value()),
                                         -cs::kMaxPitch.value(), cs::kMaxPitch.value())};
@@ -208,6 +216,9 @@ private:
     void handleInMainMenu(const nx::platform::WindowEvent& event);
     /// Whether the buy menu, open, takes `event`.
     [[nodiscard]] auto isTakenByBuyMenu(const nx::platform::WindowEvent& event) -> bool;
+    /// What `event` does to the team menu, open: the keys bound to toggleconsole open the console, the rest
+    /// are the menu's, heard as the main menu's are.
+    void handleInTeamMenu(const nx::platform::WindowEvent& event);
     /// Opens the console's window and cl_showfps's label for a screen `screenHeight` pixels tall, in the
     /// fonts of the installation's windows; one that cannot be had is logged, and the client goes on
     /// without it.
@@ -301,6 +312,8 @@ private:
     std::optional<ClientBuyMenu> buyMenu;               ///< Made with the game's content.
     std::optional<cs::PlayerTexts> texts;   ///< What the client writes, in the language of `cl_language`.
     std::optional<ClientMainMenu> mainMenu; ///< Made with the game's content and the texts.
+    std::optional<ClientTeamMenu> teamMenu; ///< Made with the game's content and the texts.
+    cs::SniperScope sniperScope;            ///< Its pictures read as the first map is played.
     nx::log::RateLimit cursorWarnings{std::chrono::seconds{1}};
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
@@ -428,6 +441,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
                         std::move(written.error()));
     }
     texts.emplace(std::move(*written));
+    // The team menu chooses for the player of the map played.
+    teamMenu.emplace(*m_content, texts->written(), [this]() -> Session* { return mapChange.played(); });
+    if (auto registered = teamMenu->registerCommands(m_console); !registered) {
+        return registered;
+    }
     sounds->openNamedOutput();
     auto video = openVideo(*m_options, settings->client.video.vsync.value(), readPipelineCache());
     if (!video) {
@@ -494,6 +512,29 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
         }
     }
     return {};
+}
+
+void Client::handleInTeamMenu(const nx::platform::WindowEvent& event) {
+    const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
+    if (key != nullptr && key->isDown && togglesConsole(*key)) {
+        toggleConsole();
+        return;
+    }
+    const auto size = m_video->window.pixelSize();
+    if (!size) {
+        return;
+    }
+    const cs::TeamMenuEffect effect = teamMenu->handle(event, m_video->window.mousePosition(), extentOf(*size));
+    const MenuFeedback feedback = effect == cs::TeamMenuEffect::Click      ? MenuFeedback::Click
+                                  : effect == cs::TeamMenuEffect::Rollover ? MenuFeedback::Rollover
+                                                                           : MenuFeedback::None;
+    if (const std::optional<std::string_view> sound = menuSoundOf(feedback)) {
+        sounds->playMenu(*sound);
+    }
+    if (!teamMenu->isOpen()) {
+        m_keys.releaseAll();
+        showCursorAsNeeded();
+    }
 }
 
 auto Client::isTakenByBuyMenu(const nx::platform::WindowEvent& event) -> bool {
@@ -597,7 +638,9 @@ void Client::openWindowText(std::uint32_t screenHeight) {
     } else {
         nx::log::warning(kLog, "the console has no window: {}", nx::describe(window.error()));
     }
-    hud.open(*fonts, m_fonts, *m_content, screenHeight);
+    // The player's own pictures before the project's.
+    const std::array pictureFolders{m_files.directory(), dataFolder};
+    hud.open(*fonts, m_fonts, *m_content, screenHeight, pictureFolders);
 }
 
 void Client::toggleConsole() {
@@ -618,7 +661,8 @@ auto Client::mouseModeNeeded() const -> nx::platform::MouseMode {
         return MouseMode::Absolute;
     }
     const bool hasOpenUi =
-        mainMenu->isOpen() || buyMenu->isOpen() || (m_consoleWindow != nullptr && m_consoleWindow->isOpen());
+        mainMenu->isOpen() || buyMenu->isOpen() || teamMenu->isOpen() ||
+        (m_consoleWindow != nullptr && m_consoleWindow->isOpen());
     if (mapChange.played() != nullptr && !hasOpenUi) {
         return MouseMode::Relative;
     }
@@ -687,7 +731,11 @@ void Client::handleInMainMenu(const nx::platform::WindowEvent& event) {
     if (!size) {
         return; // a window of no size has nothing the mouse could be over
     }
-    mainMenu->handle(event, m_video->window.mousePosition(), extentOf(*size), menuGame(), m_console);
+    const MenuFeedback feedback =
+        mainMenu->handle(event, m_video->window.mousePosition(), extentOf(*size), menuGame(), m_console);
+    if (const std::optional<std::string_view> sound = menuSoundOf(feedback)) {
+        sounds->playMenu(*sound);
+    }
 }
 
 auto Client::run() -> nx::Result<void, ClientError> {
@@ -726,6 +774,9 @@ auto Client::run() -> nx::Result<void, ClientError> {
         std::ignore = m_console.execute();
         followLanguage();
         buyMenu->update();
+        if (teamMenu->isOpen()) {
+            m_keys.releaseAll(); // the keys held as it opened, by `chooseteam`, are let go
+        }
         sounds->update(m_isFocused);
         switchMap();
         showCursorAsNeeded();
@@ -751,7 +802,10 @@ auto Client::run() -> nx::Result<void, ClientError> {
             stampMarks(*session, *m_scene, *m_content, m_bulletHoles);
             const nx::Seconds now{m_mapClock.elapsed()};
             showNotices(*session, hud.notices(m_console, *settings), m_content->weapons, now);
-            showEffects(*session, *m_scene, *m_content, now, elapsed, settings->hud.bulletTracers.value());
+            showEffects(*session, *m_scene, *m_content, now, elapsed, settings->hud.bulletTracers.value(),
+                        {.camera = m_camera,
+                         .hand = settings->hud.hand(),
+                         .offset = settings->viewModel.offset(session->viewModelBob)});
         }
         if (auto drawn = drawFrame(commands->get()); !drawn) {
             return drawn;
@@ -767,6 +821,7 @@ void Client::followLanguage() {
         nx::log::warning(kLog, "cl_language: {}", nx::describe(asked.error()));
     } else if (*asked == cs::LanguageAsked::Read) {
         mainMenu->writeIn(texts->written());
+        teamMenu->writeIn(texts->written());
     }
 }
 
@@ -852,6 +907,10 @@ void Client::handleInput(const nx::platform::WindowEvent& event) {
         handleInMainMenu(event);
         return;
     }
+    if (teamMenu->isOpen()) {
+        handleInTeamMenu(event);
+        return;
+    }
     if (isTakenByBuyMenu(event)) {
         return;
     }
@@ -862,7 +921,9 @@ void Client::handleInput(const nx::platform::WindowEvent& event) {
             openMainMenu();
         }
     } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
-        look(m_camera.angles, *moved, settings->client.mouse);
+        const Session* const played = mapChange.played();
+        look(m_camera.angles, *moved, settings->client.mouse,
+             played != nullptr ? played->client.inventory().fov() : std::nullopt);
     } else {
         m_keys.handle(event, settings->client.keyboard.keymap.value());
     }
@@ -878,6 +939,7 @@ void Client::switchMap() {
     mapChange.switchMap();
     hud.clear();
     buyMenu->reset();
+    teamMenu->reset();
     m_changedWeapons.clear(); // the new level read every weapon's view model
     if (due == MapSwitch::Leave) {
         openMainMenu(); // the map was left: none is played
@@ -890,6 +952,8 @@ void Client::switchMap() {
         nx::log::warning(kLog, "r_decals not held to mp_decals: {}", nx::describe(held.error()));
     }
     const Session& session = *mapChange.played();
+    teamMenu->openForJoining(); // as the original asks a player joining for its team
+    m_keys.releaseAll();
     sounds->readWeapons(m_content->weapons, *session.level, session.level->weapons());
     sounds->readPlayer(*m_content);
     m_camera.position = session.client.eye();
@@ -1056,6 +1120,16 @@ auto Client::upload(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& f
         }
         buyMenu->load(m_fonts, m_content->vfs, m_frames->screen(), list, extentOf(*size).height);
     }
+    if (mapChange.played() != nullptr && !sniperScope.isLoaded()) {
+        sniperScope.load(m_content->vfs, m_frames->screen(), list);
+    }
+    if (teamMenu->isOpen()) {
+        auto size = m_video->window.pixelSize();
+        if (!size) {
+            return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
+        }
+        teamMenu->load(m_fonts, m_content->vfs, m_frames->screen(), list, extentOf(*size).height);
+    }
     Session* session = mapChange.played();
     if (session != nullptr && !m_scene) {
         auto scene = makeScene(list);
@@ -1091,6 +1165,9 @@ auto Client::kickedCamera() const -> nx::render::Camera {
     // the punch to it.
     nx::render::Camera kicked = m_camera;
     const nx::EulerAngles punch = mapChange.played()->client.punch();
+    if (const std::optional<std::uint32_t> fov = mapChange.played()->client.inventory().fov()) {
+        kicked.fieldOfView = nx::Degrees{static_cast<float>(*fov)}; // through its weapon's sights
+    }
     kicked.angles = nx::EulerAngles{.pitch = m_camera.angles.pitch + punch.pitch,
                                     .yaw = m_camera.angles.yaw + punch.yaw,
                                     .roll = m_camera.angles.roll + punch.roll};
@@ -1113,7 +1190,7 @@ auto Client::sessionView() -> cs::SceneView {
             .players = m_players,
             .entities = shownEntities,
             .crowd = session.client.crowd(),
-            .viewModel = session.viewPose,
+            .viewModel = session.client.inventory().isScoped() ? std::nullopt : session.viewPose,
             .viewModelOffset = settings->viewModel.offset(session.viewModelBob),
             .tempEntities = session.effects.shown(),
             .particles = session.particles.shown(),
@@ -1134,15 +1211,21 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         const HudFrame frame{.session = *session,
                              .content = *m_content,
                              .settings = *settings,
+                             .texts = texts->written(),
                              .view = kickedCamera(),
                              .now = nx::Seconds{m_mapClock.elapsed()},
                              .size = size};
         const bool showsBuyMenu = buyMenu->isShown();
+        const bool isScoped = session->client.inventory().isScoped();
+        if (isScoped) {
+            sniperScope.append(m_screenQuads, size); // under the HUD, its crosshair the scope's lines
+        }
         hud.appendUnderMenu(m_screenQuads, frame);
         buyMenu->appendBackdrop(m_screenQuads, size); // under the HUD, which stays as bright
-        hud.appendHud(m_screenQuads, frame, showsBuyMenu);
+        hud.appendHud(m_screenQuads, frame, showsBuyMenu || isScoped);
         buyMenu->append(m_screenQuads, size);
         hud.appendPanels(m_screenQuads, frame, framesPerSecond);
+        teamMenu->append(m_screenQuads, size);
         buyMenu->appendNotice(m_screenQuads, size);
     }
     mainMenu->append(m_screenQuads, size, menuGame());

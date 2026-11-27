@@ -33,7 +33,53 @@ constexpr char kQuote = '"';
     return maps;
 }
 
+/// What changed between `before` and `after`, two frames of the menu an event came between, sounds: a page or
+/// a tab opened or closed, or a request, a click; another item, row or value armed, a rollover.
+[[nodiscard]] auto feedbackOf(const cs::MainMenuFrame& before, const cs::MainMenuFrame& after, bool asked)
+    -> MenuFeedback {
+    const bool isOptionsOpen = after.options.has_value();
+    const bool isPageChanged = before.newGame.has_value() != after.newGame.has_value() ||
+                               before.options.has_value() != isOptionsOpen;
+    const bool isTabChanged =
+        isOptionsOpen && before.options && before.options->category != after.options->category;
+    const bool isChoiceMenuChanged =
+        isOptionsOpen && before.options &&
+        before.options->choiceMenu.has_value() != after.options->choiceMenu.has_value();
+    if (asked || isPageChanged || isTabChanged || isChoiceMenuChanged) {
+        return MenuFeedback::Click;
+    }
+    const auto armedOf = [](const cs::MainMenuFrame& frame) {
+        std::optional<std::size_t> row;
+        std::optional<std::size_t> value;
+        if (frame.newGame) {
+            row = frame.newGame->selectedRow;
+        } else if (frame.options) {
+            row = frame.options->selectedRow;
+            if (frame.options->choiceMenu) {
+                value = frame.options->choiceMenu->highlighted;
+            }
+        }
+        return std::tuple{frame.selected, row, value};
+    };
+    const auto armed = armedOf(after);
+    const bool isSomethingArmed =
+        std::get<0>(armed) || std::get<1>(armed) || std::get<2>(armed);
+    return isSomethingArmed && armed != armedOf(before) ? MenuFeedback::Rollover : MenuFeedback::None;
+}
+
 } // namespace
+
+auto menuSoundOf(MenuFeedback feedback) noexcept -> std::optional<std::string_view> {
+    switch (feedback) {
+    case MenuFeedback::Rollover:
+        return "UI/buttonrollover.wav";
+    case MenuFeedback::Click:
+        return "UI/buttonclick.wav";
+    case MenuFeedback::None:
+        break;
+    }
+    return std::nullopt;
+}
 
 ClientMainMenu::ClientMainMenu(const cs::GameContent& content, const cs::Texts& texts,
                                std::vector<cs::OptionRow> settings, cs::CrosshairEditor crosshair)
@@ -65,11 +111,14 @@ void ClientMainMenu::close() noexcept {
     menu.close();
 }
 
-void ClientMainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition mouse,
-                            nx::rhi::Extent2d size, cs::MenuGame game, nx::console::Console& console) {
+auto ClientMainMenu::handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition mouse,
+                            nx::rhi::Extent2d size, cs::MenuGame game, nx::console::Console& console)
+    -> MenuFeedback {
+    const cs::MainMenuFrame before = menu.frameOf(game, size);
     const std::optional<cs::MainMenuRequest> asked = menu.handle(event, mouse, size, game);
+    const MenuFeedback feedback = feedbackOf(before, menu.frameOf(game, size), asked.has_value());
     if (!asked) {
-        return;
+        return feedback;
     }
     const std::optional<std::string_view> command = kCommands[asked->action];
     if (!command) {
@@ -79,6 +128,7 @@ void ClientMainMenu::handle(const nx::platform::WindowEvent& event, nx::platform
     } else {
         console.addText(std::format("{} {}{}{}", *command, kQuote, asked->map, kQuote));
     }
+    return feedback;
 }
 
 auto ClientMainMenu::load(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,

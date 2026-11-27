@@ -10,7 +10,7 @@ import mod.zombies;
 
 TEST(ZombieSettings, AUsersFileChangesOnlyWhatItNamesOfTheProjects) {
     auto text =
-        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "mods" / "zombies.toml");
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "mods" / "zombies.toml");
     ASSERT_TRUE(text.has_value());
     const auto base = zombies::readSettings(*text, "zombies.toml");
     ASSERT_TRUE(base.has_value()) << (base ? "" : nx::describe(base.error()));
@@ -41,7 +41,7 @@ slowShare = 0.25
 
 TEST(ZombieSettings, ReadsTheExampleAndRejectsAnUnboundedPerceptionBudget) {
     auto text =
-        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "mods" / "zombies.toml");
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "mods" / "zombies.toml");
     ASSERT_TRUE(text.has_value());
     auto read = zombies::readSettings(*text, "zombies.toml");
     ASSERT_TRUE(read.has_value()) << (read ? "" : nx::describe(read.error()));

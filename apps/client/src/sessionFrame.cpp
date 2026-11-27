@@ -104,8 +104,19 @@ void showNotices(Session& session, const FrameNotices& notices, const cs::Weapon
     }
 }
 
+auto muzzleAsFired(const cs::Level& level, const cs::ViewAnimation& animation, const FirstPersonView& view)
+    -> std::optional<nx::Vec3> {
+    const cs::ViewModel* const viewModel = level.viewModel(animation.weapon);
+    if (viewModel == nullptr) {
+        return std::nullopt;
+    }
+    const std::vector<nx::Mat3x4> bones =
+        viewModel->pose(view.camera, animation.sequence, nx::Seconds{}, view.hand, view.offset);
+    return viewModel->muzzleAt(bones, animation.sequence);
+}
+
 void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent& content, nx::Seconds now,
-                 nx::Seconds elapsed, bool showBulletTracers) {
+                 nx::Seconds elapsed, bool showBulletTracers, const FirstPersonView& firstPerson) {
     const std::vector<cs::BloodSpray> sprays = session.client.takeBloodSprays();
     const std::vector<cs::BloodStream> streams = session.client.takeBloodStreams();
     const std::vector<cs::StreakSplash> splashes = session.client.takeStreakSplashes();
@@ -121,7 +132,11 @@ void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent
     const std::vector<cs::BulletTracer> tracers = session.client.takeBulletTracers();
     if (showBulletTracers) {
         for (const cs::BulletTracer& tracer : tracers) {
-            session.particles.traceBullet(tracer, session.client.self(), now);
+            // The player's own starts where its muzzle was as it fired, before the kick moved the weapon.
+            const std::optional<nx::Vec3> muzzle = tracer.shooter == session.client.self()
+                                                       ? muzzleAsFired(level, tracer.animation, firstPerson)
+                                                       : std::nullopt;
+            session.particles.traceBullet(tracer, session.client.self(), now, muzzle);
         }
     } else {
         session.particles.clearBulletTracers();
