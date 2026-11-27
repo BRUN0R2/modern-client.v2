@@ -84,8 +84,10 @@ constexpr float kTolerance = 1e-5F;
                   .view = std::move(view)};
 }
 
-/// A knife, a Glock, an AK-47 and a USP, as the original's.
-[[nodiscard]] auto catalog() -> WeaponCatalog {
+/// A knife, a Glock, an AK-47 and a USP, as the original's; the AK-47's burst `akBurst` when given, and the
+/// Glock as `adjustGlock` makes it.
+[[nodiscard]] auto catalog(std::optional<cs::BurstAccuracy> akBurst = std::nullopt,
+                           const std::function<void(Weapon&)>& adjustGlock = {}) -> WeaponCatalog {
     const cs::AmmoTypes ammo{.ammo = {cs::AmmoType{.id = "9mm", .maxCarried = 120, .boxRounds = 30},
                                       cs::AmmoType{.id = "762Nato", .maxCarried = 90, .boxRounds = 30},
                                       cs::AmmoType{.id = "45ACP", .maxCarried = 100, .boxRounds = 12}}};
@@ -169,6 +171,9 @@ constexpr float kTolerance = 1e-5F;
                                           .air = kick(2.0F, 1.0F, 0.5F, 0.35F, 9.0F, 6.0F, 5),
                                           .ducked = kick(0.9F, 0.35F, 0.15F, 0.025F, 5.5F, 1.5F, 9),
                                           .standing = kick(1.0F, 0.375F, 0.175F, 0.0375F, 5.75F, 1.75F, 8)}}};
+    if (akBurst) {
+        ak.firing->accuracy.burst = akBurst;
+    }
     ak.reload = cs::WeaponReload{.time = nx::Seconds{2.45F}, .sequences = {1}};
     Weapon usp =
         weapon("usp", WeaponSlot::Secondary, 5, 250.0F, cs::WeaponMagazine{.ammo = "45ACP", .clipSize = 12},
@@ -204,6 +209,9 @@ constexpr float kTolerance = 1e-5F;
                            .idles = {WeaponIdle{.sequence = 0, .wait = nx::Seconds{60.0F}, .share = 1.0F}}},
         .firing = silenced,
         .reload = cs::WeaponReload{.time = nx::Seconds{2.7F}, .sequences = {5}}};
+    if (adjustGlock) {
+        adjustGlock(glock);
+    }
     auto made =
         WeaponCatalog::make(ammo, {std::move(knife), std::move(glock), std::move(ak), std::move(usp)});
     EXPECT_TRUE(made.has_value()) << (made ? "" : nx::describe(made.error()));
@@ -551,6 +559,32 @@ TEST(FiringTest, ABurstWorsensTheAccuracyByItsShotsCubedInWholeNumbers) {
     EXPECT_LT(inventory.held()->shotsFired, 6U);
 }
 
+TEST(FiringTest, ABurstOfAnotherPowerAndAFractionalDivisorDividesAsTheOriginalsDouble) {
+    // The MP5's: the shots squared over 220.1, a double, plus 0.45, at most 0.75.
+    const WeaponCatalog weapons =
+        catalog(cs::BurstAccuracy{.divisor = 220.1, .offset = 0.45F, .maximum = 0.75F, .power = 2});
+    Inventory inventory = given(weapons, {kAk});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::int64_t tick = kReady;
+    for (const std::uint32_t shot : {1U, 2U, 3U}) {
+        ASSERT_EQ(frames(inventory, shooter, tick, tick + 9, {Button::Attack}).size(), 1U);
+        EXPECT_NEAR(inventory.held()->accuracy, (static_cast<double>(shot * shot) / 220.1) + 0.45, 1e-6);
+        tick += 10;
+    }
+    // A whole divisor of the same power divides in whole numbers, as the UMP45's int 210 does.
+    const WeaponCatalog whole =
+        catalog(cs::BurstAccuracy{.divisor = 210, .offset = 0.5F, .maximum = 1.0F, .power = 2});
+    Inventory ump = given(whole, {kAk});
+    std::ignore = frames(ump, shooter, 0, kReady - 1);
+    tick = kReady;
+    for (const float expected : {0.5F, 0.5F, 0.5F}) {
+        ASSERT_EQ(frames(ump, shooter, tick, tick + 9, {Button::Attack}).size(), 1U);
+        EXPECT_FLOAT_EQ(ump.held()->accuracy, expected) << "1, 4 and 9 over 210 are 0";
+        tick += 10;
+    }
+}
+
 TEST(FiringTest, APacedAccuracyRecoversWithTheTimeBetweenShots) {
     const WeaponCatalog weapons = catalog();
     Inventory inventory = given(weapons, {kGlock});
@@ -750,6 +784,123 @@ TEST(AlternateTest, TheGlocksBurstFiresTheRestOfItsRoundsOneAFrame) {
     // Held, it fires the next burst 0.5 seconds after, 51 commands: the burst is automatic.
     EXPECT_EQ(frames(inventory, shooter, kReady + 5, kReady + 51, {Button::Attack}).size(), 0U);
     EXPECT_EQ(frames(inventory, shooter, kReady + 52, kReady + 52, {Button::Attack}).size(), 1U);
+}
+
+TEST(AlternateTest, ABurstsRoundsFireAfterTheirDelaysOfTheShotsSpreadAndDamage) {
+    // The FAMAS's: the first 0.05 seconds after the shot, the next 0.1 after it, as much astray as the shot
+    // and of 30 (FireRemaining, m_flFamasShoot, m_fBurstSpread).
+    const WeaponCatalog weapons = catalog(std::nullopt, [](Weapon& glock) {
+        glock.alternate->firing->followUps =
+            cs::FollowUps{.rounds = 2,
+                          .rangeModifier = nx::Scale{0.96F},
+                          .delays = std::vector<nx::Seconds>{nx::Seconds{0.05F}, nx::Seconds{0.1F}},
+                          .damage = nx::Damage{30.0F}};
+    });
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = frames(inventory, shooter, kReady, kReady, {Button::Attack2});
+    const std::int64_t shot = kReady + 1;
+    const std::vector<Shot> first = frames(inventory, shooter, shot, shot, {Button::Attack});
+    ASSERT_EQ(first.size(), 1U);
+    EXPECT_TRUE(frames(inventory, shooter, shot + 1, shot + 4).empty()) << "not before 0.05 seconds";
+    const std::vector<Shot> second = frames(inventory, shooter, shot + 5, shot + 6);
+    ASSERT_EQ(second.size(), 1U) << "once 0.05 seconds are past";
+    EXPECT_FLOAT_EQ(second.front().spread, first.front().spread);
+    EXPECT_EQ(second.front().round.damage, nx::Damage{30.0F});
+    const std::int64_t after = shot + 7;
+    EXPECT_TRUE(frames(inventory, shooter, after, after + 7).empty()) << "the next not before 0.1 seconds";
+    EXPECT_EQ(frames(inventory, shooter, after + 8, after + 12).size(), 1U);
+    EXPECT_EQ(inventory.held()->clip, 17U);
+}
+
+TEST(FiringTest, TwoHandsFireInTurnEachFromItsSideOfTheEye) {
+    // The Elites: an even clip drawn fires the left first, 5 units to the left of the eye.
+    const WeaponCatalog weapons = catalog(std::nullopt, [](Weapon& glock) {
+        glock.firing->hands = cs::DualHands{.leftSequences = {1},
+                                            .rightSequences = {2},
+                                            .leftLastSequence = 3,
+                                            .rightLastSequence = 4,
+                                            .offset = nx::HammerUnits{5.0F}};
+    });
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    const std::vector<Shot> left = frames(inventory, shooter, kReady, kReady, {Button::Attack});
+    ASSERT_EQ(left.size(), 1U);
+    EXPECT_EQ(left.front().animation.sequence, 1U);
+    std::ignore = frames(inventory, shooter, kReady + 1, kReady + 30);
+    const std::vector<Shot> right = frames(inventory, shooter, kReady + 31, kReady + 31, {Button::Attack});
+    ASSERT_EQ(right.size(), 1U);
+    EXPECT_EQ(right.front().animation.sequence, 2U);
+    // Facing along x, the right is -y: the left hand fires from y 5, the right from y -5.
+    EXPECT_NEAR(left.front().origin.y - shooter.eye.y, 5.0F, kTolerance);
+    EXPECT_NEAR(right.front().origin.y - shooter.eye.y, -5.0F, kTolerance);
+}
+
+TEST(ZoomTest, Attack2TurnsTheSightsToEachFovThenOutAndAShotTakesThemOutUntilItMayFireAgain) {
+    // The AWP's: 40, then 10, then out; 150 at most through them, 0.08 more astray out of them.
+    const WeaponCatalog weapons = catalog(std::nullopt, [](Weapon& glock) {
+        glock.alternate.reset();
+        glock.zoom = cs::WeaponZoom{.fovs = {40, 10},
+                                    .switchTime = nx::Seconds{0.3F},
+                                    .maxSpeed = nx::UnitsPerSecond{150.0F},
+                                    .unzoomedSpread = SpreadTerm{.base = 0.08F},
+                                    .unzoomsOnShot = true,
+                                    .hasScope = true};
+    });
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    EXPECT_FALSE(inventory.fov().has_value());
+    std::ignore = frames(inventory, shooter, kReady, kReady, {Button::Attack2});
+    EXPECT_EQ(inventory.fov(), 40U);
+    EXPECT_TRUE(inventory.isScoped());
+    EXPECT_EQ(inventory.maxSpeed(), nx::UnitsPerSecond{150.0F});
+    std::ignore = frames(inventory, shooter, kReady + 1, kReady + 10, {Button::Attack2});
+    EXPECT_EQ(inventory.fov(), 40U) << "no sooner than 0.3 seconds";
+    std::ignore = frames(inventory, shooter, kReady + 11, kReady + 40, {Button::Attack2});
+    EXPECT_EQ(inventory.fov(), 10U);
+
+    const std::vector<Shot> scoped = frames(inventory, shooter, kReady + 41, kReady + 41, {Button::Attack});
+    ASSERT_EQ(scoped.size(), 1U);
+    EXPECT_NEAR(scoped.front().spread, 0.1F * (1.0F - 0.9F), kTolerance) << "no more through its sights";
+    EXPECT_FALSE(inventory.fov().has_value()) << "out of them as it fires";
+    std::ignore = frames(inventory, shooter, kReady + 42, kReady + 60);
+    EXPECT_EQ(inventory.fov(), 10U) << "through them again once it may fire";
+}
+
+TEST(ShotgunTest, ItsPelletsGoEachTheirWayAndItsShellsGoInOneAtATime) {
+    const WeaponCatalog weapons = catalog(std::nullopt, [](Weapon& glock) {
+        glock.alternate.reset();
+        glock.firing->pellets = cs::Pellets{.count = 9, .cone = 0.0675F};
+        glock.reload->sequences = {3};
+        glock.reload->shells = cs::ShellReload{.startSequence = 5,
+                                               .startTime = nx::Seconds{0.55F},
+                                               .shellTime = nx::Seconds{0.45F},
+                                               .pumpSequence = 4,
+                                               .pumpTime = nx::Seconds{1.5F}};
+    });
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = inventory.giveAmmo("9mm", 30);
+    const std::vector<Shot> pellets = frames(inventory, shooter, kReady, kReady, {Button::Attack});
+    ASSERT_EQ(pellets.size(), 9U);
+    EXPECT_TRUE(std::ranges::all_of(pellets, [](const Shot& shot) { return shot.round.isPellet; }));
+    EXPECT_NE(pellets[0].direction, pellets[1].direction) << "each its own way";
+    EXPECT_EQ(inventory.held()->clip, 19U) << "one shell for them all";
+
+    std::int64_t tick = kReady + 40;
+    std::ignore = frames(inventory, shooter, kReady + 1, tick - 1);
+    std::ignore = frames(inventory, shooter, tick, tick, {Button::Reload});
+    EXPECT_EQ(inventory.animation()->sequence, 5U) << "its start";
+    std::ignore = frames(inventory, shooter, tick + 1, tick + 60);
+    EXPECT_EQ(inventory.animation()->sequence, 3U) << "a shell's";
+    std::ignore = frames(inventory, shooter, tick + 61, tick + 120);
+    EXPECT_EQ(inventory.held()->clip, 20U) << "full again, a shell at a time";
+    std::ignore = frames(inventory, shooter, tick + 121, tick + 140);
+    EXPECT_EQ(inventory.animation()->sequence, 4U) << "its pump once full";
 }
 
 TEST(AlternateTest, AWeaponWithoutAnAlternateIgnoresAttack2) {

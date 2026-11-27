@@ -27,6 +27,8 @@ void TickEvents::clear() noexcept {
     bloodStreams.clear();
     streakSplashes.clear();
     killNotices.clear();
+    grenadeBlasts.clear();
+    grenadeSounds.clear();
 }
 
 auto nextEntityStates(EntityStateLists& lists) -> std::vector<EntityState>& {

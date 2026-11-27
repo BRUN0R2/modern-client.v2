@@ -89,12 +89,15 @@ void thinkRules(GameState& game) {
         // RestartRound counts the spawns of the round anew before the players spawn again.
         for (Player& player : playersIn(game.players)) {
             player.spawnsThisRound = 0;
+            player.hasChangedTeam = false; // m_bTeamChanged, with m_iNumSpawns
         }
         for (Player& player : playersIn(game.players)) {
             spawn(game, player);
         }
-        // After the players spawn, as the original's RestartRound cleans the map up (CleanUpMap).
+        // After the players spawn, as the original's RestartRound cleans the map up (CleanUpMap): its brush
+        // entities anew, and the grenades gone.
         nx::game::restartBrushEntities(game.world, game.map.hulls());
+        game.grenades.clear();
     }
     // Last, as the original's Think reads them once a second after the round's checks.
     if (time.now > game.nextPeriodicThink) {

@@ -20,7 +20,7 @@ constexpr nx::Seconds kTick{0.01F};
 
 [[nodiscard]] auto repositoryRules() -> cs::BotCombatRules {
     auto rules = cs::readBotRules(
-        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "bots.toml")
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "bots.toml")
             .value_or(std::string{}),
         "bots.toml");
     EXPECT_TRUE(rules.has_value());

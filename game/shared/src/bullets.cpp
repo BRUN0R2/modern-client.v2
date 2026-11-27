@@ -72,6 +72,20 @@ auto followRound(const Shot& shot, const WeaponTracer& tracer, const HitMaterial
     -> std::vector<BulletHit> {
     const ShotRound& round = shot.round;
     std::vector<BulletHit> hits;
+    if (round.isPellet) {
+        // FireBullets' buckshot: one trace, its damage by how far it went of the reach, through nothing.
+        const WeaponHit met = tracer(nx::collision::Hull::Point, shot.origin,
+                                     shot.origin + (shot.direction * shot.reach.value()));
+        if (met.trace.fraction < 1.0F) {
+            const float dealt = (1.0F - met.trace.fraction) * round.damage.value();
+            hits.push_back(BulletHit{.entity = met.entity,
+                                     .trace = met.trace,
+                                     .damage = nx::Damage{static_cast<float>(nx::truncateAsX86(dealt))},
+                                     .direction = shot.direction,
+                                     .isBrushModel = met.isBrushModel});
+        }
+        return hits;
+    }
     std::uint32_t penetration = round.penetration;
     auto power = static_cast<std::int32_t>(round.penetrationPower);
     std::int32_t damage = nx::truncateAsX86(round.damage.value());

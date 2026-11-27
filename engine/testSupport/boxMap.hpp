@@ -18,7 +18,7 @@ inline constexpr std::size_t kBspEntitiesLump = 4;
 /// the end of its file, its terminating zero included.
 [[nodiscard]] inline auto corpusMapWith(std::string_view file, std::string_view entities)
     -> std::vector<std::byte> {
-    auto seed = nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / file);
+    auto seed = nx::platform::readFile(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" / file);
     EXPECT_TRUE(seed.has_value());
     std::vector<std::byte> bytes = seed.value_or(std::vector<std::byte>{});
     const auto offset = static_cast<std::int32_t>(bytes.size());

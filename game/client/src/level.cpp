@@ -154,15 +154,22 @@ auto Level::load(const GameContent& content, const GameMap& map)
         nx::log::warning(kLog, "sprites the map's entities show that the installation does not have: {}",
                          listed(level.m_sprites->missing()));
     }
-    level.m_models = MapModels::read(content.vfs, bsp);
+    // The grenades' models, each at its weapon's place, which show them flying.
+    std::vector<std::string> props;
+    for (const Weapon& weapon : content.weapons.weapons()) {
+        props.push_back(weapon.throwing ? weapon.throwing->model : std::string{});
+    }
+    level.m_models = MapModels::read(content.vfs, bsp, props);
     if (!level.m_models->missing().empty()) {
         nx::log::warning(kLog, "models the map's entities show that cannot be read: {}",
                          listed(level.m_models->missing()));
     }
     level.enginePalette = readPalette(content.vfs);
     level.bloodRules = &content.blood;
-    const std::vector<std::string> bloodSprites{content.blood.sprayLook.spraySprite,
-                                                content.blood.sprayLook.dropSprite};
+    const std::vector<std::string> bloodSprites{
+        content.blood.sprayLook.spraySprite, content.blood.sprayLook.dropSprite,
+        std::string{pathOf(TempSprite::Explosion, content.blood.sprayLook)},
+        std::string{pathOf(TempSprite::SmokePuff, content.blood.sprayLook)}};
     if (const std::vector<std::string> missing = level.bloodSpriteFiles.read(content.vfs, bloodSprites);
         !missing.empty()) {
         nx::log::warning(kLog, "the blood's sprites that cannot be read: {}", listed(missing));

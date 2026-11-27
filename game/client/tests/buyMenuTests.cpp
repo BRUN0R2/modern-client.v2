@@ -599,11 +599,11 @@ TEST(BuyMenuTextTest, TimeAndSharesAreWrittenWhole) {
 TEST(BuyMenuDataTest, ItsFontsAreTheProjectsOwnAndWriteAllItSays) {
     auto vfs = nx::assets::Vfs::create(std::span<const std::filesystem::path>{});
     ASSERT_TRUE(vfs.has_value());
-    auto game = cs::readGameContent(NX_DATA_DIRECTORY, std::move(vfs).value());
+    auto game = cs::readGameContent(nx::platform::fromUtf8(NX_DATA_DIRECTORY), std::move(vfs).value());
     ASSERT_TRUE(game.has_value()) << (game ? "" : nx::describe(game.error()));
 
     nx::ui::FontCatalog fonts;
-    const auto added = fonts.addFolder(std::filesystem::path{NX_DATA_DIRECTORY} / "fonts");
+    const auto added = fonts.addFolder(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "fonts");
     ASSERT_TRUE(added.has_value());
     EXPECT_EQ(added->faces, 2U);
     EXPECT_TRUE(added->leftOut.empty());
@@ -631,7 +631,7 @@ TEST(BuyMenuDataTest, ItsFontsAreTheProjectsOwnAndWriteAllItSays) {
 TEST(BuyMenuDataTest, AGunTellsWhatItsFileSays) {
     auto vfs = nx::assets::Vfs::create(std::span<const std::filesystem::path>{});
     ASSERT_TRUE(vfs.has_value());
-    auto game = cs::readGameContent(NX_DATA_DIRECTORY, std::move(vfs).value());
+    auto game = cs::readGameContent(nx::platform::fromUtf8(NX_DATA_DIRECTORY), std::move(vfs).value());
     ASSERT_TRUE(game.has_value()) << (game ? "" : nx::describe(game.error()));
     const cs::BuyMenuContent content{.weapons = &game->weapons,
                                      .armorPrices = &game->buying.armor,
@@ -674,7 +674,9 @@ TEST(BuyMenuDataTest, AGunTellsWhatItsFileSays) {
     EXPECT_EQ(keyOf(terrorist, BuyTab::Rifles, "CV-47"), 2U);
     EXPECT_EQ(keyOf(counterTerrorist, BuyTab::Rifles, "Maverick M4A1 Carbine"), 3U);
     EXPECT_EQ(keyOf(terrorist, BuyTab::Pistols, "9x19mm Sidearm"), 1U);
-    EXPECT_EQ(keyOf(terrorist, BuyTab::Pistols, "K&M .45 Tactical"), 2U);
+    EXPECT_EQ(keyOf(counterTerrorist, BuyTab::Pistols, "K&M .45 Tactical"), 2U);
+    EXPECT_EQ(keyOf(terrorist, BuyTab::Pistols, "K&M .45 Tactical"), 0U) << "each team's own pistol";
+    EXPECT_EQ(keyOf(counterTerrorist, BuyTab::Pistols, "9x19mm Sidearm"), 0U);
     EXPECT_EQ(keyOf(terrorist, BuyTab::Equipment, "Kevlar Vest"), 1U);
     EXPECT_EQ(keyOf(terrorist, BuyTab::Equipment, "Kevlar + Helmet"), 2U);
 }

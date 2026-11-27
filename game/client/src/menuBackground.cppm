@@ -3,14 +3,13 @@
 
 /// The picture behind the main menu (docs/12-ui-hud-and-console.md, section 4): the active content's own,
 /// the pictures its background layout places (the original's resource/BackgroundLayout.txt and its
-/// resource/background/ tiles) put together into one, and where that one goes on a screen of any shape.
+/// resource/background/ tiles) put together into one, which the menu stretches over the screen as the
+/// original.
 export module cs.client:menuBackground;
 
 import std;
 import nx.core;
-import nx.rhi;
 import nx.assets;
-import nx.render;
 
 export namespace cs {
 
@@ -30,10 +29,5 @@ enum class MenuBackgroundError : std::uint8_t {
 /// and put together (composeBackground). Errors: every MenuBackgroundError.
 [[nodiscard]] auto readMenuBackground(const nx::assets::Vfs& vfs, std::string_view layoutPath)
     -> nx::Result<nx::assets::RgbaImage, MenuBackgroundError>;
-
-/// Where a picture of `picture` goes to cover a screen of `screen` whole without changing its shape: as
-/// large as covers both ways, its middle on the screen's, what is too wide or too tall left off the edges.
-[[nodiscard]] auto coveringRect(nx::rhi::Extent2d picture, nx::rhi::Extent2d screen) noexcept
-    -> nx::render::ScreenRect;
 
 } // namespace cs

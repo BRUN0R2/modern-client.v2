@@ -38,6 +38,15 @@ struct MapModel {
     std::uint8_t amount = 0;
 };
 
+/// A model of the game's that is no entity of the map, where a frame shows it: a grenade flying (its
+/// prop, the place of its file among those MapModels::read was given), still, its first sequence's first
+/// frame.
+struct ShownProp {
+    std::size_t prop = 0;
+    nx::Vec3 origin{};
+    nx::EulerAngles angles{};
+};
+
 /// The studio model entities of `map`: its cycler_sprites of a model (not ".spr") and its hostages.
 [[nodiscard]] auto mapModelsOf(const nx::assets::BspView& map) -> std::vector<MapModel>;
 
@@ -47,7 +56,10 @@ public:
     /// Reads the model of every studio model entity of `map` from `vfs`, its `*T.mdl` when its textures
     /// are not in it, and the animation of the sequence each entity plays, each file once; an entity
     /// whose model or animation cannot be read is left out, and listed.
-    [[nodiscard]] static auto read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map) -> MapModels;
+    /// `props` are the files of the models the game shows besides (ShownProp), by their place; an empty one
+    /// for none at a place.
+    [[nodiscard]] static auto read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map,
+                                   std::span<const std::string> props = {}) -> MapModels;
 
     MapModels(MapModels&& other) noexcept = default;
     auto operator=(MapModels&& other) noexcept -> MapModels& = default;
@@ -70,8 +82,10 @@ public:
     /// Writes to `posed` the models `frame` may show `sinceStart` after the map started, drawn with `models`,
     /// what load gave, each lit where its entity is: the cyclers, then the hostages as `hostages` shows them
     /// (cs::shownHostageOf), each of the map's hostage it names.
+    /// and `props` where they show.
     void pose(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
-              std::span<const ShownHostage> hostages, const ModelFrame& frame, PosedModels& posed) const;
+              std::span<const ShownHostage> hostages, const ModelFrame& frame, PosedModels& posed,
+              std::span<const ShownProp> props = {}) const;
 
 private:
     /// An entity and its file's index.
@@ -104,6 +118,8 @@ private:
     std::vector<Entity> m_cyclers;
     /// By HostageSpawn::spawn; none where the model could not be read.
     std::vector<std::optional<Entity>> hostagesBySpawn;
+    /// By ShownProp::prop; none where there is none, or its model could not be read.
+    std::vector<std::optional<Entity>> propEntities;
     std::vector<std::string> m_missing;
 };
 

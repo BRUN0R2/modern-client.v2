@@ -1,0 +1,88 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The AWP (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "awp"
+classname = "weapon_awp"
+name = "Magnum Sniper Rifle" # as the original's buy menu shows it
+slot = "primary"
+position = 2
+weight = 30
+maxSpeed = 210.0
+
+[purchase]
+buyers = "everyone"
+price = 4750
+commands = ["awp", "magnum"]
+menu = { tab = "rifles", key = 5, counterTerroristKey = 6, picture = "gfx/vgui/awp.tga" }
+
+[magazine]
+ammo = "338Magnum"
+clipSize = 10
+
+[models]
+view = "models/v_awp.mdl"
+player = "models/p_awp.mdl"
+playerAnimation = "rifle"
+viewHand = "left"
+
+[view] # sequences of models/v_awp.mdl
+drawSequences = [5] # draw
+idles = [{ sequence = 0, wait = 60.0, share = 1.0 }] # idle
+idlesWhenEmpty = false
+
+[firing]
+cycle = 1.45
+reach = 8192.0 # how far its rounds go
+damage = 115.0
+rangeModifier = 0.99
+penetration = 3
+isAutomatic = true
+idleAfterShot = 2.0
+shootSequences = [1, 2, 3]
+
+[firing.accuracy] # paced, held at 1: its spread alone
+initial = 1.0
+paced = { threshold = 0.0, rate = 0.0, minimum = 1.0, maximum = 1.0 }
+
+[firing.spread]
+movingAbove = 140.0
+air = { base = 0.85, scale = 0.0 }
+moving = { base = 0.25, scale = 0.0 }
+walking = { above = 10.0, term = { base = 0.1, scale = 0.0 } }
+ducked = { base = 0.0, scale = 0.0 }
+standing = { base = 0.001, scale = 0.0 }
+
+[firing.recoil]
+punch = 2.0
+
+[firing.sound]
+files = ["weapons/awp1.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 2.5
+sequences = [4] # reload
+
+[zoom] # SecondaryAttack: its sights
+fovs = [40, 10]
+switchTime = 0.3
+maxSpeed = 150.0
+sound = { files = ["weapons/zoom.wav"], channel = "item", volume = 0.2 }
+unzoomedSpread = { base = 0.08, scale = 0.0 }
+unzoomsOnShot = true
+hasScope = true
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.95
+largeFlinch = true

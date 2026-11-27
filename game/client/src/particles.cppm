@@ -39,10 +39,13 @@ struct Particle {
     nx::Seconds goesAt{};
 };
 
-/// The endpoint of a bullet tracer and the firing animation for one seen in first person.
+/// The endpoint of a bullet tracer and the firing animation for one seen in first person, and where the
+/// muzzle was as it fired, before the shot's kick moved the weapon: a first-person tracer starts there, fixed
+/// in the world, rather than following the muzzle as the weapon recoils.
 struct TracerPath {
     nx::Vec3 end{};
     std::optional<ViewAnimation> view{};
+    std::optional<nx::Vec3> muzzle{};
 };
 
 /// A streak: where it starts and how it moves, its color, and when it goes, in the time of the map.
@@ -64,8 +67,9 @@ struct Streak {
 /// tenth of a second of it at most (CL_DrawTracers).
 [[nodiscard]] auto endOf(const Streak& streak, nx::Seconds now) noexcept -> nx::Vec3;
 
-/// The visible line of a tracer. First-person tracers need the posed muzzle and an impact ahead of it. Other
-/// shots use an approximation based on the server's path.
+/// The visible line of a tracer. First-person tracers start at the muzzle as it fired when it is known, else
+/// at `muzzle`, the posed one, and need an impact ahead of it. Other shots use an approximation based on the
+/// server's path.
 [[nodiscard]] auto tracerOf(const Streak& streak, std::optional<nx::Vec3> muzzle, nx::Seconds now) noexcept
     -> std::optional<nx::render::StreakInstance>;
 
@@ -89,8 +93,10 @@ public:
     /// gone after a tenth to half a second. Those past kMostParticles are not made.
     void splashStreaks(const StreakSplash& splash, nx::Seconds now);
 
-    /// Keeps the shot's path briefly. For `viewer`'s shot, the view model supplies the visible origin.
-    void traceBullet(const BulletTracer& shot, PlayerIndex viewer, nx::Seconds now);
+    /// Keeps the shot's path briefly. For `viewer`'s shot, the view model supplies the visible origin:
+    /// `muzzle`, where it was as it fired, when known.
+    void traceBullet(const BulletTracer& shot, PlayerIndex viewer, nx::Seconds now,
+                     std::optional<nx::Vec3> muzzle = std::nullopt);
     void clearBulletTracers();
 
     /// Moves them over `elapsed` up to `now`, the world's gravity `gravity`: each moves by its velocity,

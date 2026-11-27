@@ -40,7 +40,7 @@ constexpr float kTolerance = 1e-4F;
 
 [[nodiscard]] auto repositoryLook() -> cs::BloodStreamLook {
     auto rules = cs::readBloodRules(
-        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "blood.toml")
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "blood.toml")
             .value_or(std::string{}),
         "blood.toml");
     EXPECT_TRUE(rules.has_value());
@@ -229,6 +229,20 @@ TEST_F(ParticlesTest, AFirstPersonTracerStartsAtThePosedMuzzleAndAimsAtTheImpact
     EXPECT_FALSE(cs::tracerOf(streak, std::nullopt, {}).has_value());
     EXPECT_FALSE(cs::tracerOf(streak, nx::Vec3{.x = 150.0F}, {}).has_value())
         << "the world stopped the shot before the muzzle";
+}
+
+TEST(StreakTest, AFirstPersonTracerStaysWhereTheMuzzleWasAsItFiredWhateverTheKickMovesTheWeapon) {
+    constexpr nx::Vec3 kFiredFrom{.x = 24.0F, .y = 8.0F, .z = -6.0F};
+    constexpr nx::Vec3 kKicked{.x = 22.0F, .y = 8.0F, .z = -1.0F};
+    constexpr nx::Vec3 kImpact{.x = 400.0F, .y = 20.0F, .z = 4.0F};
+    const cs::Streak streak{
+        .tracer = cs::TracerPath{.end = kImpact, .view = cs::ViewAnimation{}, .muzzle = kFiredFrom}};
+    for (const std::optional<nx::Vec3> posed : {std::optional{kKicked}, std::optional<nx::Vec3>{}}) {
+        const auto line = cs::tracerOf(streak, posed, {});
+        ASSERT_TRUE(line.has_value());
+        EXPECT_EQ(line->start, kFiredFrom);
+        EXPECT_EQ(line->end, kImpact);
+    }
 }
 
 TEST(StreakTest, AShortenedTracerStillPointsAtTheActualImpact) {

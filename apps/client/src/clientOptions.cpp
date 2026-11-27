@@ -263,6 +263,7 @@ constexpr auto kKeyActions = std::to_array<KeyAction>({
     {.name = &OptionsTexts::lastWeapon, .command = "lastinv"},
     {.name = &OptionsTexts::buyMenu, .command = "buy"},
     {.name = &OptionsTexts::buyEquipment, .command = "buyequip"},
+    {.name = &OptionsTexts::chooseTeam, .command = "chooseteam"},
     {.name = &OptionsTexts::buyPrimaryAmmo, .command = "buyammo1"},
     {.name = &OptionsTexts::buyPistolAmmo, .command = "buyammo2"},
     {.name = &OptionsTexts::rebuy, .command = "rebuy"},

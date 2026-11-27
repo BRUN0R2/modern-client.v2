@@ -85,10 +85,11 @@ auto tracerOf(const Streak& streak, std::optional<nx::Vec3> muzzle, nx::Seconds 
     nx::Vec3 start{};
     nx::Vec3 end{};
     if (shot.view) {
-        if (!muzzle) {
+        const std::optional<nx::Vec3> from = shot.muzzle ? shot.muzzle : muzzle;
+        if (!from) {
             return std::nullopt;
         }
-        start = *muzzle;
+        start = *from;
         const nx::Vec3 fromMuzzle = shot.end - start;
         if (nx::dot(path, fromMuzzle) <= 0.0F) {
             return std::nullopt;
@@ -145,16 +146,18 @@ void Particles::splashStreaks(const StreakSplash& splash, nx::Seconds now) {
     }
 }
 
-void Particles::traceBullet(const BulletTracer& shot, PlayerIndex viewer, nx::Seconds now) {
+void Particles::traceBullet(const BulletTracer& shot, PlayerIndex viewer, nx::Seconds now,
+                            std::optional<nx::Vec3> muzzle) {
     if (shot.origin == shot.end || !hasRoom()) {
         return;
     }
-    const auto view = shot.shooter == viewer ? std::optional{shot.animation} : std::nullopt;
-    streaks.push_back(
-        Streak{.origin = shot.origin,
-               .color = {.red = shot.color.red, .green = shot.color.green, .blue = shot.color.blue},
-               .goesAt = now + kBulletTracerLife,
-               .tracer = TracerPath{.end = shot.end, .view = view}});
+    const bool isViewers = shot.shooter == viewer;
+    const auto view = isViewers ? std::optional{shot.animation} : std::nullopt;
+    streaks.push_back(Streak{
+        .origin = shot.origin,
+        .color = {.red = shot.color.red, .green = shot.color.green, .blue = shot.color.blue},
+        .goesAt = now + kBulletTracerLife,
+        .tracer = TracerPath{.end = shot.end, .view = view, .muzzle = isViewers ? muzzle : std::nullopt}});
 }
 
 void Particles::clearBulletTracers() {

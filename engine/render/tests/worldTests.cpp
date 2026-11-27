@@ -31,7 +31,7 @@ constexpr nx::rhi::Extent2d kExtent = nx::test::kTargetExtent;
 constexpr nx::Vec3 kMiddle{.x = 32.0F, .y = 32.0F, .z = 32.0F};
 
 [[nodiscard]] auto readSeed(std::string_view name = "boxEmbedded.bsp") -> std::vector<std::byte> {
-    auto bytes = nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / name);
+    auto bytes = nx::platform::readFile(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" / name);
     EXPECT_TRUE(bytes.has_value()) << nx::describe(bytes.error());
     return bytes.value_or(std::vector<std::byte>{});
 }

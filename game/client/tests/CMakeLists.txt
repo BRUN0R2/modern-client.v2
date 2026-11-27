@@ -24,6 +24,7 @@ nxAddTest(csClientTests
         weaponCommandsTests.cpp
         buyCommandsTests.cpp
         buyMenuTests.cpp
+        teamMenuTests.cpp
         mainMenuTests.cpp
         optionsPageTests.cpp
         menuBackgroundTests.cpp

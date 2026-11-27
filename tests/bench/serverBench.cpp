@@ -293,7 +293,7 @@ constexpr float kYawPerBody = 137.5F;
 /// each way so that a mesh may be built on them, and a player's spawn point in their middle.
 [[nodiscard]] auto crowdFloorMap() -> std::vector<std::byte> {
     auto read =
-        nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp");
+        nx::platform::readFile(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" / "boxEmbedded.bsp");
     std::vector<std::byte> bytes = std::move(read).value_or(std::vector<std::byte>{});
     if (bytes.size() < kVerticesLumpAt + (2 * sizeof(std::int32_t))) {
         return bytes;

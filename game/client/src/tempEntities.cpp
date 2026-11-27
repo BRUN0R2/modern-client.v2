@@ -17,6 +17,13 @@ namespace {
 
 /// The stream of random numbers the temporary entities draw from.
 constexpr std::string_view kTempEntityStream = "temporary entities";
+/// What a fireball is drawn in: its sprite's own colors, opaque.
+constexpr nx::render::RenderColor kWhite{.red = 255, .green = 255, .blue = 255};
+constexpr std::uint8_t kOpaque = 255;
+/// A draw of 0 to 1 made one of -1 to 1: times this, less 1.
+constexpr float kBothWays = 2.0F;
+/// Of a degree, the radians.
+constexpr float kRadiansPerDegree = std::numbers::pi_v<float> / 180.0F;
 /// The widest roll a temporary entity is drawn at: a whole turn.
 constexpr nx::Degrees kWidestRoll = nx::kFullTurnDegrees;
 
@@ -35,6 +42,10 @@ auto pathOf(TempSprite sprite, const BloodSprayLook& look) noexcept -> std::stri
     case TempSprite::BloodDrop:
     case TempSprite::Count:
         return look.dropSprite;
+    case TempSprite::Explosion:
+        return "sprites/zerogxplode.spr";
+    case TempSprite::SmokePuff:
+        return "sprites/gas_puff_01.spr";
     }
     std::unreachable();
 }
@@ -108,6 +119,72 @@ void TempEntities::sprayBlood(const BloodSpray& spray, const BloodSprayLook& loo
                                       .color = colorOf(palette, impact - 1),
                                       .amount = look.amount,
                                       .goesAt = now + nx::Seconds{life}});
+    }
+}
+
+void TempEntities::blowUp(nx::Vec3 position, std::optional<std::uint32_t> frames, nx::Seconds now) {
+    if (!frames || *frames == 0) {
+        return;
+    }
+    constexpr float kFramerate = 30.0F;
+    const nx::Seconds lasts{static_cast<float>(*frames) / kFramerate};
+    const auto fireball = [&](nx::Vec3 at, float scale) {
+        entities.push_back(TempEntity{.sprite = TempSprite::Explosion,
+                                      .origin = at,
+                                      .framerate = nx::PerSecond{kFramerate},
+                                      .lastFrame = static_cast<float>(*frames - 1),
+                                      .scale = nx::Scale{scale},
+                                      .color = kWhite,
+                                      .amount = kOpaque,
+                                      .goesAt = now + lasts,
+                                      .mode = nx::render::RenderMode::TransAdd});
+    };
+    // The first 20 over it at 2.5 times its size, the second near it at 3 (Explode3's TE_EXPLOSIONs).
+    constexpr float kSpread = 64.0F;
+    constexpr float kFirstLift = 20.0F;
+    constexpr float kFirstScale = 2.5F;
+    constexpr float kSecondLift = 30.0F;
+    constexpr float kSecondLiftMore = 5.0F;
+    constexpr float kSecondScale = 3.0F;
+    const auto aside = [this] {
+        return ((static_cast<float>(random.nextUnit()) * kBothWays) - 1.0F) * kSpread;
+    };
+    fireball(position + nx::Vec3{.z = kFirstLift}, kFirstScale);
+    const float acrossX = aside();
+    const float acrossY = aside();
+    fireball(position +
+                 nx::Vec3{.x = acrossX,
+                          .y = acrossY,
+                          .z = kSecondLift + (static_cast<float>(random.nextUnit()) * kSecondLiftMore)},
+             kSecondScale);
+}
+
+void TempEntities::smokeUp(nx::Vec3 position, nx::Seconds now) {
+    constexpr std::uint32_t kPuffs = 40;
+    constexpr float kRadius = 110.0F;
+    constexpr float kHeight = 90.0F;
+    constexpr nx::Seconds kLasts{20.0F};
+    constexpr float kLowest = 16.0F;  ///< Over the grenade, the lowest puff.
+    constexpr float kSmallest = 3.0F; ///< Times its sprite's size, and up to kLarger more.
+    constexpr float kLarger = 1.5F;
+    constexpr std::uint8_t kThick = 235; ///< Of 255 opaque.
+    constexpr float kLastsLonger = 2.0F; ///< Up to this longer, at random, so that it thins out.
+    constexpr std::uint32_t kDarkestGray = 150;
+    constexpr std::uint32_t kGrays = 40;
+    for (std::uint32_t puff = 0; puff < kPuffs; ++puff) {
+        const float turn = static_cast<float>(random.nextUnit()) * kWidestRoll.value() * kRadiansPerDegree;
+        const float out = std::sqrt(static_cast<float>(random.nextUnit())) * kRadius;
+        const auto gray = static_cast<std::uint8_t>(kDarkestGray + random.below(kGrays));
+        entities.push_back(TempEntity{
+            .sprite = TempSprite::SmokePuff,
+            .origin = position + nx::Vec3{.x = std::cos(turn) * out,
+                                          .y = std::sin(turn) * out,
+                                          .z = kLowest + (static_cast<float>(random.nextUnit()) * kHeight)},
+            .roll = nx::Degrees{static_cast<float>(random.nextUnit()) * kWidestRoll.value()},
+            .scale = nx::Scale{kSmallest + (static_cast<float>(random.nextUnit()) * kLarger)},
+            .color = {.red = gray, .green = gray, .blue = gray},
+            .amount = kThick,
+            .goesAt = now + kLasts + nx::Seconds{static_cast<float>(random.nextUnit()) * kLastsLonger}});
     }
 }
 

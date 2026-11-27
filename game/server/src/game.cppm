@@ -126,6 +126,13 @@ struct PlayerOwnState {
 
 export namespace cs {
 
+/// Why a player may not join the team it chose (HandleMenu_ChooseTeam).
+enum class TeamRefusal : std::uint8_t {
+    TeamFull,      ///< It has as many players as spawn points (#Terrorists_Full, #CTs_Full).
+    TeamStacked,   ///< It would have more than mp_limitteams more than the other (#Too_Many_Terrorists).
+    OnlyOneChange, ///< The player is dead and changed teams this round already (#Only_1_Team_Change).
+};
+
 /// The game of a map, played tick by tick by its players' commands.
 class Game {
     struct CreateToken {
@@ -161,6 +168,22 @@ public:
     /// weapons and its body are gone, and its slot is free for the next player to join; then the round's
     /// end is weighed (checkWinConditions). `player` is in the game.
     void leave(PlayerIndex player);
+    /// `player`, in the game, chooses `team` on the team menu (HandleMenu_ChooseTeam): refused when that
+    /// team, another than its own, has as many players as spawn points (TeamFull) or more than mp_limitteams
+    /// more than the other's (TeamStacked), or when the player is dead and changed teams this round already.
+    /// A player that had not chosen yet (it joined in a team until it does) moves to it, spawning there when
+    /// it may (canSpawn), else watching, as a joining player; one that had, alive, dies (Kill: a death, a
+    /// frag less) and plays for it from the next round, having changed teams this round. Either way it plays
+    /// as one of the team's characters drawn at random until it chooses one (chooseCharacter). Errors: every
+    /// TeamRefusal.
+    [[nodiscard]] auto chooseTeam(PlayerIndex player, Team team) -> nx::Result<void, TeamRefusal>;
+    /// `player`, in the game, chooses its team's character `slot` (from 1) on the appearance menu
+    /// (HandleMenu_ChooseAppearance); one of them at random for a slot of none.
+    void chooseCharacter(PlayerIndex player, std::uint32_t slot);
+    /// Whether `player`, in the game, chose its team on the team menu yet.
+    [[nodiscard]] auto hasChosenTeam(PlayerIndex player) const -> bool;
+    /// The team `player`, in the game, plays for.
+    [[nodiscard]] auto teamOf(PlayerIndex player) const -> Team;
     /// The team a player joining by auto-select joins (SelectDefaultTeam): the one of fewer players, else
     /// the one of fewer wins, the losing one, else one of the two drawn at random, from a stream of the tick.
     [[nodiscard]] auto defaultTeam() const -> Team;
@@ -332,6 +355,10 @@ public:
     void placeEye(PlayerIndex player, nx::Vec3 eye);
 
 private:
+    /// Gives `player`, `index`, one of its team's characters drawn at random, as the appearance menu's
+    /// auto-select does, from a stream of the tick.
+    void drawCharacter(PlayerIndex index, Player& player);
+
     GameState m_state;
 };
 

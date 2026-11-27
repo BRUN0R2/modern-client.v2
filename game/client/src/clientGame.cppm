@@ -135,6 +135,18 @@ public:
     [[nodiscard]] inline auto takePlayerSounds() -> std::vector<PlayerSound> {
         return std::exchange(playerSounds, {});
     }
+    /// The grenades that went off since the last call, in their order.
+    [[nodiscard]] inline auto takeGrenadeBlasts() -> std::vector<GrenadeBlast> {
+        return std::exchange(grenadeBlasts, {});
+    }
+    /// How a flash blinded the player since the last call, the last that did; none.
+    [[nodiscard]] inline auto takeBlinding() -> std::optional<Blinding> {
+        return std::exchange(blinding, {});
+    }
+    /// The grenades flying or lying, where the last tick left them.
+    [[nodiscard]] inline auto grenades() const noexcept -> std::span<const ShownGrenade> {
+        return m_last.grenades;
+    }
     /// The shot paths received since the last call, in the order they were fired.
     [[nodiscard]] inline auto takeBulletTracers() -> std::vector<BulletTracer> {
         return std::exchange(bulletTracers, {});
@@ -217,6 +229,8 @@ private:
     std::vector<DamageDealt> m_damageDealt;        ///< Since takeDamageDealt.
     std::vector<EntityStep> m_entitySteps;         ///< Since takeEntitySteps.
     std::vector<KillNotice> killNotices;           ///< Since takeKillNotices.
+    std::vector<GrenadeBlast> grenadeBlasts;       ///< Since takeGrenadeBlasts.
+    std::optional<Blinding> blinding;              ///< Since takeBlinding.
 };
 
 } // namespace cs

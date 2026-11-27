@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The Desert Eagle (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "deagle"
+classname = "weapon_deagle"
+name = "Night Hawk .50C" # as the original's buy menu shows it
+slot = "secondary"
+position = 1
+weight = 7
+maxSpeed = 250.0
+
+[purchase]
+buyers = "everyone"
+price = 650
+commands = ["deagle", "nighthaw"]
+menu = { tab = "pistols", key = 4, picture = "gfx/vgui/deserteagle.tga" }
+
+[magazine]
+ammo = "50AE"
+clipSize = 7
+
+[models]
+view = "models/v_deagle.mdl"
+player = "models/p_deagle.mdl"
+playerAnimation = "onehanded"
+viewHand = "left"
+
+[view] # sequences of models/v_deagle.mdl
+drawSequences = [5] # draw
+idles = [{ sequence = 0, wait = 3.0625, share = 1.0 }] # idle1
+idlesWhenEmpty = false
+
+[firing]
+cycle = 0.225 # semi-automatic: the original's 0.3 less 0.075
+reach = 4096.0 # how far its rounds go (FireBullets3)
+damage = 54.0 # FireBullets3's iDamage
+rangeModifier = 0.81 # its damage times this for each 500 units it went
+penetration = 2 # how many things a round may meet
+isAutomatic = false
+idleAfterShot = 1.8
+shootSequences = [1, 2] # shoot1, shoot2
+lastShotSequence = 3 # shoot_empty
+
+[firing.accuracy] # paced: each shot takes (0.4 - the time since the last) x 0.35, within 0.55 and 0.9
+initial = 0.9
+paced = { threshold = 0.4, rate = 0.35, minimum = 0.55, maximum = 0.9 }
+
+[firing.spread] # scale times 1 less the accuracy
+movingAbove = 0.0
+air = { base = 0.0, scale = 1.5 }
+moving = { base = 0.0, scale = 0.25 }
+ducked = { base = 0.0, scale = 0.115 }
+standing = { base = 0.0, scale = 0.13 }
+
+[firing.recoil]
+punch = 2.0
+
+[firing.sound] # its client event plays one of them: which, and how far it carries, to be measured on the original
+files = ["weapons/deagle-1.wav", "weapons/deagle-2.wav"]
+channel = "weapon"
+volume = 1.0
+noise = "shot"
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_pistol.wav"]
+channel = "weapon"
+volume = 0.8
+noise = "emptyShot"
+
+[reload]
+time = 2.2
+sequences = [4] # reload
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.5
+largeFlinch = true

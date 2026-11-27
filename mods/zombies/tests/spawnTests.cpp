@@ -30,7 +30,7 @@ auto floorMap(nx::HammerUnits width, nx::HammerUnits depth) -> std::vector<std::
 class HordeSpawnTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        const std::filesystem::path data{NX_DATA_DIRECTORY};
+        const std::filesystem::path data = nx::platform::fromUtf8(NX_DATA_DIRECTORY);
         auto characterText = nx::platform::readTextFile(data / "cstrike" / "characters.toml");
         ASSERT_TRUE(characterText.has_value());
         auto characters = cs::readCharacters(*characterText, "characters.toml");
@@ -81,7 +81,7 @@ protected:
         auto started = cs::Game::start(*content, *map, *cvars);
         ASSERT_TRUE(started.has_value());
         game = std::move(*started);
-        const auto file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "navigation.toml";
+        const auto file = nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "navigation.toml";
         auto text = nx::platform::readTextFile(file);
         ASSERT_TRUE(text.has_value());
         auto navigation = nx::game::readNavigationData(*text, "navigation.toml");

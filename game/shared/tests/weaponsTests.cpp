@@ -306,9 +306,9 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsWeapons) {
     };
     for (const Expected& expected : {
              Expected{"knife", WeaponSlot::Knife, 1, 0, 250.0F, std::nullopt, 0, "", 0, "knife"},
-             Expected{"glock18", WeaponSlot::Secondary, 2, 5, 250.0F, Buyers::Everyone, 400, "9mm", 20,
+             Expected{"glock18", WeaponSlot::Secondary, 2, 5, 250.0F, Buyers::Terrorists, 400, "9mm", 20,
                       "onehanded"},
-             Expected{"usp", WeaponSlot::Secondary, 4, 5, 250.0F, Buyers::Everyone, 500, "45ACP", 12,
+             Expected{"usp", WeaponSlot::Secondary, 4, 5, 250.0F, Buyers::CounterTerrorists, 500, "45ACP", 12,
                       "onehanded"},
              Expected{"ak47", WeaponSlot::Primary, 1, 25, 221.0F, Buyers::Terrorists, 2500, "762Nato", 30,
                       "ak47"},
@@ -345,6 +345,91 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsWeapons) {
             EXPECT_EQ(weapon->magazine->clipSize, expected.clipSize) << expected.id;
         }
     }
+}
+
+TEST(WeaponsTest, TheRepositoryHasTheOriginalsPistolsSubmachineGunsGalilAndM249) {
+    const std::optional<WeaponCatalog> catalog = repositoryCatalog();
+    ASSERT_TRUE(catalog.has_value());
+    if (!catalog) {
+        return; // as the assertion does
+    }
+    // weapontype.h's MaxAmmoType, AmmoCostType and AmmoBuyAmount; FireBullets3's bullet types.
+    for (const auto& [id, most, price, rounds, power, distance] :
+         {std::tuple{"357SIG", 52U, 50, 13U, 25U, 800.0F}, std::tuple{"50AE", 35U, 40, 7U, 30U, 1000.0F},
+          std::tuple{"57mm", 100U, 50, 50U, 30U, 2000.0F},
+          std::tuple{"556NatoBox", 200U, 60, 30U, 35U, 4000.0F}}) {
+        const AmmoType* const ammo = catalog->findAmmo(id);
+        ASSERT_NE(ammo, nullptr) << id;
+        EXPECT_EQ(ammo->maxCarried, most) << id;
+        EXPECT_EQ(ammo->boxPrice, nx::Money{price}) << id;
+        EXPECT_EQ(ammo->boxRounds, rounds) << id;
+        EXPECT_EQ(ammo->penetrationPower, power) << id;
+        EXPECT_EQ(ammo->penetrationDistance, nx::HammerUnits{distance}) << id;
+    }
+    struct Expected {
+        std::string_view id;
+        std::string_view model;
+        WeaponSlot slot;
+        std::uint32_t position;
+        std::uint32_t weight;
+        float maxSpeed;
+        Buyers buyers;
+        std::int32_t price;
+        std::string_view ammo;
+        std::uint32_t clipSize;
+        float damage;
+    };
+    for (const Expected& expected : {
+             Expected{"p228", "p228", WeaponSlot::Secondary, 3, 5, 250.0F, Buyers::Everyone, 600, "357SIG",
+                      13, 32.0F},
+             Expected{"deagle", "deagle", WeaponSlot::Secondary, 1, 7, 250.0F, Buyers::Everyone, 650, "50AE",
+                      7, 54.0F},
+             Expected{"fiveseven", "fiveseven", WeaponSlot::Secondary, 6, 5, 250.0F,
+                      Buyers::CounterTerrorists, 750, "57mm", 20, 20.0F},
+             Expected{"mac10", "mac10", WeaponSlot::Primary, 13, 25, 250.0F, Buyers::Terrorists, 1400,
+                      "45ACP", 30, 29.0F},
+             Expected{"tmp", "tmp", WeaponSlot::Primary, 11, 25, 250.0F, Buyers::CounterTerrorists, 1250,
+                      "9mm", 30, 20.0F},
+             Expected{"mp5navy", "mp5", WeaponSlot::Primary, 7, 25, 250.0F, Buyers::Everyone, 1500, "9mm", 30,
+                      26.0F},
+             Expected{"ump45", "ump45", WeaponSlot::Primary, 15, 25, 250.0F, Buyers::Everyone, 1700, "45ACP",
+                      25, 30.0F},
+             Expected{"p90", "p90", WeaponSlot::Primary, 8, 26, 245.0F, Buyers::Everyone, 2350, "57mm", 50,
+                      21.0F},
+             Expected{"galil", "galil", WeaponSlot::Primary, 17, 25, 240.0F, Buyers::Terrorists, 2000,
+                      "556Nato", 35, 30.0F},
+             Expected{"m249", "m249", WeaponSlot::Primary, 4, 25, 220.0F, Buyers::Everyone, 5750,
+                      "556NatoBox", 100, 32.0F},
+         }) {
+        const Weapon* const weapon = catalog->findWeapon(expected.id);
+        ASSERT_NE(weapon, nullptr) << expected.id;
+        EXPECT_EQ(weapon->classname, std::format("weapon_{}", expected.id));
+        EXPECT_EQ(weapon->slot, expected.slot) << expected.id;
+        EXPECT_EQ(weapon->position, expected.position) << expected.id;
+        EXPECT_EQ(weapon->weight, expected.weight) << expected.id;
+        EXPECT_EQ(weapon->maxSpeed, nx::UnitsPerSecond{expected.maxSpeed}) << expected.id;
+        EXPECT_EQ(weapon->models.view, std::format("models/v_{}.mdl", expected.model));
+        ASSERT_TRUE(weapon->purchase.has_value()) << expected.id;
+        EXPECT_EQ(weapon->purchase->buyers, expected.buyers) << expected.id;
+        EXPECT_EQ(weapon->purchase->price, nx::Money{expected.price}) << expected.id;
+        ASSERT_TRUE(weapon->magazine.has_value()) << expected.id;
+        EXPECT_EQ(weapon->magazine->ammo, expected.ammo) << expected.id;
+        EXPECT_EQ(weapon->magazine->clipSize, expected.clipSize) << expected.id;
+        ASSERT_TRUE(weapon->firing.has_value()) << expected.id;
+        EXPECT_EQ(weapon->firing->damage, nx::Damage{expected.damage}) << expected.id;
+    }
+    // The submachine guns square their shots, the MP5 over a double; they and the M249 kick in the air first.
+    const Weapon* const mp5 = catalog->findWeapon("mp5navy");
+    ASSERT_NE(mp5, nullptr);
+    ASSERT_TRUE(mp5->firing->accuracy.burst.has_value());
+    EXPECT_EQ(mp5->firing->accuracy.burst->power, 2U);
+    EXPECT_DOUBLE_EQ(mp5->firing->accuracy.burst->divisor, 220.1);
+    ASSERT_TRUE(mp5->firing->recoil.kicks.has_value());
+    EXPECT_EQ(mp5->firing->recoil.kicks->airFirst, true);
+    const Weapon* const galil = catalog->findWeapon("galil");
+    ASSERT_NE(galil, nullptr);
+    EXPECT_FALSE(galil->firing->accuracy.burst->power.has_value()) << "cubed, as the AK-47";
+    EXPECT_FALSE(galil->firing->recoil.kicks->airFirst.has_value()) << "moving first, as the AK-47";
 }
 
 TEST(WeaponsTest, TheRepositorysWeaponsDrawAndIdleAsTheOriginalsDo) {

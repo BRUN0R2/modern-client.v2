@@ -130,6 +130,7 @@ struct OptionsTexts {
     std::string lastWeapon{};
     std::string buyMenu{};
     std::string buyEquipment{};
+    std::string chooseTeam{};
     std::string buyPrimaryAmmo{};
     std::string buyPistolAmmo{};
     std::string rebuy{};
@@ -140,10 +141,47 @@ struct OptionsTexts {
     std::string restore{};
 };
 
+/// What the scoreboard writes: the teams' names, the columns' heads, how many of a team live ("3/4 alive"),
+/// how many play (one, or more), and how a row says its player is dead.
+struct ScoreboardTexts {
+    std::string terrorists{};
+    std::string counterTerrorists{};
+    std::string player{};
+    std::string health{};
+    std::string money{};
+    std::string kills{};
+    std::string deaths{};
+    std::string alive{};
+    std::string players{};
+    std::string onePlayer{};
+    std::string dead{};
+
+    [[nodiscard]] inline auto operator==(const ScoreboardTexts&) const noexcept -> bool = default;
+};
+
+/// What the team and appearance menus write (cs.client:teamMenu), and why a team cannot be joined.
+struct TeamMenuTexts {
+    std::string chooseTeam{};
+    std::string terrorists{};
+    std::string counterTerrorists{};
+    std::string autoSelect{};
+    std::string chooseCharacter{};
+    std::string cancel{};
+    std::string terroristsFull{};
+    std::string counterTerroristsFull{};
+    std::string tooManyTerrorists{};
+    std::string tooManyCounterTerrorists{};
+    std::string onlyOneTeamChange{};
+
+    [[nodiscard]] inline auto operator==(const TeamMenuTexts&) const noexcept -> bool = default;
+};
+
 /// Every text of the game, by the part that writes it.
 struct Texts {
     MainMenuTexts mainMenu{};
     OptionsTexts options{};
+    ScoreboardTexts scoreboard{};
+    TeamMenuTexts teamMenu{};
 };
 
 /// Whether `language` is a language tag a file can be named after: letters, digits and `-` between them
@@ -233,6 +271,24 @@ struct nx::meta::Description<cs::MainMenuTexts> {
 };
 
 template <>
+struct nx::meta::Description<cs::ScoreboardTexts> {
+    static constexpr std::string_view kName = "cs::ScoreboardTexts";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::ScoreboardTexts::terrorists>("terrorists"),
+        nx::meta::field<&cs::ScoreboardTexts::counterTerrorists>("counterTerrorists"),
+        nx::meta::field<&cs::ScoreboardTexts::player>("player"),
+        nx::meta::field<&cs::ScoreboardTexts::health>("health"),
+        nx::meta::field<&cs::ScoreboardTexts::money>("money"),
+        nx::meta::field<&cs::ScoreboardTexts::kills>("kills"),
+        nx::meta::field<&cs::ScoreboardTexts::deaths>("deaths"),
+        nx::meta::field<&cs::ScoreboardTexts::alive>("alive"),
+        nx::meta::field<&cs::ScoreboardTexts::players>("players"),
+        nx::meta::field<&cs::ScoreboardTexts::onePlayer>("onePlayer"),
+        nx::meta::field<&cs::ScoreboardTexts::dead>("dead"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::OptionsTexts> {
     static constexpr std::string_view kName = "cs::OptionsTexts";
     static constexpr std::tuple kFields{
@@ -317,6 +373,7 @@ struct nx::meta::Description<cs::OptionsTexts> {
         nx::meta::field<&cs::OptionsTexts::lastWeapon>("lastWeapon"),
         nx::meta::field<&cs::OptionsTexts::buyMenu>("buyMenu"),
         nx::meta::field<&cs::OptionsTexts::buyEquipment>("buyEquipment"),
+        nx::meta::field<&cs::OptionsTexts::chooseTeam>("chooseTeam"),
         nx::meta::field<&cs::OptionsTexts::buyPrimaryAmmo>("buyPrimaryAmmo"),
         nx::meta::field<&cs::OptionsTexts::buyPistolAmmo>("buyPistolAmmo"),
         nx::meta::field<&cs::OptionsTexts::rebuy>("rebuy"),
@@ -334,5 +391,25 @@ struct nx::meta::Description<cs::Texts> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::Texts::mainMenu>("mainMenu"),
         nx::meta::field<&cs::Texts::options>("options"),
+        nx::meta::field<&cs::Texts::scoreboard>("scoreboard"),
+        nx::meta::field<&cs::Texts::teamMenu>("teamMenu"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::TeamMenuTexts> {
+    static constexpr std::string_view kName = "cs::TeamMenuTexts";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::TeamMenuTexts::chooseTeam>("chooseTeam"),
+        nx::meta::field<&cs::TeamMenuTexts::terrorists>("terrorists"),
+        nx::meta::field<&cs::TeamMenuTexts::counterTerrorists>("counterTerrorists"),
+        nx::meta::field<&cs::TeamMenuTexts::autoSelect>("autoSelect"),
+        nx::meta::field<&cs::TeamMenuTexts::chooseCharacter>("chooseCharacter"),
+        nx::meta::field<&cs::TeamMenuTexts::cancel>("cancel"),
+        nx::meta::field<&cs::TeamMenuTexts::terroristsFull>("terroristsFull"),
+        nx::meta::field<&cs::TeamMenuTexts::counterTerroristsFull>("counterTerroristsFull"),
+        nx::meta::field<&cs::TeamMenuTexts::tooManyTerrorists>("tooManyTerrorists"),
+        nx::meta::field<&cs::TeamMenuTexts::tooManyCounterTerrorists>("tooManyCounterTerrorists"),
+        nx::meta::field<&cs::TeamMenuTexts::onlyOneTeamChange>("onlyOneTeamChange"),
     };
 };

@@ -47,6 +47,12 @@ struct MainMenuItem {
 /// the game's files (the original's resource/BackgroundLayout.txt), and its items from the top.
 struct MainMenuLook {
     MenuFontFamilies font{};
+    /// The original's families among the system's (its TrackerScheme.res: `strong` for its items, `regular`
+    /// for its windows), written in instead of `font` where the system has them.
+    std::optional<MenuFontFamilies> originalFont{};
+    /// The original's logo among the game's files (resource/logo_game.tga), shown instead of the project's
+    /// where the game has it.
+    std::optional<std::string> originalLogo{};
     std::string background{};
     std::vector<MainMenuItem> items{};
 };
@@ -72,6 +78,8 @@ struct nx::meta::Description<cs::MainMenuLook> {
     static constexpr std::string_view kName = "cs::MainMenuLook";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::MainMenuLook::font>("font"),
+        nx::meta::field<&cs::MainMenuLook::originalFont>("originalFont"),
+        nx::meta::field<&cs::MainMenuLook::originalLogo>("originalLogo"),
         nx::meta::field<&cs::MainMenuLook::background>("background"),
         nx::meta::field<&cs::MainMenuLook::items>("items"),
     };

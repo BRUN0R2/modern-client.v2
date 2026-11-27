@@ -65,6 +65,7 @@ struct SceneView {
     nx::render::LightStyleValues lightStyles{}; ///< The server's styles at time (ClientGame::lightStylesAt).
     std::span<const nx::render::ModelPlacement> placements{};
     std::span<const ShownHostage> hostages{};   ///< How the game's hostages show (ClientGame::writeHostages).
+    std::span<const ShownProp> props{};         ///< The grenades flying or lying (MapModels' props).
     std::span<const ShownPlayer> players{};     ///< How the other players show (ClientGame::updatePlayers).
     std::span<const ShownEntity> entities{};    ///< The entity bodies' corpses.
     ShownCrowd crowd{};                         ///< The entity bodies, those alive for the GPU to show.

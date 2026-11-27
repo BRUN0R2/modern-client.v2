@@ -50,7 +50,7 @@ protected:
         }
         auto vfs = nx::assets::Vfs::create(std::array{m_installation.path()});
         EXPECT_TRUE(vfs.has_value());
-        auto content = cs::readGameContent(NX_DATA_DIRECTORY, std::move(vfs).value());
+        auto content = cs::readGameContent(nx::platform::fromUtf8(NX_DATA_DIRECTORY), std::move(vfs).value());
         EXPECT_TRUE(content.has_value()) << (content ? "" : nx::describe(content.error()));
         m_content.emplace(std::move(content).value());
         auto map = nx::assets::BspView::parse(m_mapBytes);

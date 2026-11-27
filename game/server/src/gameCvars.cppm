@@ -20,7 +20,8 @@ export namespace cs {
 /// on their teammates: `mp_freezetime` (6 seconds), `mp_roundtime` (5 minutes), `mp_startmoney` (800),
 /// `sv_restartround` and `sv_restart` (0: the seconds to restart the game in), `mp_footsteps` (1: the
 /// players' steps sound, any value but 0), `mp_friendlyfire` (0: a player's attacks hurt no teammate, any
-/// value but 0 that they do), and `mp_buytime` (1.5: the minutes a round's players buy for).
+/// value but 0 that they do), `mp_buytime` (1.5: the minutes a round's players buy for), and `mp_limitteams`
+/// (2: how many players more than the other's a team may have as a player joins it, 0 for no limit).
 struct GameCvars {
     nx::console::Cvar<float> freezeTime;
     nx::console::Cvar<float> roundTime;
@@ -30,6 +31,7 @@ struct GameCvars {
     nx::console::Cvar<float> footsteps;    ///< `mp_footsteps`, read at each step.
     nx::console::Cvar<float> friendlyFire; ///< `mp_friendlyfire`, read at each attack.
     nx::console::Cvar<float> buyTime;      ///< `mp_buytime`, read at each purchase.
+    nx::console::Cvar<float> limitTeams;   ///< `mp_limitteams`, read as a player chooses a team.
 
     nx::console::Cvar<std::string> tracerColor; ///< `sv_tracer_color`, read at each shot.
 
@@ -52,6 +54,9 @@ struct GameCvars {
     [[nodiscard]] auto isFriendlyFireOn() const -> bool;
     /// How long a round's players buy for, mp_buytime set back where it is held (readBuyTime).
     [[nodiscard]] auto buyingTime() const -> nx::Seconds;
+    /// How many players more than the other's a team may have as a player joins it (mp_limitteams, 0 to 20;
+    /// 0 for no limit).
+    [[nodiscard]] auto teamsLimit() const -> std::uint32_t;
     /// The tint of a shot's visual tracer.
     [[nodiscard]] auto bulletTracerColor() const -> nx::assets::PaletteColor;
 };

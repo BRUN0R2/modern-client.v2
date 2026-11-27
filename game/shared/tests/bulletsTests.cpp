@@ -73,6 +73,20 @@ TEST(BulletsTest, ARoundThatMeetsNothingGoesAsFarAsItsReach) {
     EXPECT_FLOAT_EQ(traced[0].end.x, 8192.0F);
 }
 
+TEST(BulletsTest, APelletIsTracedOnceItsDamageByHowFarItWentOfItsReach) {
+    // A shotgun's (BULLET_PLAYER_BUCKSHOT): 20 times 1 less the fraction, through nothing.
+    Shot pellet = akShot();
+    pellet.reach = nx::HammerUnits{3000.0F};
+    pellet.round = cs::ShotRound{.damage = nx::Damage{20.0F}, .penetration = 1, .isPellet = true};
+    std::vector<Traced> traced;
+    const std::vector<BulletHit> hits = cs::followRound(
+        pellet, tracerOf({wallAt(750.0F, 0.0F, 3000.0F), wallAt(900.0F, 0.0F, 3000.0F)}, traced),
+        madeOf(TextureMaterial::Wood));
+    ASSERT_EQ(hits.size(), 1U);
+    EXPECT_EQ(traced.size(), 1U) << "through nothing";
+    EXPECT_EQ(hits[0].damage, nx::Damage{15.0F}) << "a quarter of the way: 20 x 0.75";
+}
+
 TEST(BulletsTest, ItsDamageIsItsRangeModifiersPowerOfTheDistanceItWent) {
     std::vector<Traced> traced;
     const std::vector<BulletHit> hits = cs::followRound(

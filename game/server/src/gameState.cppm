@@ -59,7 +59,10 @@ struct Player {
     nx::ecs::Entity body{};
     nx::Flags<Button> lastButtons{}; ///< m_afButtonLast: the use button acts as it goes down.
     bool isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
-    std::uint32_t spawnsThisRound = 0;  ///< m_iNumSpawns.
+    std::uint32_t spawnsThisRound = 0; ///< m_iNumSpawns.
+    /// Whether it chose its team on the team menu yet: a player joining is put in one until it does.
+    bool hasChosenTeam = false;
+    bool hasChangedTeam = false;        ///< m_bTeamChanged: it changed teams this round.
     nx::GameTime spawnedAt{};           ///< When it last spawned, alive already or not (Spawn, RoundRespawn).
     std::optional<HurtFrom> hurtFrom{}; ///< In the tick: where the last attack it took came from.
     std::vector<DamageDealt> damageDealt{}; ///< In the tick: what its hits dealt, in their order.
@@ -76,6 +79,19 @@ struct Player {
     CommandNumber randomSeed{};
     HitGroup lastHitGroup = HitGroup::Generic;
     float speedShare = 1.0F;
+    std::optional<Blinding> blinding{}; ///< In the tick: a flash blinded it.
+};
+
+/// A grenade thrown, flying or lying until it goes off.
+struct LiveGrenade {
+    WeaponIndex weapon{};
+    PlayerIndex thrower{};
+    nx::Vec3 origin{};
+    nx::Vec3 velocity{};
+    nx::GameTime goesOffAt{};
+    std::uint32_t bounces = 0;
+    bool isResting = false;
+    std::uint32_t serial = 0;
 };
 
 /// What a tick made, which every client is told of after it.
@@ -88,6 +104,8 @@ struct TickEvents {
     std::vector<BloodStream> bloodStreams{};
     std::vector<StreakSplash> streakSplashes{};
     std::vector<KillNotice> killNotices{};
+    std::vector<GrenadeBlast> grenadeBlasts{};
+    std::vector<PlayerSound> grenadeSounds{}; ///< Heard where they were made.
 
     /// As a tick starts: nothing yet.
     void clear() noexcept;
@@ -149,6 +167,8 @@ struct GameState {
     MapLightStyles lightStyles; ///< Owned by this game; copied into each client's snapshot.
     std::optional<MoveLists> moves{};
     EntityStateLists entityStates{};
+    std::vector<LiveGrenade> grenades{}; ///< Thrown, until they go off.
+    std::uint32_t grenadeSerial = 0;     ///< Of the next grenade thrown.
 };
 
 /// The entities' bodies of `game` as they are now, written if stale, in jobs if given.

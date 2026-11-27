@@ -56,8 +56,10 @@ auto readTexts(std::string_view text, std::string_view sourceName) -> nx::Result
         return nx::fail(TextsError::DataInvalid, std::string{sourceName}, std::move(texts.error()));
     }
     // Each part by the name of its table.
-    const std::array emptyTexts{std::pair{std::string_view{"mainMenu"}, firstEmptyTextOf(texts->mainMenu)},
-                                std::pair{std::string_view{"options"}, firstEmptyTextOf(texts->options)}};
+    const std::array emptyTexts{
+        std::pair{std::string_view{"mainMenu"}, firstEmptyTextOf(texts->mainMenu)},
+        std::pair{std::string_view{"options"}, firstEmptyTextOf(texts->options)},
+        std::pair{std::string_view{"scoreboard"}, firstEmptyTextOf(texts->scoreboard)}};
     for (const auto& [part, empty] : emptyTexts) {
         if (empty) {
             return nx::fail(TextsError::DataInvalid,

@@ -51,7 +51,19 @@ void showNotices(Session& session, const FrameNotices& notices, const cs::Weapon
 /// where it met the body (cs::Scene::bloodLightAt), its sprays and their heads' gushes in place of the
 /// original's streams; else as the original's (cs::TempEntities::sprayBlood), and the streams the hits in the
 /// head made (cs::Particles::streamBlood); the blood but without the engine's palette, as the level logged.
+/// How the player's own view model is held: the view without the weapon's kick, the hand and the offset.
+struct FirstPersonView {
+    nx::render::Camera camera{};
+    cs::Hand hand = cs::Hand::Right;
+    cs::ViewModelOffset offset{};
+};
+
+/// Where the muzzle of the view model of `animation`'s weapon is as its shot starts, held as `view` says: the
+/// first frame of its firing sequence, before the kick; none without that view model.
+[[nodiscard]] auto muzzleAsFired(const cs::Level& level, const cs::ViewAnimation& animation,
+                                 const FirstPersonView& view) -> std::optional<nx::Vec3>;
+
 void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent& content, nx::Seconds now,
-                 nx::Seconds elapsed, bool showBulletTracers);
+                 nx::Seconds elapsed, bool showBulletTracers, const FirstPersonView& firstPerson);
 
 } // namespace app

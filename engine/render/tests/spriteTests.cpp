@@ -161,8 +161,8 @@ class Scene {
 public:
     explicit Scene(nx::rhi::Device& device,
                    nx::render::ColorEncoding encoding = nx::render::ColorEncoding::Display)
-        : m_device{&device},
-          m_mapBytes{readFileOf(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp")},
+        : m_device{&device}, m_mapBytes{readFileOf(nx::platform::fromUtf8(NX_FUZZ_CORPUS_DIRECTORY) / "bsp" /
+                                                   "boxEmbedded.bsp")},
           m_map{nx::assets::BspView::parse(m_mapBytes).value()}, m_light{m_map} {
         const auto executable = nx::platform::executablePath();
         const std::vector<std::byte> shader =

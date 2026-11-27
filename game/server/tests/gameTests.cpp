@@ -74,7 +74,7 @@ class GameTest : public ::testing::Test {
 protected:
     GameTest() {
         const std::filesystem::path charactersFile =
-            std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "characters.toml";
+            nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "characters.toml";
         auto characters = cs::readCharacters(
             nx::platform::readTextFile(charactersFile).value_or(std::string{}), "characters.toml");
         EXPECT_TRUE(characters.has_value());
@@ -87,7 +87,7 @@ protected:
         }
         auto vfs = nx::assets::Vfs::create(std::array{m_installation.path()});
         EXPECT_TRUE(vfs.has_value());
-        auto content = cs::readGameContent(NX_DATA_DIRECTORY, std::move(vfs).value());
+        auto content = cs::readGameContent(nx::platform::fromUtf8(NX_DATA_DIRECTORY), std::move(vfs).value());
         EXPECT_TRUE(content.has_value()) << (content ? "" : nx::describe(content.error()));
         m_content.emplace(std::move(content).value());
         auto map = cs::GameMap::read(nx::test::boxMapWith(kEntities), "box");
@@ -247,6 +247,97 @@ TEST_F(GameTest, APlayerJoinsAtItsTeamsSpawnPointWithItsLoadoutAndTheStartingMon
     EXPECT_EQ(content().weapons.weapon(held->weapon).id, "usp");
     // The first round is frozen: its HUD counts the freeze down.
     EXPECT_TRUE(game().rounds().isFrozen());
+}
+
+TEST_F(GameTest, APlayerJoiningMovesToTheTeamItChoosesWithoutDying) {
+    const cs::PlayerIndex player =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    EXPECT_FALSE(game().hasChosenTeam(player));
+    ASSERT_TRUE(game().chooseTeam(player, cs::Team::Terrorists).has_value());
+    EXPECT_TRUE(game().hasChosenTeam(player));
+    EXPECT_EQ(game().teamOf(player), cs::Team::Terrorists);
+    const cs::PlayerSnapshot moved = game().snapshotFor(player);
+    EXPECT_TRUE(moved.status.isAlive()) << "spawned as it joins, in the first freeze";
+    EXPECT_EQ(moved.player.origin, (nx::Vec3{.x = 300.0F, .y = 300.0F, .z = 9.0F})) << "at its team's spawn";
+    EXPECT_EQ(moved.scores.at(player.value).score, cs::PlayerScore{}) << "no death for joining";
+    // The terrorists' loadout: the Glock, drawn.
+    const cs::OwnedWeapon* const held = moved.inventory.held();
+    ASSERT_NE(held, nullptr);
+    EXPECT_EQ(content().weapons.weapon(held->weapon).id, "glock18");
+}
+
+TEST_F(GameTest, APlayerChangingTeamsAliveDiesAndDeadChangesOnceARound) {
+    const cs::PlayerIndex player =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    ASSERT_TRUE(game().chooseTeam(player, cs::Team::CounterTerrorists).has_value());
+    ASSERT_TRUE(game().chooseTeam(player, cs::Team::Terrorists).has_value());
+    const cs::PlayerSnapshot changed = game().snapshotFor(player);
+    EXPECT_FALSE(changed.status.isAlive()) << "killed as it changes (Kill)";
+    EXPECT_EQ(changed.scores.at(player.value).score, (cs::PlayerScore{.frags = -1, .deaths = 1}));
+    EXPECT_EQ(game().teamOf(player), cs::Team::Terrorists);
+    const auto again = game().chooseTeam(player, cs::Team::CounterTerrorists);
+    ASSERT_FALSE(again.has_value());
+    EXPECT_EQ(again.error().code, cs::TeamRefusal::OnlyOneChange);
+}
+
+TEST_F(GameTest, ATeamFullOrStackedIsRefused) {
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "First");
+    const cs::PlayerIndex second =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Second");
+    cvars().limitTeams.setAccepted(1.0F);
+    const auto stacked = game().chooseTeam(second, cs::Team::Terrorists);
+    ASSERT_FALSE(stacked.has_value());
+    EXPECT_EQ(stacked.error().code, cs::TeamRefusal::TeamStacked) << "two terrorists to no counter-terrorist";
+    cvars().limitTeams.setAccepted(0.0F);
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Third");
+    const auto full = game().chooseTeam(second, cs::Team::Terrorists);
+    ASSERT_FALSE(full.has_value());
+    EXPECT_EQ(full.error().code, cs::TeamRefusal::TeamFull) << "as many terrorists as their spawn points";
+    EXPECT_EQ(game().teamOf(second), cs::Team::CounterTerrorists);
+}
+
+TEST_F(GameTest, AGrenadeDroppedAtItsThrowersFeetGoesOffAfterItsFuseHurtingWhoIsNear) {
+    const cs::PlayerIndex attacker = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Attacker");
+    const cs::PlayerIndex victim =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Victim");
+    idle(kPastTheFirstFreeze);
+    const cs::WeaponIndex grenade = *content().weapons.indexOf("hegrenade");
+    game().give(attacker, grenade);
+    EXPECT_EQ(game().snapshotFor(attacker).inventory.reserve("HEGrenade"), 1U)
+        << "a grenade given is one of it";
+    standOff(attacker, victim, "hegrenade");
+    // Looking straight down, it is thrown at no speed: it falls at the thrower's feet.
+    const nx::EulerAngles down{.pitch = nx::Degrees{89.0F}};
+    for (std::uint32_t tick = 0; tick < 60; ++tick) {
+        std::ignore = press(attacker, {cs::Button::Attack}, down);
+    }
+    std::ignore = play(attacker, 1, {}, down);
+    EXPECT_EQ(game().snapshotFor(attacker).grenades.size(), 1U) << "thrown as the button went up";
+    EXPECT_EQ(game().snapshotFor(attacker).inventory.reserve("HEGrenade"), 0U);
+    bool wentOff = false;
+    for (std::uint32_t tick = 0; tick < 200 && !wentOff; ++tick) {
+        std::ignore = play(attacker, 1, {}, down);
+        wentOff = !game().snapshotFor(victim).grenadeBlasts.empty();
+    }
+    ASSERT_TRUE(wentOff) << "within its fuse of 1.5 seconds";
+    EXPECT_TRUE(game().snapshotFor(attacker).grenades.empty());
+    EXPECT_LT(game().snapshotFor(victim).status.health, cs::kSpawnHealth) << "40 units from it, near enough";
+}
+
+TEST_F(GameTest, AFlashBlindsLongerAndWhiterSeenInFrontThanBehindAndNotOutOfItsRadius) {
+    const nx::Vec3 eye{};
+    const nx::Vec3 forward{.x = 1.0F};
+    const std::optional<cs::Blinding> front = cs::blindingOf({.x = 100.0F}, eye, forward, 4.0F, 1500.0F);
+    ASSERT_TRUE(front.has_value());
+    const float adjusted = 4.0F - (100.0F * 4.0F / 1500.0F);
+    EXPECT_EQ(front->alpha, 255U);
+    EXPECT_FLOAT_EQ(front->hold.count(), adjusted / 1.5F);
+    EXPECT_FLOAT_EQ(front->fade.count(), adjusted * 3.0F);
+    const std::optional<cs::Blinding> behind = cs::blindingOf({.x = -100.0F}, eye, forward, 4.0F, 1500.0F);
+    ASSERT_TRUE(behind.has_value());
+    EXPECT_EQ(behind->alpha, 200U);
+    EXPECT_FLOAT_EQ(behind->fade.count(), adjusted * 1.75F);
+    EXPECT_FALSE(cs::blindingOf({.x = 2000.0F}, eye, forward, 4.0F, 1500.0F).has_value());
 }
 
 TEST_F(GameTest, APlayerPlaysByTheNameTheServerGivesItAmongTheOthers) {
@@ -1287,19 +1378,19 @@ TEST_F(GameTest, APlayerBuysAWeaponInABuyZoneDroppingThatOfItsSlotAndPayingForIt
     playOn(buyZoneMap(""));
     const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     const cs::WeaponIndex glock = *content().weapons.indexOf("glock18");
-    const cs::WeaponIndex usp = *content().weapons.indexOf("usp");
+    const cs::WeaponIndex p228 = *content().weapons.indexOf("p228");
     const cs::WeaponIndex ak = *content().weapons.indexOf("ak47");
     std::ignore = play(player, 1);
     const nx::Money start = game().snapshotFor(player).status.money;
     ASSERT_EQ(start, nx::Money{800});
 
-    ASSERT_TRUE(game().buyWeapon(player, usp).has_value());
+    ASSERT_TRUE(game().buyWeapon(player, p228).has_value());
     cs::PlayerSnapshot told = play(player, 1);
-    EXPECT_EQ(told.status.money, nx::Money{300});
+    EXPECT_EQ(told.status.money, nx::Money{200});
     EXPECT_FALSE(told.inventory.has(glock)) << "a pistol takes a pistol's place";
     ASSERT_NE(told.inventory.held(), nullptr);
-    EXPECT_EQ(told.inventory.held()->weapon, usp);
-    EXPECT_EQ(told.inventory.held()->clip, 12U);
+    EXPECT_EQ(told.inventory.held()->weapon, p228);
+    EXPECT_EQ(told.inventory.held()->clip, 13U);
     EXPECT_EQ(told.inventory.reserve("9mm"), 40U) << "the rounds the loadout gave stay the player's";
     EXPECT_TRUE(std::ranges::contains(told.sounds, &content().buying.sounds.weapon, &cs::SoundMade::sound));
     EXPECT_FALSE(made(player, content().buying.sounds.armor));
@@ -1307,13 +1398,30 @@ TEST_F(GameTest, APlayerBuysAWeaponInABuyZoneDroppingThatOfItsSlotAndPayingForIt
         std::ranges::contains(play(player, 1).sounds, &content().buying.sounds.weapon, &cs::SoundMade::sound))
         << "heard once";
 
-    EXPECT_EQ(game().buyWeapon(player, usp).error().code, cs::BuyRefusal::AlreadyOwned);
+    EXPECT_EQ(game().buyWeapon(player, p228).error().code, cs::BuyRefusal::AlreadyOwned);
     EXPECT_EQ(game().buyWeapon(player, ak).error().code, cs::BuyRefusal::NotEnoughMoney);
-    EXPECT_EQ(game().snapshotFor(player).status.money, nx::Money{300}) << "a refusal costs nothing";
+    EXPECT_EQ(game().snapshotFor(player).status.money, nx::Money{200}) << "a refusal costs nothing";
+    EXPECT_EQ(game().buyWeapon(player, *content().weapons.indexOf("usp")).error().code,
+              cs::BuyRefusal::NotForItsTeam)
+        << "the counter-terrorists' pistol";
     EXPECT_EQ(game().buyWeapon(player, *content().weapons.indexOf("knife")).error().code,
               cs::BuyRefusal::NotSold);
     EXPECT_EQ(game().buyWeapon(player, *content().weapons.indexOf("m4a1")).error().code,
               cs::BuyRefusal::NotForItsTeam);
+}
+
+TEST_F(GameTest, AGrenadeIsBoughtAsManyTimesAsItsKindMayBeCarried) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = play(player, 1);
+    const cs::WeaponIndex flash = *content().weapons.indexOf("flashbang");
+    ASSERT_TRUE(game().buyWeapon(player, flash).has_value());
+    ASSERT_TRUE(game().buyWeapon(player, flash).has_value()) << "two flashbangs";
+    EXPECT_EQ(game().buyWeapon(player, flash).error().code, cs::BuyRefusal::AlreadyOwned);
+    const cs::PlayerSnapshot told = play(player, 1);
+    EXPECT_EQ(told.inventory.reserve("Flashbang"), 2U);
+    EXPECT_EQ(told.status.money, nx::Money{400});
+    EXPECT_TRUE(told.inventory.has(*content().weapons.indexOf("glock18"))) << "a grenade keeps the pistol";
 }
 
 TEST_F(GameTest, AWeaponReplacedIsBoughtAsItsReplacement) {
@@ -1333,13 +1441,12 @@ TEST_F(GameTest, APlayerBuysOnlyWhereAndWhileItsRulesLetIt) {
     const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "T");
     const cs::PlayerIndex counterTerrorist =
         game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "CT");
-    const cs::WeaponIndex usp = *content().weapons.indexOf("usp");
-    const cs::WeaponIndex glock = *content().weapons.indexOf("glock18");
+    const cs::WeaponIndex p228 = *content().weapons.indexOf("p228");
     std::ignore = play(terrorist, 1);
 
-    EXPECT_EQ(game().buyWeapon(terrorist, usp).error().code, cs::BuyRefusal::OutsideBuyZones)
+    EXPECT_EQ(game().buyWeapon(terrorist, p228).error().code, cs::BuyRefusal::OutsideBuyZones)
         << "a zone of the other team's";
-    EXPECT_TRUE(game().buyWeapon(counterTerrorist, glock).has_value());
+    EXPECT_TRUE(game().buyWeapon(counterTerrorist, p228).has_value());
 
     game().placeEye(counterTerrorist, {.x = 3000.0F, .y = 3000.0F, .z = kStandingEye});
     EXPECT_EQ(game().buyArmor(counterTerrorist, cs::ArmorKind::Kevlar).error().code,

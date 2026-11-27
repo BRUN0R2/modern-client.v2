@@ -27,6 +27,8 @@ export namespace cs {
 enum class TempSprite : std::uint8_t {
     BloodSpray,
     BloodDrop,
+    Explosion, ///< An HE grenade's fireball (TE_EXPLOSION's).
+    SmokePuff, ///< A smoke grenade's cloud's puffs.
     Count,
 };
 
@@ -49,6 +51,8 @@ struct TempEntity {
     nx::render::RenderColor color{};
     std::uint8_t amount = 0;
     nx::Seconds goesAt{};
+    nx::render::RenderMode mode =
+        nx::render::RenderMode::TransTexture; ///< How it is drawn over what is behind.
 };
 
 /// How many frames the blood's sprites have: none of one the level could not read, which is not shown.
@@ -84,6 +88,12 @@ public:
                 nx::UnitsPerSecondSquared gravity);
 
     /// Those shown, in the order they came.
+    /// An HE grenade's explosion at `position` `now`: its two fireballs of `frames` frames, added to what is
+    /// behind (Explode3's TE_EXPLOSIONs).
+    void blowUp(nx::Vec3 position, std::optional<std::uint32_t> frames, nx::Seconds now);
+    /// A smoke grenade's cloud at `position` `now`, its puffs lasting as the original's (SG_Smoke's 20
+    /// seconds).
+    void smokeUp(nx::Vec3 position, nx::Seconds now);
     [[nodiscard]] inline auto shown() const noexcept -> std::span<const TempEntity> { return entities; }
 
 private:

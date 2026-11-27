@@ -23,6 +23,7 @@ export import :purchases;
 export import :playerSnapshots;
 export import :gameRules;
 export import :playerHarms;
+export import :grenades;
 export import :playerCommands;
 export import :game;
 export import :entityBodies;

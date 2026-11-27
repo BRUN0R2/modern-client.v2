@@ -25,7 +25,7 @@ using cs::TextureMaterials;
 /// The repository's data/cstrike/footsteps.toml, read.
 [[nodiscard]] auto repositoryRules() -> FootstepRules {
     const std::filesystem::path file =
-        std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "footsteps.toml";
+        nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "footsteps.toml";
     auto text = nx::platform::readTextFile(file);
     EXPECT_TRUE(text.has_value());
     auto rules = cs::readFootstepRules(text.value_or(std::string{}), "footsteps.toml");

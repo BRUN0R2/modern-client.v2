@@ -28,7 +28,8 @@ using nx::game::Trigger;
 using nx::game::Waves;
 
 [[nodiscard]] auto repositoryClasses() -> EntityClasses {
-    const std::filesystem::path file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "entities.toml";
+    const std::filesystem::path file =
+        nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "cstrike" / "entities.toml";
     auto text = nx::platform::readTextFile(file);
     EXPECT_TRUE(text.has_value());
     auto classes = nx::game::readEntityClasses(text.value_or(""), "entities.toml");

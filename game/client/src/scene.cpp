@@ -258,7 +258,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     // Prepared: what the world's view may show is what the frame poses and draws.
     const ModelFrame modelFrame{
         .world = m_world, .light = m_light, .sky = level.skyLight(), .styles = styles, .jobs = view.jobs};
-    level.models().pose(m_models, view.time, view.hostages, modelFrame, posedMapModels);
+    level.models().pose(m_models, view.time, view.hostages, modelFrame, posedMapModels, view.props);
     level.players().pose(m_playerModels, view.players, modelFrame, posedPlayers);
     entityModels.pose(level.entityCatalog(), view.entities, modelFrame, posedEntities);
     posedInstances.clear();
@@ -311,7 +311,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                                                      .angles = {.roll = entity.roll},
                                                      .frame = entity.frame,
                                                      .scale = entity.scale,
-                                                     .mode = nx::render::RenderMode::TransTexture,
+                                                     .mode = entity.mode,
                                                      .amount = entity.amount,
                                                      .color = entity.color});
     }
