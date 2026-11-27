@@ -131,7 +131,7 @@ struct WeaponPurchase {
 
 /// The ammo a weapon fires, and how much of it its clip holds.
 struct WeaponMagazine {
-    std::string ammo{}; ///< The id of an AmmoType.
+    std::string ammo{};       ///< The id of an AmmoType.
     std::uint32_t clipSize{}; ///< 0 for none: a grenade, its count the rounds of its ammo carried.
 };
 
@@ -1088,7 +1088,8 @@ struct nx::meta::Description<cs::WeaponThrow> {
         nx::meta::field<&cs::WeaponThrow::pinSequence>("pinSequence"),
         nx::meta::field<&cs::WeaponThrow::throwSequence>("throwSequence"),
         nx::meta::field<&cs::WeaponThrow::gravity>("gravity", nx::data::Range{.minimum = 0.0}),
-        nx::meta::field<&cs::WeaponThrow::friction>("friction", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::WeaponThrow::friction>("friction",
+                                                    nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::WeaponThrow::damage>("damage", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::WeaponThrow::radius>("radius", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::WeaponThrow::bounceSound>("bounceSound"),

@@ -10,6 +10,7 @@ import std;
 import nx.core;
 import nx.assets;
 import nx.ui;
+import cs.shared;
 import cs.client;
 
 #include "squareFont.hpp"

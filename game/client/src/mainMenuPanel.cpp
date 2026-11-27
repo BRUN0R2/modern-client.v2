@@ -412,7 +412,8 @@ void paintOptions(std::vector<nx::render::ScreenQuad>& quads, nx::ui::PanelPaint
                          kControlBg);
         }
         // The tabs take the keys while no row is selected.
-        writeInMiddle(painter, rowFace, texts.options.*kTabTexts[tab], rect, isShown ? kBrightText : kDimText);
+        writeInMiddle(painter, rowFace, texts.options.*kTabTexts[tab], rect,
+                      isShown ? kBrightText : kDimText);
     }
 
     const auto top = layout.listRow(0);
@@ -496,7 +497,8 @@ void paintNewGame(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
     };
     // The original's list: a recessed pane, the row selected in the selection's color.
     const nx::ui::PixelRect last = layout.listRow(layout.listRows() - 1);
-    const nx::ui::PixelRect list{.x = top.x, .y = top.y, .wide = top.wide, .tall = last.y + last.tall - top.y};
+    const nx::ui::PixelRect list{
+        .x = top.x, .y = top.y, .wide = top.wide, .tall = last.y + last.tall - top.y};
     painter.fill(list, kWindowBg);
     paintBevel(painter, list, true);
     if (page.rows.empty()) {
@@ -549,8 +551,8 @@ void paintItemRow(nx::ui::PanelPainter& painter, const MainMenuLayout& layout, c
         // faint copies of the text all about it.
         const nx::Pixels reach = layout.pixels(kItemGlowReach);
         for (const auto [across, down] : kItemGlowDirections) {
-            std::ignore = painter.text(face, text, {.x = rect.x + (across * reach), .y = top + (down * reach)},
-                                       kItemGlow);
+            std::ignore = painter.text(
+                face, text, {.x = rect.x + (across * reach), .y = top + (down * reach)}, kItemGlow);
         }
     }
     std::ignore = painter.text(face, text, {.x = rect.x + shadow, .y = top + shadow}, kItemShadow);
@@ -618,7 +620,8 @@ void paintMenu(std::vector<nx::render::ScreenQuad>& quads, nx::ui::PanelPainter&
     }
     auto picture = nx::assets::readTga(*bytes);
     if (!picture) {
-        nx::log::warning(kLog, "the original logo {:?} is no picture: {}", path, nx::describe(picture.error()));
+        nx::log::warning(kLog, "the original logo {:?} is no picture: {}", path,
+                         nx::describe(picture.error()));
         return std::nullopt;
     }
     return std::move(*picture);
@@ -686,7 +689,8 @@ auto MainMenuPanel::load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
                                                       kFontSizes[font], screenHeight, "mainMenu")
                                        : nx::fail(MenuPanelError::NoFont, std::string{"no original font"});
         if (!face && face.error().code == MenuPanelError::NoFont) {
-            face = makeMenuFace(fonts, screen, commands, look->font, kFontSizes[font], screenHeight, "mainMenu");
+            face =
+                makeMenuFace(fonts, screen, commands, look->font, kFontSizes[font], screenHeight, "mainMenu");
         }
         if (!face) {
             return std::unexpected{std::move(face.error())};
@@ -700,18 +704,17 @@ auto MainMenuPanel::load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
 void MainMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const MainMenuFrame& frame,
                            nx::rhi::Extent2d size) {
     nx::expects(isLoadedFor(size.height), "MainMenuPanel::append: its fonts loaded for the screen");
-    shown.append(quads, Shown{.frame = frame, .size = size},
-                 [&](std::vector<nx::render::ScreenQuad>& laidOut) {
-                     const MainMenuLayout layout{size, frame.items.size()};
-                     if (frame.game == MenuGame::Played) {
-                         nx::ui::PanelPainter{laidOut, size}.fill(layout.screen(), kMenuBackdrop);
-                     } else {
-                         appendGround(laidOut, size);
-                     }
-                     nx::ui::PanelPainter painter{laidOut, size};
-                     paintMenu(laidOut, painter, layout, textFaces(), *texts, frame, size, *logo,
-                               isOriginalLogo);
-                 });
+    shown.append(
+        quads, Shown{.frame = frame, .size = size}, [&](std::vector<nx::render::ScreenQuad>& laidOut) {
+            const MainMenuLayout layout{size, frame.items.size()};
+            if (frame.game == MenuGame::Played) {
+                nx::ui::PanelPainter{laidOut, size}.fill(layout.screen(), kMenuBackdrop);
+            } else {
+                appendGround(laidOut, size);
+            }
+            nx::ui::PanelPainter painter{laidOut, size};
+            paintMenu(laidOut, painter, layout, textFaces(), *texts, frame, size, *logo, isOriginalLogo);
+        });
 }
 
 void MainMenuPanel::appendLoading(std::vector<nx::render::ScreenQuad>& quads, std::string_view map,
@@ -747,11 +750,11 @@ void MainMenuPanel::appendGround(std::vector<nx::render::ScreenQuad>& quads, nx:
     nx::ui::PanelPainter{quads, size}.fill(whole, kGround);
     if (background) {
         // Stretched over the screen whole, as the original's.
-        quads.push_back({.image = &*background,
-                         .source = {.width = background->width(), .height = background->height()},
-                         .target = {.width = static_cast<float>(size.width),
-                                    .height = static_cast<float>(size.height)},
-                         .filter = nx::render::ScreenFilter::Linear});
+        quads.push_back(
+            {.image = &*background,
+             .source = {.width = background->width(), .height = background->height()},
+             .target = {.width = static_cast<float>(size.width), .height = static_cast<float>(size.height)},
+             .filter = nx::render::ScreenFilter::Linear});
     }
 }
 

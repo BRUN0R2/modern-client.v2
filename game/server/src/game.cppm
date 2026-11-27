@@ -168,14 +168,14 @@ public:
     /// weapons and its body are gone, and its slot is free for the next player to join; then the round's
     /// end is weighed (checkWinConditions). `player` is in the game.
     void leave(PlayerIndex player);
-    /// `player`, in the game, chooses `team` on the team menu (HandleMenu_ChooseTeam): refused when that team,
-    /// another than its own, has as many players as spawn points (TeamFull) or more than mp_limitteams more
-    /// than the other's (TeamStacked), or when the player is dead and changed teams this round already. A
-    /// player that had not chosen yet (it joined in a team until it does) moves to it, spawning there when it
-    /// may (canSpawn), else watching, as a joining player; one that had, alive, dies (Kill: a death, a frag
-    /// less) and plays for it from the next round, having changed teams this round. Either way it plays as
-    /// one of the team's characters drawn at random until it chooses one (chooseCharacter).
-    /// Errors: every TeamRefusal.
+    /// `player`, in the game, chooses `team` on the team menu (HandleMenu_ChooseTeam): refused when that
+    /// team, another than its own, has as many players as spawn points (TeamFull) or more than mp_limitteams
+    /// more than the other's (TeamStacked), or when the player is dead and changed teams this round already.
+    /// A player that had not chosen yet (it joined in a team until it does) moves to it, spawning there when
+    /// it may (canSpawn), else watching, as a joining player; one that had, alive, dies (Kill: a death, a
+    /// frag less) and plays for it from the next round, having changed teams this round. Either way it plays
+    /// as one of the team's characters drawn at random until it chooses one (chooseCharacter). Errors: every
+    /// TeamRefusal.
     [[nodiscard]] auto chooseTeam(PlayerIndex player, Team team) -> nx::Result<void, TeamRefusal>;
     /// `player`, in the game, chooses its team's character `slot` (from 1) on the appearance menu
     /// (HandleMenu_ChooseAppearance); one of them at random for a slot of none.

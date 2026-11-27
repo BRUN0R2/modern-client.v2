@@ -74,8 +74,8 @@ auto followRound(const Shot& shot, const WeaponTracer& tracer, const HitMaterial
     std::vector<BulletHit> hits;
     if (round.isPellet) {
         // FireBullets' buckshot: one trace, its damage by how far it went of the reach, through nothing.
-        const WeaponHit met =
-            tracer(nx::collision::Hull::Point, shot.origin, shot.origin + (shot.direction * shot.reach.value()));
+        const WeaponHit met = tracer(nx::collision::Hull::Point, shot.origin,
+                                     shot.origin + (shot.direction * shot.reach.value()));
         if (met.trace.fraction < 1.0F) {
             const float dealt = (1.0F - met.trace.fraction) * round.damage.value();
             hits.push_back(BulletHit{.entity = met.entity,

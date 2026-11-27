@@ -125,7 +125,8 @@ auto Game::chooseTeam(PlayerIndex index, Team team) -> nx::Result<void, TeamRefu
         if (counts[team].players() >= m_state.map.spawnPoints(team).size()) {
             return nx::fail(TeamRefusal::TeamFull);
         }
-        // TeamStacked, the player leaving the other team: one more than the other's, less itself, and the limit.
+        // TeamStacked, the player leaving the other team: one more than the other's, less itself, and the
+        // limit.
         const std::uint32_t limit = m_state.cvars.teamsLimit();
         if (limit != 0 && counts[team].players() + 1 > counts[other].players() + limit - 1) {
             return nx::fail(TeamRefusal::TeamStacked);
@@ -153,7 +154,7 @@ auto Game::chooseTeam(PlayerIndex index, Team team) -> nx::Result<void, TeamRefu
         }
     } else {
         if (isAlive) {
-            player.team = left; // killed as the team it played for, before the change
+            player.team = left;                     // killed as the team it played for, before the change
             player.status.health = nx::HitPoints{}; // Kill: no health left, then Killed
             die(m_state, player, &player);
             player.team = team;

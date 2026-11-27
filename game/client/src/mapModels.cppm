@@ -119,7 +119,7 @@ private:
     /// By HostageSpawn::spawn; none where the model could not be read.
     std::vector<std::optional<Entity>> hostagesBySpawn;
     /// By ShownProp::prop; none where there is none, or its model could not be read.
-    std::vector<std::optional<Entity>> m_props;
+    std::vector<std::optional<Entity>> propEntities;
     std::vector<std::string> m_missing;
 };
 

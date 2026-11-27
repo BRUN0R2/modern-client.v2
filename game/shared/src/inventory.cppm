@@ -66,8 +66,8 @@ struct OwnedWeapon {
     std::uint32_t followUpsLeft{}; ///< The rounds its last shot still fires, one a frame.
     /// Until the next of them fires, by its delay (m_flFamasShoot), counted down to -0.001 second.
     nx::Seconds nextFollowUp{};
-    float followUpSpread{}; ///< How much its last shot strayed, its follow-ups' too (m_fBurstSpread).
-    bool firesLeft{};       ///< Its left hand fires next (WPNSTATE_ELITE_LEFT).
+    float followUpSpread{};     ///< How much its last shot strayed, its follow-ups' too (m_fBurstSpread).
+    bool firesLeft{};           ///< Its left hand fires next (WPNSTATE_ELITE_LEFT).
     std::uint32_t zoomLevel{};  ///< Of its sights' fovs, from 1; 0 out of them (m_iFOV).
     std::uint32_t resumeZoom{}; ///< The level a shot took it out of, to look through again (m_iLastZoom).
     bool isPinPulled{}; ///< A grenade whose pin is pulled, thrown once `+attack` goes up (m_flStartThrow).
@@ -325,9 +325,9 @@ private:
     /// Until the weapon held does anything (the player's m_flNextAttack), counted down to -0.001
     /// second.
     nx::Seconds m_nextAttack{};
-    bool m_isReloading = false;      ///< (m_fInReload)
+    bool m_isReloading = false; ///< (m_fInReload)
     /// Of a reload a shell at a time (m_fInSpecialReload): none, started, or a shell's sequence playing.
-    std::uint32_t m_shellReload = 0;
+    std::uint32_t shellReloadState = 0;
     std::vector<SoundMade> m_sounds; ///< Made since takeSounds.
 };
 

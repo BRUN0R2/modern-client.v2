@@ -59,11 +59,12 @@ struct ScoreTeam {
     [[nodiscard]] inline auto operator==(const ScoreTeam&) const noexcept -> bool = default;
 };
 
-/// The teams of `rows` as the board lists them, side by side: the counter-terrorists on the left, the
-/// terrorists on the right, either of no player too; each team's players from the most frags, of as many the
-/// fewest deaths, of as many by their slots.
+/// The teams of `rows` as the board lists them, side by side: the local player's team, `ownTeam`, on the
+/// left, its opponent on the right, either of no player too, whatever their wins; each team's players from
+/// the most frags, of as many the fewest deaths, of as many by their slots.
 [[nodiscard]] auto scoreTeamsOf(std::span<const ScoreRow> rows,
-                                const nx::EnumArray<Team, std::uint32_t>& wins) -> std::vector<ScoreTeam>;
+                                const nx::EnumArray<Team, std::uint32_t>& wins,
+                                Team ownTeam = Team::CounterTerrorists) -> std::vector<ScoreTeam>;
 
 /// `text` cut so that it is at most `wide` in `atlas`, "..." ending it when cut; whole UTF-8 characters.
 [[nodiscard]] auto elidedTo(const nx::ui::GlyphAtlas& atlas, std::string_view text, nx::Pixels wide)
@@ -76,6 +77,7 @@ struct ScoreboardView {
     std::string_view map{};
     std::span<const ScoreRow> rows{};
     PlayerIndex self{};
+    Team ownTeam = Team::CounterTerrorists; ///< The local player's, on the left.
     nx::EnumArray<Team, std::uint32_t> wins{};
     const ScoreboardTexts* texts = nullptr;
 };
@@ -121,6 +123,7 @@ private:
         std::string map{};
         std::vector<ScoreRow> rows{};
         PlayerIndex self{};
+        Team ownTeam{};
         nx::EnumArray<Team, std::uint32_t> wins{};
         ScoreboardTexts texts{};
         nx::rhi::Extent2d size{};
@@ -140,8 +143,8 @@ private:
 
     Atlases atlases;
     nx::EnumArray<ScoreboardFont, std::optional<nx::render::ScreenImage>> images; ///< Once loaded.
-    Emblems emblems;                                                          ///< None unread.
-    nx::EnumArray<Team, std::optional<nx::render::ScreenImage>> emblemImages; ///< Once loaded.
+    Emblems emblems;                                                              ///< None unread.
+    nx::EnumArray<Team, std::optional<nx::render::ScreenImage>> emblemImages;     ///< Once loaded.
     nx::render::RetainedQuads<Shown> shown;
 };
 

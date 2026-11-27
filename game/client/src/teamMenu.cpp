@@ -70,7 +70,8 @@ TeamMenuLayout::TeamMenuLayout(nx::rhi::Extent2d size) noexcept : scale{size.hei
 
 auto TeamMenuLayout::rule() const noexcept -> nx::ui::PixelRect {
     const nx::Pixels tall = pixels(kRuleTallUnits);
-    return {.x = headerRect.x, .y = headerRect.y + headerRect.tall - tall, .wide = headerRect.wide, .tall = tall};
+    return {
+        .x = headerRect.x, .y = headerRect.y + headerRect.tall - tall, .wide = headerRect.wide, .tall = tall};
 }
 
 auto TeamMenuLayout::row(std::size_t index) const noexcept -> nx::ui::PixelRect {

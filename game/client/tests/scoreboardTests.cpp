@@ -45,6 +45,11 @@ TEST(ScoreTeamsTest, TheCounterTerroristsGoLeftTheTerroristsRightWhateverTheirWi
     wins[cs::Team::Terrorists] = 7;
     wins[cs::Team::CounterTerrorists] = 2;
     const std::vector<cs::ScoreTeam> teams = cs::scoreTeamsOf(rows, wins);
+    // A terrorist's board has its own team on the left, whatever the wins (#375).
+    const std::vector<cs::ScoreTeam> terrorists = cs::scoreTeamsOf(rows, wins, cs::Team::Terrorists);
+    ASSERT_EQ(terrorists.size(), 2U);
+    EXPECT_EQ(terrorists[0].team, cs::Team::Terrorists);
+    EXPECT_EQ(terrorists[1].team, cs::Team::CounterTerrorists);
     ASSERT_EQ(teams.size(), 2U) << "a team of no player is listed too";
     EXPECT_EQ(teams[0].team, cs::Team::CounterTerrorists);
     EXPECT_EQ(teams[0].wins, 2U);

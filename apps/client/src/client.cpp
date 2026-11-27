@@ -143,7 +143,8 @@ void look(nx::EulerAngles& view, const nx::platform::MouseMoved& moved, const nx
           std::optional<std::uint32_t> fov = std::nullopt) {
     float sensitivity = mouse.sensitivity.value();
     if (fov) {
-        sensitivity *= static_cast<float>(*fov) / nx::render::kDefaultFieldOfView.value() * kZoomSensitivityRatio;
+        sensitivity *=
+            static_cast<float>(*fov) / nx::render::kDefaultFieldOfView.value() * kZoomSensitivityRatio;
     }
     view.yaw = nx::normalizeAngle(view.yaw - nx::Degrees{moved.dx * sensitivity * mouse.yaw.value()});
     view.pitch = nx::Degrees{std::clamp(view.pitch.value() + (moved.dy * sensitivity * mouse.pitch.value()),
@@ -319,7 +320,7 @@ private:
     std::optional<ClientMainMenu> mainMenu; ///< Made with the game's content and the texts.
     std::optional<ClientTeamMenu> teamMenu; ///< Made with the game's content and the texts.
     cs::SniperScope sniperScope;            ///< Its pictures read as the first map is played.
-    std::vector<cs::ShownProp> m_props;     ///< The grenades the frame shows.
+    std::vector<cs::ShownProp> shownProps;  ///< The grenades the frame shows.
     /// A flash's blinding: since when, how long it holds, how long it fades, how white (UTIL_ScreenFade).
     struct Flash {
         nx::Seconds start{};
@@ -536,7 +537,8 @@ void Client::handleInTeamMenu(const nx::platform::WindowEvent& event) {
     if (!size) {
         return;
     }
-    const cs::TeamMenuEffect effect = teamMenu->handle(event, m_video->window.mousePosition(), extentOf(*size));
+    const cs::TeamMenuEffect effect =
+        teamMenu->handle(event, m_video->window.mousePosition(), extentOf(*size));
     const MenuFeedback feedback = effect == cs::TeamMenuEffect::Click      ? MenuFeedback::Click
                                   : effect == cs::TeamMenuEffect::Rollover ? MenuFeedback::Rollover
                                                                            : MenuFeedback::None;
@@ -672,9 +674,8 @@ auto Client::mouseModeNeeded() const -> nx::platform::MouseMode {
     if (!m_isFocused) {
         return MouseMode::Absolute;
     }
-    const bool hasOpenUi =
-        mainMenu->isOpen() || buyMenu->isOpen() || teamMenu->isOpen() ||
-        (m_consoleWindow != nullptr && m_consoleWindow->isOpen());
+    const bool hasOpenUi = mainMenu->isOpen() || buyMenu->isOpen() || teamMenu->isOpen() ||
+                           (m_consoleWindow != nullptr && m_consoleWindow->isOpen());
     if (mapChange.played() != nullptr && !hasOpenUi) {
         return MouseMode::Relative;
     }
@@ -1191,9 +1192,9 @@ auto Client::sessionView() -> cs::SceneView {
     Session& session = *mapChange.played();
     session.client.writePlacements(m_placements);
     session.client.writeHostages(m_hostages);
-    m_props.clear();
+    shownProps.clear();
     for (const cs::ShownGrenade& grenade : session.client.grenades()) {
-        m_props.push_back(cs::ShownProp{.prop = grenade.weapon.value, .origin = grenade.origin});
+        shownProps.push_back(cs::ShownProp{.prop = grenade.weapon.value, .origin = grenade.origin});
     }
     session.client.writeCorpses(m_content->entities, settings->corpses.stayTime(), m_jobs.get(),
                                 shownEntities);
@@ -1203,7 +1204,7 @@ auto Client::sessionView() -> cs::SceneView {
             .lightStyles = session.client.lightStylesAt(time),
             .placements = m_placements,
             .hostages = m_hostages,
-            .props = m_props,
+            .props = shownProps,
             .players = m_players,
             .entities = shownEntities,
             .crowd = session.client.crowd(),
@@ -1284,8 +1285,9 @@ void Client::appendFlash(nx::rhi::Extent2d size) {
     }
     const auto alpha = static_cast<std::uint8_t>(static_cast<float>(flash->blinding.alpha) * share);
     nx::ui::PanelPainter{m_screenQuads, size}.fill(
-        {.wide = nx::Pixels{nx::narrow<std::int32_t>(size.width)}, .tall = nx::Pixels{nx::narrow<std::int32_t>(size.height)}},
-        nx::render::ScreenColor{.red = 255, .green = 255, .blue = 255, .alpha = alpha});
+        {.wide = nx::Pixels{nx::narrow<std::int32_t>(size.width)},
+         .tall = nx::Pixels{nx::narrow<std::int32_t>(size.height)}},
+        nx::render::ScreenColor{.alpha = alpha}); // white: the color's own red, green and blue
 }
 
 void Client::appendMenuCursor(nx::rhi::Extent2d size) {

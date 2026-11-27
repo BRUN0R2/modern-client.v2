@@ -350,6 +350,9 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsWeapons) {
 TEST(WeaponsTest, TheRepositoryHasTheOriginalsPistolsSubmachineGunsGalilAndM249) {
     const std::optional<WeaponCatalog> catalog = repositoryCatalog();
     ASSERT_TRUE(catalog.has_value());
+    if (!catalog) {
+        return; // as the assertion does
+    }
     // weapontype.h's MaxAmmoType, AmmoCostType and AmmoBuyAmount; FireBullets3's bullet types.
     for (const auto& [id, most, price, rounds, power, distance] :
          {std::tuple{"357SIG", 52U, 50, 13U, 25U, 800.0F}, std::tuple{"50AE", 35U, 40, 7U, 30U, 1000.0F},
@@ -377,23 +380,26 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsPistolsSubmachineGunsGalilAndM249)
         float damage;
     };
     for (const Expected& expected : {
-             Expected{"p228", "p228", WeaponSlot::Secondary, 3, 5, 250.0F, Buyers::Everyone, 600, "357SIG", 13, 32.0F},
-             Expected{"deagle", "deagle", WeaponSlot::Secondary, 1, 7, 250.0F, Buyers::Everyone, 650, "50AE", 7,
-                      54.0F},
-             Expected{"fiveseven", "fiveseven", WeaponSlot::Secondary, 6, 5, 250.0F, Buyers::CounterTerrorists, 750,
-                      "57mm", 20, 20.0F},
-             Expected{"mac10", "mac10", WeaponSlot::Primary, 13, 25, 250.0F, Buyers::Terrorists, 1400, "45ACP", 30,
-                      29.0F},
-             Expected{"tmp", "tmp", WeaponSlot::Primary, 11, 25, 250.0F, Buyers::CounterTerrorists, 1250, "9mm", 30,
-                      20.0F},
-             Expected{"mp5navy", "mp5", WeaponSlot::Primary, 7, 25, 250.0F, Buyers::Everyone, 1500, "9mm", 30, 26.0F},
-             Expected{"ump45", "ump45", WeaponSlot::Primary, 15, 25, 250.0F, Buyers::Everyone, 1700, "45ACP", 25,
-                      30.0F},
-             Expected{"p90", "p90", WeaponSlot::Primary, 8, 26, 245.0F, Buyers::Everyone, 2350, "57mm", 50, 21.0F},
-             Expected{"galil", "galil", WeaponSlot::Primary, 17, 25, 240.0F, Buyers::Terrorists, 2000, "556Nato", 35,
-                      30.0F},
-             Expected{"m249", "m249", WeaponSlot::Primary, 4, 25, 220.0F, Buyers::Everyone, 5750, "556NatoBox", 100,
-                      32.0F},
+             Expected{"p228", "p228", WeaponSlot::Secondary, 3, 5, 250.0F, Buyers::Everyone, 600, "357SIG",
+                      13, 32.0F},
+             Expected{"deagle", "deagle", WeaponSlot::Secondary, 1, 7, 250.0F, Buyers::Everyone, 650, "50AE",
+                      7, 54.0F},
+             Expected{"fiveseven", "fiveseven", WeaponSlot::Secondary, 6, 5, 250.0F,
+                      Buyers::CounterTerrorists, 750, "57mm", 20, 20.0F},
+             Expected{"mac10", "mac10", WeaponSlot::Primary, 13, 25, 250.0F, Buyers::Terrorists, 1400,
+                      "45ACP", 30, 29.0F},
+             Expected{"tmp", "tmp", WeaponSlot::Primary, 11, 25, 250.0F, Buyers::CounterTerrorists, 1250,
+                      "9mm", 30, 20.0F},
+             Expected{"mp5navy", "mp5", WeaponSlot::Primary, 7, 25, 250.0F, Buyers::Everyone, 1500, "9mm", 30,
+                      26.0F},
+             Expected{"ump45", "ump45", WeaponSlot::Primary, 15, 25, 250.0F, Buyers::Everyone, 1700, "45ACP",
+                      25, 30.0F},
+             Expected{"p90", "p90", WeaponSlot::Primary, 8, 26, 245.0F, Buyers::Everyone, 2350, "57mm", 50,
+                      21.0F},
+             Expected{"galil", "galil", WeaponSlot::Primary, 17, 25, 240.0F, Buyers::Terrorists, 2000,
+                      "556Nato", 35, 30.0F},
+             Expected{"m249", "m249", WeaponSlot::Primary, 4, 25, 220.0F, Buyers::Everyone, 5750,
+                      "556NatoBox", 100, 32.0F},
          }) {
         const Weapon* const weapon = catalog->findWeapon(expected.id);
         ASSERT_NE(weapon, nullptr) << expected.id;

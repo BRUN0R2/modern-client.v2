@@ -52,9 +52,9 @@ public:
     [[nodiscard]] auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition mouse,
                               nx::rhi::Extent2d size) -> cs::TeamMenuEffect;
 
-    /// Puts what draws it on the GPU in `list` with `screen`, its faces from `fonts` at `screenHeight` and its
-    /// pictures from `vfs`, while it is open. One that cannot be loaded is logged, and the menu goes without
-    /// what draws it.
+    /// Puts what draws it on the GPU in `list` with `screen`, its faces from `fonts` at `screenHeight` and
+    /// its pictures from `vfs`, while it is open. One that cannot be loaded is logged, and the menu goes
+    /// without what draws it.
     void load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs, nx::render::ScreenRenderer& screen,
               nx::rhi::CommandList& list, std::uint32_t screenHeight);
     /// While it is open over a map played: the menu, over the HUD.

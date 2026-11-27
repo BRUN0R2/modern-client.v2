@@ -20,8 +20,8 @@ export namespace cs {
 /// on their teammates: `mp_freezetime` (6 seconds), `mp_roundtime` (5 minutes), `mp_startmoney` (800),
 /// `sv_restartround` and `sv_restart` (0: the seconds to restart the game in), `mp_footsteps` (1: the
 /// players' steps sound, any value but 0), `mp_friendlyfire` (0: a player's attacks hurt no teammate, any
-/// value but 0 that they do), `mp_buytime` (1.5: the minutes a round's players buy for), and `mp_limitteams` (2: how
-/// many players more than the other's a team may have as a player joins it, 0 for no limit).
+/// value but 0 that they do), `mp_buytime` (1.5: the minutes a round's players buy for), and `mp_limitteams`
+/// (2: how many players more than the other's a team may have as a player joins it, 0 for no limit).
 struct GameCvars {
     nx::console::Cvar<float> freezeTime;
     nx::console::Cvar<float> roundTime;

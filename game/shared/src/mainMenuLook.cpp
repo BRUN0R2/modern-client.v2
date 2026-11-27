@@ -26,10 +26,10 @@ auto readMainMenuLook(std::string_view text, std::string_view sourceName)
         !isNeverEmpty) {
         return nx::fail(
             MainMenuLookError::DataInvalid,
-            std::format(
-                "{}: both font families (and both original ones, and the original logo, when given), a background, and items of which none does what another does "
-                "and one at least is always listed, are required",
-                sourceName));
+            std::format("{}: both font families (and both original ones, and the original logo, when given), "
+                        "a background, and items of which none does what another does "
+                        "and one at least is always listed, are required",
+                        sourceName));
     }
     return std::move(*look);
 }

@@ -127,8 +127,8 @@ void showEffects(Session& session, const cs::Scene& scene, const cs::GameContent
         if (blast.kind == cs::GrenadeKind::Explosive) {
             const std::string_view path = cs::pathOf(cs::TempSprite::Explosion, content.blood.sprayLook);
             const std::optional<std::uint32_t> index = level.bloodSprites().indexOf(path);
-            session.effects.blowUp(blast.position, index ? level.bloodSprites().frameCountOf(*index) : std::nullopt,
-                                   now);
+            session.effects.blowUp(blast.position,
+                                   index ? level.bloodSprites().frameCountOf(*index) : std::nullopt, now);
         } else if (blast.kind == cs::GrenadeKind::Smoke) {
             session.effects.smokeUp(blast.position, now);
         }

@@ -64,8 +64,9 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
         server("mp_friendlyfire", 0.0F, "Whether a player's attacks hurt its teammates: any value but 0.");
     auto buyTime = server("mp_buytime", kDefaultBuyTime.count(),
                           "The minutes each round's players buy for after its freeze: at least 0.25.");
-    auto limitTeams = server("mp_limitteams", kDefaultTeamsLimit,
-                             "How many players more than the other's a team may have: 0 to 20, 0 for no limit.");
+    auto limitTeams =
+        server("mp_limitteams", kDefaultTeamsLimit,
+               "How many players more than the other's a team may have: 0 to 20, 0 for no limit.");
     for (auto* const registered : {&freezeTime, &roundTime, &startMoney, &restartRound, &restart, &footsteps,
                                    &friendlyFire, &buyTime, &limitTeams}) {
         if (!*registered) {

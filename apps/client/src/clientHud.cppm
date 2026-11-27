@@ -24,7 +24,7 @@ struct HudFrame {
     const Session& session;
     const cs::GameContent& content;
     const ClientSettings& settings;
-    const cs::Texts& texts; ///< In the player's language.
+    const cs::Texts& texts;  ///< In the player's language.
     nx::render::Camera view; ///< The player's, turned by the kick its weapon gave it.
     nx::Seconds now;         ///< Since the map started.
     nx::rhi::Extent2d size;  ///< Of the screen.

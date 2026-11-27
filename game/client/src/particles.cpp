@@ -153,11 +153,11 @@ void Particles::traceBullet(const BulletTracer& shot, PlayerIndex viewer, nx::Se
     }
     const bool isViewers = shot.shooter == viewer;
     const auto view = isViewers ? std::optional{shot.animation} : std::nullopt;
-    streaks.push_back(
-        Streak{.origin = shot.origin,
-               .color = {.red = shot.color.red, .green = shot.color.green, .blue = shot.color.blue},
-               .goesAt = now + kBulletTracerLife,
-               .tracer = TracerPath{.end = shot.end, .view = view, .muzzle = isViewers ? muzzle : std::nullopt}});
+    streaks.push_back(Streak{
+        .origin = shot.origin,
+        .color = {.red = shot.color.red, .green = shot.color.green, .blue = shot.color.blue},
+        .goesAt = now + kBulletTracerLife,
+        .tracer = TracerPath{.end = shot.end, .view = view, .muzzle = isViewers ? muzzle : std::nullopt}});
 }
 
 void Particles::clearBulletTracers() {

@@ -140,9 +140,13 @@ public:
         return std::exchange(grenadeBlasts, {});
     }
     /// How a flash blinded the player since the last call, the last that did; none.
-    [[nodiscard]] inline auto takeBlinding() -> std::optional<Blinding> { return std::exchange(blinding, {}); }
+    [[nodiscard]] inline auto takeBlinding() -> std::optional<Blinding> {
+        return std::exchange(blinding, {});
+    }
     /// The grenades flying or lying, where the last tick left them.
-    [[nodiscard]] inline auto grenades() const noexcept -> std::span<const ShownGrenade> { return m_last.grenades; }
+    [[nodiscard]] inline auto grenades() const noexcept -> std::span<const ShownGrenade> {
+        return m_last.grenades;
+    }
     /// The shot paths received since the last call, in the order they were fired.
     [[nodiscard]] inline auto takeBulletTracers() -> std::vector<BulletTracer> {
         return std::exchange(bulletTracers, {});

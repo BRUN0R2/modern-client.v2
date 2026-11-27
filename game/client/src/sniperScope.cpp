@@ -51,7 +51,8 @@ void SniperScope::append(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Ex
     const float middle = wide / 2.0F;
     const float left = middle - side;
     // Each quarter in its corner of a square as tall as the screen, in its middle.
-    const std::array<std::array<float, 2>, 4> corners{{{left, 0.0F}, {middle, 0.0F}, {left, side}, {middle, side}}};
+    const std::array<std::array<float, 2>, 4> corners{
+        {{left, 0.0F}, {middle, 0.0F}, {left, side}, {middle, side}}};
     for (const auto& [quarter, corner] : std::views::zip(quarters, corners)) {
         if (!quarter) {
             continue;

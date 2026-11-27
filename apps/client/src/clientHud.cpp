@@ -40,7 +40,8 @@ void ClientHud::open(const cs::WindowFonts& fonts, nx::ui::FontCatalog& catalog,
     } else {
         nx::log::warning(kLog, "the kill feed shows nothing: {}", nx::describe(feed.error()));
     }
-    if (auto board = cs::Scoreboard::open(catalog, content.mainMenu.font, screenHeight, pictureFolders); board) {
+    if (auto board = cs::Scoreboard::open(catalog, content.mainMenu.font, screenHeight, pictureFolders);
+        board) {
         scoreboard.emplace(std::move(*board));
     } else {
         nx::log::warning(kLog, "the scoreboard shows nothing: {}", nx::describe(board.error()));
@@ -169,6 +170,7 @@ void ClientHud::appendPanels(std::vector<nx::render::ScreenQuad>& quads, const H
                             .map = frame.session.map->name(),
                             .rows = client.scores(),
                             .self = client.self(),
+                            .ownTeam = client.team(),
                             .wins = client.teamWins(),
                             .texts = &frame.texts.scoreboard},
                            frame.size);

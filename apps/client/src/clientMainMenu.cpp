@@ -62,8 +62,7 @@ constexpr char kQuote = '"';
         return std::tuple{frame.selected, row, value};
     };
     const auto armed = armedOf(after);
-    const bool isSomethingArmed =
-        std::get<0>(armed) || std::get<1>(armed) || std::get<2>(armed);
+    const bool isSomethingArmed = std::get<0>(armed) || std::get<1>(armed) || std::get<2>(armed);
     return isSomethingArmed && armed != armedOf(before) ? MenuFeedback::Rollover : MenuFeedback::None;
 }
 

@@ -36,10 +36,10 @@ public:
         return facesHeight == screenHeight;
     }
 
-    /// Puts on the GPU with `screen`, its uploads recorded in `commands`, the fonts for a screen `screenHeight`
-    /// pixels tall, of the look's families among `fonts`, and the pictures of `characters` and auto-select,
-    /// read from `vfs` the first time; one that cannot be read is logged, and its row drawn without it.
-    /// Errors: every MenuPanelError.
+    /// Puts on the GPU with `screen`, its uploads recorded in `commands`, the fonts for a screen
+    /// `screenHeight` pixels tall, of the look's families among `fonts`, and the pictures of `characters` and
+    /// auto-select, read from `vfs` the first time; one that cannot be read is logged, and its row drawn
+    /// without it. Errors: every MenuPanelError.
     [[nodiscard]] auto load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,
                             nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,
                             const Characters& characters, std::uint32_t screenHeight)
@@ -47,7 +47,8 @@ public:
 
     /// Appends to `quads` the menu showing `frame` on a screen of `size`, once loaded for its height, over
     /// the scene darkened: laid out again only when what it shows changes.
-    void append(std::vector<nx::render::ScreenQuad>& quads, const TeamMenuFrame& frame, nx::rhi::Extent2d size);
+    void append(std::vector<nx::render::ScreenQuad>& quads, const TeamMenuFrame& frame,
+                nx::rhi::Extent2d size);
 
 private:
     struct Shown {

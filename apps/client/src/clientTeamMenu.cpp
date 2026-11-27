@@ -69,8 +69,8 @@ auto ClientTeamMenu::actions() -> cs::TeamMenuActions {
 auto ClientTeamMenu::registerCommands(nx::console::Console& console) -> nx::Result<void, ClientError> {
     auto registered = console.registerCommand(
         {.name = "chooseteam", .description = "Opens the team menu."},
-        [this](nx::console::Console& on, const nx::console::CommandLine&)
-            -> nx::Result<void, nx::console::ConsoleError> {
+        [this](nx::console::Console& on,
+               const nx::console::CommandLine&) -> nx::Result<void, nx::console::ConsoleError> {
             const Session* const session = played();
             if (session == nullptr) {
                 on.print("Can't choose a team: no map is played");

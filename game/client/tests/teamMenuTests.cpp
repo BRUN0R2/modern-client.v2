@@ -99,9 +99,9 @@ TEST(TeamMenuTest, TheMouseSelectsAndChoosesTheRowItIsOver) {
     const nx::ui::PixelRect first = cs::TeamMenuLayout{kScreen}.row(0);
     const nx::platform::MousePosition over{.x = static_cast<float>(first.x.value() + 4),
                                            .y = static_cast<float>(first.y.value() + 4)};
-    EXPECT_EQ(menu.handle(nx::platform::MouseButtonChanged{.button = nx::platform::MouseButton::Left,
-                                                           .isDown = true},
-                          over, kScreen, frame.rows),
+    EXPECT_EQ(menu.handle(
+                  nx::platform::MouseButtonChanged{.button = nx::platform::MouseButton::Left, .isDown = true},
+                  over, kScreen, frame.rows),
               TeamMenuEffect::Click);
     EXPECT_EQ(asked.teams, (std::vector<Team>{Team::Terrorists}));
     EXPECT_EQ(press(menu, Key::Escape), TeamMenuEffect::Click) << "Escape auto-selects a character";

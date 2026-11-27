@@ -30,9 +30,10 @@ constexpr std::uint8_t kWholePicture = 255;
 constexpr std::uint8_t kRowPicture = 128;
 
 constexpr nx::EnumArray<TeamMenuFont, MenuFontSize> kFontSizes{
-    nx::EnumArray<TeamMenuFont, MenuFontSize>::Storage{MenuFontSize{.line = MenuUnits{56}, .isStrong = true},
-                                                       MenuFontSize{.line = MenuUnits{32}, .isStrong = false},
-                                                       MenuFontSize{.line = MenuUnits{16}, .isStrong = false}}};
+    nx::EnumArray<TeamMenuFont, MenuFontSize>::Storage{
+        MenuFontSize{.line = MenuUnits{56}, .isStrong = true},
+        MenuFontSize{.line = MenuUnits{32}, .isStrong = false},
+        MenuFontSize{.line = MenuUnits{16}, .isStrong = false}}};
 
 // In the design's units: what the layout leaves to what draws in it.
 constexpr MenuUnits kAccentBar{3};
@@ -57,7 +58,9 @@ public:
         : output{&quads}, painter{quads, size}, design{&layout}, textFaces{&faces}, loaded{&pictures} {}
 
     [[nodiscard]] inline auto layout() const noexcept -> const TeamMenuLayout& { return *design; }
-    [[nodiscard]] inline auto px(MenuUnits units) const noexcept -> nx::Pixels { return design->pixels(units); }
+    [[nodiscard]] inline auto px(MenuUnits units) const noexcept -> nx::Pixels {
+        return design->pixels(units);
+    }
 
     void fill(const nx::ui::PixelRect& rect, ScreenColor color) { painter.fill(rect, color); }
 
@@ -172,9 +175,9 @@ void paintRows(Paint& paint, const TeamMenuFrame& frame) {
     }
     if (!frame.refusal.empty()) {
         const nx::ui::PixelRect rect = paint.layout().refusal();
-        std::ignore = paint.write(TeamMenuFont::Title, frame.refusal, rect.x,
-                                  rect.y + ((rect.tall - paint.lineOf(TeamMenuFont::Title)) / kMiddleDivisor),
-                                  kDanger);
+        std::ignore =
+            paint.write(TeamMenuFont::Title, frame.refusal, rect.x,
+                        rect.y + ((rect.tall - paint.lineOf(TeamMenuFont::Title)) / kMiddleDivisor), kDanger);
     }
 }
 
@@ -259,20 +262,22 @@ void TeamMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const Tea
     if (!isLoadedFor(size.height)) {
         return;
     }
-    shown.append(quads, Shown{.frame = frame, .size = size}, [&](std::vector<nx::render::ScreenQuad>& laidOut) {
-        nx::ui::PanelPainter{laidOut, size}.fill({.wide = nx::Pixels{nx::narrow<std::int32_t>(size.width)},
-                                                  .tall = nx::Pixels{nx::narrow<std::int32_t>(size.height)}},
-                                                 kMenuBackdrop);
-        const TeamMenuLayout layout{size};
-        TextFaces shownFaces;
-        for (const TeamMenuFont font : TextFaces::keys()) {
-            shownFaces[font] = faces[font]->textFace();
-        }
-        Paint paint{laidOut, size, layout, shownFaces, pictures};
-        paintHeader(paint, frame);
-        paintRows(paint, frame);
-        paintDetail(paint, frame);
-    });
+    shown.append(quads, Shown{.frame = frame, .size = size},
+                 [&](std::vector<nx::render::ScreenQuad>& laidOut) {
+                     nx::ui::PanelPainter{laidOut, size}.fill(
+                         {.wide = nx::Pixels{nx::narrow<std::int32_t>(size.width)},
+                          .tall = nx::Pixels{nx::narrow<std::int32_t>(size.height)}},
+                         kMenuBackdrop);
+                     const TeamMenuLayout layout{size};
+                     TextFaces shownFaces;
+                     for (const TeamMenuFont font : TextFaces::keys()) {
+                         shownFaces[font] = faces[font]->textFace();
+                     }
+                     Paint paint{laidOut, size, layout, shownFaces, pictures};
+                     paintHeader(paint, frame);
+                     paintRows(paint, frame);
+                     paintDetail(paint, frame);
+                 });
 }
 
 } // namespace cs

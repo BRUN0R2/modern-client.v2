@@ -68,8 +68,9 @@ struct MenuFace {
 
 /// Makes the glyphs of the text of `size` for a screen `screenHeight` pixels tall, of the family of
 /// `families` it asks for among `fonts`, not yet on the GPU. Errors: NoFont, Unusable.
-[[nodiscard]] auto makeMenuAtlas(nx::ui::FontCatalog& fonts, const MenuFontFamilies& families, MenuFontSize size,
-                                 std::uint32_t screenHeight) -> nx::Result<nx::ui::GlyphAtlas, MenuPanelError>;
+[[nodiscard]] auto makeMenuAtlas(nx::ui::FontCatalog& fonts, const MenuFontFamilies& families,
+                                 MenuFontSize size, std::uint32_t screenHeight)
+    -> nx::Result<nx::ui::GlyphAtlas, MenuPanelError>;
 
 /// Makes the text of `size` for a screen `screenHeight` pixels tall, of the family of `families` it asks
 /// for among `fonts`, and puts its atlas, labelled `label`, on the GPU with `screen`, the upload recorded in

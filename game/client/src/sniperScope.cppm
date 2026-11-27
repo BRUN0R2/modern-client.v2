@@ -14,6 +14,9 @@ import nx.render;
 
 export namespace cs {
 
+/// How many pictures the scope's circle is made of: its quarters.
+inline constexpr std::size_t kScopeQuarters = 4;
+
 class SniperScope {
 public:
     /// Puts its quarters, read from `vfs`, on the GPU with `screen`, their uploads recorded in `commands`;
@@ -27,7 +30,7 @@ public:
 private:
     bool isRead = false;
     /// North-west, north-east, south-west, south-east; none for one that could not be read.
-    std::array<std::optional<nx::render::ScreenImage>, 4> quarters{};
+    std::array<std::optional<nx::render::ScreenImage>, kScopeQuarters> quarters{};
 };
 
 } // namespace cs

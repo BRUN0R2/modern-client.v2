@@ -282,7 +282,8 @@ TEST_F(GameTest, APlayerChangingTeamsAliveDiesAndDeadChangesOnceARound) {
 
 TEST_F(GameTest, ATeamFullOrStackedIsRefused) {
     std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "First");
-    const cs::PlayerIndex second = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Second");
+    const cs::PlayerIndex second =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Second");
     cvars().limitTeams.setAccepted(1.0F);
     const auto stacked = game().chooseTeam(second, cs::Team::Terrorists);
     ASSERT_FALSE(stacked.has_value());
@@ -297,11 +298,13 @@ TEST_F(GameTest, ATeamFullOrStackedIsRefused) {
 
 TEST_F(GameTest, AGrenadeDroppedAtItsThrowersFeetGoesOffAfterItsFuseHurtingWhoIsNear) {
     const cs::PlayerIndex attacker = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Attacker");
-    const cs::PlayerIndex victim = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Victim");
+    const cs::PlayerIndex victim =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Victim");
     idle(kPastTheFirstFreeze);
     const cs::WeaponIndex grenade = *content().weapons.indexOf("hegrenade");
     game().give(attacker, grenade);
-    EXPECT_EQ(game().snapshotFor(attacker).inventory.reserve("HEGrenade"), 1U) << "a grenade given is one of it";
+    EXPECT_EQ(game().snapshotFor(attacker).inventory.reserve("HEGrenade"), 1U)
+        << "a grenade given is one of it";
     standOff(attacker, victim, "hegrenade");
     // Looking straight down, it is thrown at no speed: it falls at the thrower's feet.
     const nx::EulerAngles down{.pitch = nx::Degrees{89.0F}};

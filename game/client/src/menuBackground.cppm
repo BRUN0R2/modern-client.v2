@@ -3,7 +3,8 @@
 
 /// The picture behind the main menu (docs/12-ui-hud-and-console.md, section 4): the active content's own,
 /// the pictures its background layout places (the original's resource/BackgroundLayout.txt and its
-/// resource/background/ tiles) put together into one, which the menu stretches over the screen as the original.
+/// resource/background/ tiles) put together into one, which the menu stretches over the screen as the
+/// original.
 export module cs.client:menuBackground;
 
 import std;

@@ -18,16 +18,26 @@ namespace {
 constexpr std::string_view kRandomStream = "weapons";
 constexpr std::string_view kSpreadStream = "spread";
 // A grenade's throw (the grenades' PrimaryAttack and WeaponIdle).
-constexpr nx::Seconds kPinPullTime{0.5F};       ///< The pin pulled, it is thrown no sooner.
-constexpr nx::Seconds kAfterThrow{0.5F};        ///< Until the next may be pulled.
-constexpr nx::Seconds kIdleAfterThrow{0.75F};   ///< Until it is drawn again, or put away.
-constexpr float kThrowLift = -10.0F;            ///< Degrees the throw is turned up from the view.
-constexpr float kThrowUpShare = 80.0F / 90.0F;  ///< Of a view up, the throw keeps this.
+constexpr nx::Seconds kPinPullTime{0.5F};         ///< The pin pulled, it is thrown no sooner.
+constexpr nx::Seconds kAfterThrow{0.5F};          ///< Until the next may be pulled.
+constexpr nx::Seconds kIdleAfterThrow{0.75F};     ///< Until it is drawn again, or put away.
+constexpr float kThrowLift = -10.0F;              ///< Degrees the throw is turned up from the view.
+constexpr float kThrowUpShare = 80.0F / 90.0F;    ///< Of a view up, the throw keeps this.
 constexpr float kThrowDownShare = 100.0F / 90.0F; ///< Of a view down, the throw keeps this.
 constexpr float kRightAngle = 90.0F;
-constexpr float kThrowSpeedPerDegree = 6.0F; ///< Units a second for each degree the throw is under straight down.
+constexpr float kThrowSpeedPerDegree =
+    6.0F; ///< Units a second for each degree the throw is under straight down.
 constexpr float kMostThrowSpeed = 750.0F;
 constexpr float kThrowAhead = 16.0F; ///< From the eye along the throw.
+/// The hands of a weapon in each, which fire in turn.
+constexpr std::uint32_t kHands = 2;
+/// What a draw of 0 to 1 is centered by.
+constexpr double kHalf = 0.5;
+/// A side at random: twice a draw of 0 to 1, less 1.
+constexpr float kBothSides = 2.0F;
+/// Of a reload a shell at a time (m_fInSpecialReload): started, and a shell's sequence playing.
+constexpr std::uint32_t kStartedShells = 1;
+constexpr std::uint32_t kLoadingShell = 2;
 /// The stream a shotgun's pellets stray by, of the command's number.
 constexpr std::string_view kPelletStream = "pellets";
 
@@ -128,7 +138,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
 }
 
 /// What a shot strays by more for being out of `weapon`'s sights, when it has some and `owned` is out.
-[[nodiscard]] auto unzoomedSpreadOf(const Weapon& weapon, const OwnedWeapon& owned) -> std::optional<SpreadTerm> {
+[[nodiscard]] auto unzoomedSpreadOf(const Weapon& weapon, const OwnedWeapon& owned)
+    -> std::optional<SpreadTerm> {
     return weapon.zoom && owned.zoomLevel == 0 ? weapon.zoom->unzoomedSpread : std::nullopt;
 }
 
@@ -155,7 +166,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
     }
     const double whole = std::floor(burst.divisor);
     if (whole == burst.divisor) {
-        return static_cast<float>(raised / static_cast<std::uint64_t>(whole)) + burst.offset;
+        const std::uint64_t quotient = raised / static_cast<std::uint64_t>(whole); // the int's division
+        return static_cast<float>(quotient) + burst.offset;
     }
     return static_cast<float>((static_cast<double>(raised) / burst.divisor) + double{burst.offset});
 }
@@ -282,8 +294,9 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         return over();
     }
     // `Attack2` counts for a weapon with an alternate or melee attacks alone (HasSecondaryAttack).
-    const bool switches = (weapon.alternate.has_value() || weapon.melee.has_value() || weapon.zoom.has_value()) &&
-                          command.buttons.test(Button::Attack2);
+    const bool switches =
+        (weapon.alternate.has_value() || weapon.melee.has_value() || weapon.zoom.has_value()) &&
+        command.buttons.test(Button::Attack2);
     if (owned.resumeZoom > 0 && owned.nextShot <= nx::Seconds{} && owned.clip > 0) {
         owned.zoomLevel = std::exchange(owned.resumeZoom, 0); // through its sights again
     }
@@ -345,21 +358,22 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         --owned.shotsFired;
     }
     if (isShellReloaded(owned, weapon) && m_nextIdle <= nx::Seconds{}) {
-        // A shotgun's WeaponIdle: on with its reload while it may load more, else its pump; empty, it starts one.
+        // A shotgun's WeaponIdle: on with its reload while it may load more, else its pump; empty, it starts
+        // one.
         const std::uint32_t carried = reserve(weapon.magazine->ammo);
-        if (m_shellReload == 0 && owned.clip == 0 && carried > 0) {
+        if (shellReloadState == 0 && owned.clip == 0 && carried > 0) {
             reloadShells(owned, weapon, time, random);
             attacks.motions.set(HolderMotion::Reloaded);
             return over();
         }
-        if (m_shellReload != 0) {
+        if (shellReloadState != 0) {
             if (owned.clip < weapon.magazine->clipSize && carried > 0) {
                 reloadShells(owned, weapon, time, random);
             } else {
                 const ShellReload& shells = *reloadOf(weapon, owned)->shells;
                 m_animation =
                     ViewAnimation{.weapon = owned.weapon, .sequence = shells.pumpSequence, .start = time.now};
-                m_shellReload = 0;
+                shellReloadState = 0;
                 m_nextIdle = shells.pumpTime;
             }
             return over();
@@ -525,16 +539,16 @@ void Inventory::draw(std::size_t index, const nx::game::TickTime& time, nx::Rand
         owned.shotsFired = 0;
     }
     owned.fewerShotsAt = time.now;
-    owned.followUpsLeft = 0; // its alternate stays as it was
-    owned.firesLeft = owned.clip % 2 == 0; // ELITE's Deploy: an even clip fires the left first
+    owned.followUpsLeft = 0;                    // its alternate stays as it was
+    owned.firesLeft = owned.clip % kHands == 0; // ELITE's Deploy: an even clip fires the left first
     for (OwnedWeapon& carried : m_weapons) {
         carried.zoomLevel = 0; // out of every sights (DefaultDeploy's m_iFOV)
         carried.resumeZoom = 0;
     }
-    m_shellReload = 0;
+    shellReloadState = 0;
     owned.isPinPulled = false;
     owned.hasThrown = false;
-    owned.slashes = 0;       // a knife drawn slashes from its first sequence again (CKnife::Deploy)
+    owned.slashes = 0; // a knife drawn slashes from its first sequence again (CKnife::Deploy)
     const WeaponView& view = viewOf(weapon, owned);
     m_animation = ViewAnimation{
         .weapon = owned.weapon, .sequence = anyOf(view.drawSequences, random), .start = time.now};
@@ -546,7 +560,7 @@ void Inventory::draw(std::size_t index, const nx::game::TickTime& time, nx::Rand
 auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter, std::uint32_t seed,
                      const nx::game::TickTime& time, nx::Random& random) -> std::vector<Shot> {
     const WeaponFiring& firing = *firingOf(weapon, owned);
-    m_shellReload = 0; // firing stops a reload a shell at a time (PrimaryAttack's m_fInSpecialReload)
+    shellReloadState = 0; // firing stops a reload a shell at a time (PrimaryAttack's m_fInSpecialReload)
     // The spread is of the accuracy before this shot changes it, but of a timed accuracy of this shot's.
     float spread = spreadOf(firing, owned.accuracy, shooter, unzoomedSpreadOf(weapon, owned));
     if (firing.isAutomatic) {
@@ -596,12 +610,14 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     owned.followUpsLeft = firing.followUps ? firing.followUps->rounds : 0;
     owned.followUpSpread = spread;
     owned.nextFollowUp = firing.followUps ? delayOf(*firing.followUps, 0) : nx::Seconds{};
-    std::uint32_t sequence = owned.clip == 0 && firing.lastShotSequence ? *firing.lastShotSequence
-                                                                        : anyOf(firing.shootSequences, random);
+    std::uint32_t sequence = owned.clip == 0 && firing.lastShotSequence
+                                 ? *firing.lastShotSequence
+                                 : anyOf(firing.shootSequences, random);
     if (const std::optional<DualHands>& hands = firing.hands) {
         const bool isLast = owned.clip == 0;
-        sequence = owned.firesLeft ? (isLast ? hands->leftLastSequence : anyOf(hands->leftSequences, random))
-                                   : (isLast ? hands->rightLastSequence : anyOf(hands->rightSequences, random));
+        sequence = owned.firesLeft
+                       ? (isLast ? hands->leftLastSequence : anyOf(hands->leftSequences, random))
+                       : (isLast ? hands->rightLastSequence : anyOf(hands->rightSequences, random));
     }
     m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = sequence, .start = time.now};
 
@@ -614,7 +630,9 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
                                              .yaw = shooter.view.yaw + shooter.punch.yaw,
                                              .roll = shooter.view.roll + shooter.punch.roll});
         nx::Random stray{seed, kPelletStream};
-        const auto half = [&stray] { return stray.nextUnit() - 0.5; };
+        const auto half = [&stray] {
+            return stray.nextUnit() - kHalf;
+        };
         ShotRound round = roundOf(firing, ammoOf(weapon), firing.rangeModifier);
         round.isPellet = true;
         for (std::uint32_t pellet = 0; pellet < pellets->count; ++pellet) {
@@ -656,7 +674,8 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
         if (kick->lateral) {
             const float side = kick->lateral->value();
             shooter.punch.yaw =
-                shooter.punch.yaw + nx::Degrees{(static_cast<float>(random.nextUnit()) * 2.0F * side) - side};
+                shooter.punch.yaw +
+                nx::Degrees{(static_cast<float>(random.nextUnit()) * kBothSides * side) - side};
         }
     }
     if (firing.recoil.kicks) {
@@ -689,7 +708,8 @@ auto Inventory::isFull(WeaponIndex weapon) const -> bool {
 }
 
 auto Inventory::throwFrame(OwnedWeapon& owned, const Weapon& weapon, bool isAttacking, const Shooter& shooter,
-                           const nx::game::TickTime& time, nx::Random& random, WeaponAttacks& attacks) -> bool {
+                           const nx::game::TickTime& time, nx::Random& random, WeaponAttacks& attacks)
+    -> bool {
     const WeaponThrow& throwing = *weapon.throwing;
     const std::string& ammo = weapon.magazine->ammo;
     if (isAttacking) {
@@ -697,7 +717,8 @@ auto Inventory::throwFrame(OwnedWeapon& owned, const Weapon& weapon, bool isAtta
         if (!owned.isPinPulled && !owned.hasThrown && reserve(ammo) > 0 && owned.nextShot <= nx::Seconds{} &&
             shooter.canAttack) {
             owned.isPinPulled = true;
-            m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = throwing.pinSequence, .start = time.now};
+            m_animation =
+                ViewAnimation{.weapon = owned.weapon, .sequence = throwing.pinSequence, .start = time.now};
             m_nextIdle = kPinPullTime;
         }
         return true;
@@ -711,13 +732,15 @@ auto Inventory::throwFrame(OwnedWeapon& owned, const Weapon& weapon, bool isAtta
         pitch = pitch < 0.0F ? kThrowLift + (pitch * kThrowUpShare) : kThrowLift + (pitch * kThrowDownShare);
         const float speed = std::min((kRightAngle - pitch) * kThrowSpeedPerDegree, kMostThrowSpeed);
         const nx::Vec3 forward =
-            nx::angleVectors(nx::EulerAngles{.pitch = nx::Degrees{pitch}, .yaw = shooter.view.yaw + shooter.punch.yaw})
+            nx::angleVectors(
+                nx::EulerAngles{.pitch = nx::Degrees{pitch}, .yaw = shooter.view.yaw + shooter.punch.yaw})
                 .forward;
         attacks.throws.push_back(Throw{.weapon = owned.weapon,
                                        .origin = shooter.eye + (forward * kThrowAhead),
                                        .velocity = (forward * speed) + shooter.velocity});
         attacks.motions.set(HolderMotion::Attacked);
-        m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = throwing.throwSequence, .start = time.now};
+        m_animation =
+            ViewAnimation{.weapon = owned.weapon, .sequence = throwing.throwSequence, .start = time.now};
         owned.isPinPulled = false;
         owned.hasThrown = true;
         owned.nextShot = kAfterThrow;
@@ -732,7 +755,8 @@ auto Inventory::throwFrame(OwnedWeapon& owned, const Weapon& weapon, bool isAtta
             return false;
         }
         const WeaponView& view = viewOf(weapon, owned);
-        m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = anyOf(view.drawSequences, random), .start = time.now};
+        m_animation = ViewAnimation{
+            .weapon = owned.weapon, .sequence = anyOf(view.drawSequences, random), .start = time.now};
         m_nextIdle = kIdleAfterDraw;
         return true;
     }
@@ -750,14 +774,15 @@ void Inventory::reloadShells(OwnedWeapon& owned, const Weapon& weapon, const nx:
     const WeaponReload& reloading = *reloadOf(weapon, owned);
     const ShellReload& shells = *reloading.shells;
     std::uint32_t& carried = m_reserves.try_emplace(weapon.magazine->ammo, 0).first->second;
-    switch (m_shellReload) {
+    switch (shellReloadState) {
     case 0:
         if (carried == 0 || owned.clip >= weapon.magazine->clipSize || owned.nextShot > nx::Seconds{}) {
             return;
         }
         owned.zoomLevel = 0;
-        m_shellReload = 1;
-        m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = shells.startSequence, .start = time.now};
+        shellReloadState = kStartedShells;
+        m_animation =
+            ViewAnimation{.weapon = owned.weapon, .sequence = shells.startSequence, .start = time.now};
         m_nextAttack = shells.startTime;
         m_nextIdle = shells.startTime;
         owned.nextShot = shells.startTime;
@@ -767,7 +792,7 @@ void Inventory::reloadShells(OwnedWeapon& owned, const Weapon& weapon, const nx:
         if (m_nextIdle > nx::Seconds{}) {
             return;
         }
-        m_shellReload = 2;
+        shellReloadState = kLoadingShell;
         m_animation = ViewAnimation{
             .weapon = owned.weapon, .sequence = anyOf(reloading.sequences, random), .start = time.now};
         m_nextIdle = shells.shellTime;
@@ -777,7 +802,7 @@ void Inventory::reloadShells(OwnedWeapon& owned, const Weapon& weapon, const nx:
             ++owned.clip;
             --carried;
         }
-        m_shellReload = 1;
+        shellReloadState = kStartedShells;
         return;
     }
 }

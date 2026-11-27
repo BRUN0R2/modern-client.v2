@@ -93,7 +93,7 @@ auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map,
     MapModels read;
     std::map<std::string, std::optional<std::size_t>, std::less<>> files; // by path; none: left out
     for (const std::string& prop : props) {
-        read.m_props.emplace_back();
+        read.propEntities.emplace_back();
         if (prop.empty()) {
             continue;
         }
@@ -102,7 +102,7 @@ auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map,
             read.m_missing.push_back(std::format("{} ({})", prop, nx::describe(animated.error())));
             continue;
         }
-        read.m_props.back() = Entity{.model = MapModel{.model = prop}, .file = read.m_files.size()};
+        read.propEntities.back() = Entity{.model = MapModel{.model = prop}, .file = read.m_files.size()};
         read.m_files.push_back(std::move(*animated));
     }
     for (MapModel& model : mapModelsOf(map)) {
@@ -214,14 +214,14 @@ void MapModels::pose(std::span<const nx::render::StudioModel> models, nx::Second
         }
     }
     for (const ShownProp& shown : props) {
-        if (shown.prop >= m_props.size() || !m_props[shown.prop]) {
+        if (shown.prop >= propEntities.size() || !propEntities[shown.prop]) {
             continue; // none, or one it could not read, which it listed
         }
-        const Entity& prop = *m_props[shown.prop];
+        const Entity& prop = *propEntities[shown.prop];
         appendShown(prop, shown.origin, nx::assets::SequenceIndex{}, [this, &prop, &shown] {
             const AnimatedModel& file = m_files[prop.file];
-            return drawnBonesOf(*file.files->view, file.animations[0], nx::assets::SequenceIndex{}, SequenceFrame{},
-                                {}, shown.origin, shown.angles);
+            return drawnBonesOf(*file.files->view, file.animations[0], nx::assets::SequenceIndex{},
+                                SequenceFrame{}, {}, shown.origin, shown.angles);
         });
     }
     // The instances point into the bones, which no longer move.

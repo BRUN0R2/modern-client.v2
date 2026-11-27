@@ -67,8 +67,8 @@ constexpr std::string_view kClassnamePrefix = "weapon_";
     if (firing.shootSequences.empty() || firing.cycle <= nx::Seconds{} || firing.reach <= nx::HammerUnits{}) {
         return "fires without a shoot sequence, a cycle or a reach";
     }
-    const int accuracies = (firing.accuracy.burst ? 1 : 0) + (firing.accuracy.paced ? 1 : 0) +
-                           (firing.accuracy.timed ? 1 : 0);
+    const int accuracies =
+        (firing.accuracy.burst ? 1 : 0) + (firing.accuracy.paced ? 1 : 0) + (firing.accuracy.timed ? 1 : 0);
     if (accuracies != 1) {
         return "fires without one accuracy, by bursts, by pace or by time";
     }

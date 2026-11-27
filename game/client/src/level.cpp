@@ -166,10 +166,10 @@ auto Level::load(const GameContent& content, const GameMap& map)
     }
     level.enginePalette = readPalette(content.vfs);
     level.bloodRules = &content.blood;
-    const std::vector<std::string> bloodSprites{content.blood.sprayLook.spraySprite,
-                                                content.blood.sprayLook.dropSprite,
-                                                std::string{pathOf(TempSprite::Explosion, content.blood.sprayLook)},
-                                                std::string{pathOf(TempSprite::SmokePuff, content.blood.sprayLook)}};
+    const std::vector<std::string> bloodSprites{
+        content.blood.sprayLook.spraySprite, content.blood.sprayLook.dropSprite,
+        std::string{pathOf(TempSprite::Explosion, content.blood.sprayLook)},
+        std::string{pathOf(TempSprite::SmokePuff, content.blood.sprayLook)}};
     if (const std::vector<std::string> missing = level.bloodSpriteFiles.read(content.vfs, bloodSprites);
         !missing.empty()) {
         nx::log::warning(kLog, "the blood's sprites that cannot be read: {}", listed(missing));

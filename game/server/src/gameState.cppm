@@ -59,10 +59,10 @@ struct Player {
     nx::ecs::Entity body{};
     nx::Flags<Button> lastButtons{}; ///< m_afButtonLast: the use button acts as it goes down.
     bool isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
-    std::uint32_t spawnsThisRound = 0;  ///< m_iNumSpawns.
+    std::uint32_t spawnsThisRound = 0; ///< m_iNumSpawns.
     /// Whether it chose its team on the team menu yet: a player joining is put in one until it does.
     bool hasChosenTeam = false;
-    bool hasChangedTeam = false; ///< m_bTeamChanged: it changed teams this round.
+    bool hasChangedTeam = false;        ///< m_bTeamChanged: it changed teams this round.
     nx::GameTime spawnedAt{};           ///< When it last spawned, alive already or not (Spawn, RoundRespawn).
     std::optional<HurtFrom> hurtFrom{}; ///< In the tick: where the last attack it took came from.
     std::vector<DamageDealt> damageDealt{}; ///< In the tick: what its hits dealt, in their order.

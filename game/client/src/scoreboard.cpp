@@ -20,38 +20,38 @@ namespace {
 /// The sizes of text, on the menus' design 1080 lines tall.
 constexpr nx::EnumArray<ScoreboardFont, MenuFontSize> kFontSizes{
     nx::EnumArray<ScoreboardFont, MenuFontSize>::Storage{
-        MenuFontSize{.line = MenuUnits{34}, .isStrong = true},  // Title
-        MenuFontSize{.line = MenuUnits{22}, .isStrong = false}, // Subtitle
-        MenuFontSize{.line = MenuUnits{34}, .isStrong = true},  // Team
-        MenuFontSize{.line = MenuUnits{76}, .isStrong = true},  // Wins
-        MenuFontSize{.line = MenuUnits{19}, .isStrong = true},  // Head
-        MenuFontSize{.line = MenuUnits{25}, .isStrong = false}, // Row
+        MenuFontSize{.line = MenuUnits{34}, .isStrong = true},   // Title
+        MenuFontSize{.line = MenuUnits{22}, .isStrong = false},  // Subtitle
+        MenuFontSize{.line = MenuUnits{34}, .isStrong = true},   // Team
+        MenuFontSize{.line = MenuUnits{76}, .isStrong = true},   // Wins
+        MenuFontSize{.line = MenuUnits{19}, .isStrong = true},   // Head
+        MenuFontSize{.line = MenuUnits{25}, .isStrong = false},  // Row
         MenuFontSize{.line = MenuUnits{15}, .isStrong = true}}}; // Tag
 
 // Where its parts go, in the design's units.
-constexpr MenuUnits kPanelWide{1480};    ///< At most; less on a narrower screen.
-constexpr MenuUnits kScreenMargin{32};   ///< Least, at either side of the screen.
+constexpr MenuUnits kPanelWide{1480};  ///< At most; less on a narrower screen.
+constexpr MenuUnits kScreenMargin{32}; ///< Least, at either side of the screen.
 constexpr MenuUnits kPanelTop{72};
 constexpr MenuUnits kBottomMargin{24};
 constexpr MenuUnits kHeaderTall{90};
-constexpr MenuUnits kGap{12};            ///< Between the header, the teams' banners and their tables.
-constexpr MenuUnits kHalvesGap{14};      ///< Between the teams.
+constexpr MenuUnits kGap{12};       ///< Between the header, the teams' banners and their tables.
+constexpr MenuUnits kHalvesGap{14}; ///< Between the teams.
 constexpr MenuUnits kBannerTall{112};
 constexpr MenuUnits kHeadTall{42};
-constexpr MenuUnits kRowPitch{50};       ///< At most; less when the rows would not fit.
+constexpr MenuUnits kRowPitch{50}; ///< At most; less when the rows would not fit.
 constexpr MenuUnits kLeastRowPitch{26};
 constexpr MenuUnits kRowGap{2};
-constexpr MenuUnits kInset{24};          ///< Inside the header and the banners.
+constexpr MenuUnits kInset{24}; ///< Inside the header and the banners.
 constexpr MenuUnits kTitleTop{12};
 constexpr MenuUnits kBannerTextTop{20};
 constexpr MenuUnits kBannerLinesGap{4};
-constexpr MenuUnits kEmblemInset{16};    ///< Over and under a team's emblem in its banner.
-constexpr MenuUnits kEmblemGap{18};      ///< After it, before the team's name.
+constexpr MenuUnits kEmblemInset{16}; ///< Over and under a team's emblem in its banner.
+constexpr MenuUnits kEmblemGap{18};   ///< After it, before the team's name.
 constexpr MenuUnits kAccentWide{4};
-constexpr MenuUnits kAccentTall{2};      ///< Of the line under a banner.
-constexpr MenuUnits kCellPad{16};        ///< Inside a table, at its sides.
+constexpr MenuUnits kAccentTall{2}; ///< Of the line under a banner.
+constexpr MenuUnits kCellPad{16};   ///< Inside a table, at its sides.
 constexpr MenuUnits kAvatar{36};
-constexpr MenuUnits kAvatarInset{4};     ///< Least, over and under an avatar in its row.
+constexpr MenuUnits kAvatarInset{4}; ///< Least, over and under an avatar in its row.
 constexpr MenuUnits kAvatarGap{14};
 constexpr MenuUnits kDeathsWide{60};
 constexpr MenuUnits kKillsWide{64};
@@ -160,10 +160,11 @@ auto ScoreTeam::aliveCount() const noexcept -> std::size_t {
     return nx::narrow<std::size_t>(std::ranges::count(rows, false, &ScoreRow::isDead));
 }
 
-auto scoreTeamsOf(std::span<const ScoreRow> rows, const nx::EnumArray<Team, std::uint32_t>& wins)
-    -> std::vector<ScoreTeam> {
+auto scoreTeamsOf(std::span<const ScoreRow> rows, const nx::EnumArray<Team, std::uint32_t>& wins,
+                  Team ownTeam) -> std::vector<ScoreTeam> {
     std::vector<ScoreTeam> teams;
-    for (const Team team : {Team::CounterTerrorists, Team::Terrorists}) {
+    const Team opponent = ownTeam == Team::Terrorists ? Team::CounterTerrorists : Team::Terrorists;
+    for (const Team team : {ownTeam, opponent}) {
         ScoreTeam listed{.team = team, .wins = wins[team]};
         std::ranges::copy_if(rows, std::back_inserter(listed.rows),
                              [team](const ScoreRow& row) { return row.team == team; });
@@ -185,7 +186,8 @@ auto elidedTo(const nx::ui::GlyphAtlas& atlas, std::string_view text, nx::Pixels
     std::string cut{text};
     while (!cut.empty()) {
         // Its last character: its continuation bytes, then the byte that leads them.
-        while (!cut.empty() && (static_cast<unsigned char>(cut.back()) & kContinuationMask) == kContinuation) {
+        while (!cut.empty() &&
+               (static_cast<unsigned char>(cut.back()) & kContinuationMask) == kContinuation) {
             cut.pop_back();
         }
         if (!cut.empty()) {
@@ -199,8 +201,9 @@ auto elidedTo(const nx::ui::GlyphAtlas& atlas, std::string_view text, nx::Pixels
     return {};
 }
 
-auto Scoreboard::open(nx::ui::FontCatalog& fonts, const MenuFontFamilies& families, std::uint32_t screenHeight,
-                      std::span<const std::filesystem::path> folders) -> nx::Result<Scoreboard, MenuPanelError> {
+auto Scoreboard::open(nx::ui::FontCatalog& fonts, const MenuFontFamilies& families,
+                      std::uint32_t screenHeight, std::span<const std::filesystem::path> folders)
+    -> nx::Result<Scoreboard, MenuPanelError> {
     Atlases made;
     for (const ScoreboardFont font : Atlases::keys()) {
         auto atlas = makeMenuAtlas(fonts, families, kFontSizes[font], screenHeight);
@@ -216,19 +219,21 @@ auto Scoreboard::open(nx::ui::FontCatalog& fonts, const MenuFontFamilies& famili
             return std::filesystem::is_regular_file(folder / kScoreboardEmblems[team], error);
         });
         if (found == folders.end()) {
-            nx::log::warning(kLog, "the scoreboard shows no emblem of a team: no {}", kScoreboardEmblems[team]);
+            nx::log::warning(kLog, "the scoreboard shows no emblem of a team: no {}",
+                             kScoreboardEmblems[team]);
             continue;
         }
         const std::filesystem::path path = *found / kScoreboardEmblems[team];
         auto bytes = nx::platform::readFile(path);
         if (!bytes) {
-            nx::log::warning(kLog, "the scoreboard shows no emblem of a team: {}", nx::describe(bytes.error()));
+            nx::log::warning(kLog, "the scoreboard shows no emblem of a team: {}",
+                             nx::describe(bytes.error()));
             continue;
         }
         auto picture = nx::assets::readTga(*bytes);
         if (!picture) {
-            nx::log::warning(kLog, "the scoreboard shows no emblem of a team: {}: {}", nx::platform::toUtf8(path),
-                             nx::describe(picture.error()));
+            nx::log::warning(kLog, "the scoreboard shows no emblem of a team: {}: {}",
+                             nx::platform::toUtf8(path), nx::describe(picture.error()));
             continue;
         }
         read[team].emplace(std::move(*picture));
@@ -265,8 +270,9 @@ auto Scoreboard::load(nx::render::ScreenRenderer& screen, nx::rhi::CommandList& 
 
 void Scoreboard::append(std::vector<nx::render::ScreenQuad>& quads, const ScoreboardView& view,
                         nx::rhi::Extent2d size) {
-    if (view.texts == nullptr ||
-        std::ranges::any_of(Atlases::keys(), [&](ScoreboardFont font) { return !images[font].has_value(); })) {
+    if (view.texts == nullptr || std::ranges::any_of(Atlases::keys(), [&](ScoreboardFont font) {
+            return !images[font].has_value();
+        })) {
         return;
     }
     Faces faces;
@@ -278,6 +284,7 @@ void Scoreboard::append(std::vector<nx::render::ScreenQuad>& quads, const Scoreb
                        .map = std::string{view.map},
                        .rows = {view.rows.begin(), view.rows.end()},
                        .self = view.self,
+                       .ownTeam = view.ownTeam,
                        .wins = view.wins,
                        .texts = *view.texts,
                        .size = size},
@@ -288,22 +295,28 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const Faces&
                         const ScoreboardView& view, nx::rhi::Extent2d size) const {
     const ScoreboardTexts& texts = *view.texts;
     const MenuScale scale{size.height};
-    const auto px = [&](MenuUnits units) { return scale.pixels(units); };
+    const auto px = [&](MenuUnits units) {
+        return scale.pixels(units);
+    };
     const nx::Pixels screenWide{nx::narrow<std::int32_t>(size.width)};
     const nx::Pixels screenTall{nx::narrow<std::int32_t>(size.height)};
     const nx::Pixels wide = std::min(px(kPanelWide), screenWide - (px(kScreenMargin) * kBothSides));
     const nx::Pixels top = px(kPanelTop);
     const nx::Pixels panelX = (screenWide - wide) / kHalf;
     nx::ui::PanelPainter screen{quads, size};
-    nx::ui::PanelPainter painter = screen.inside({.x = panelX, .y = top, .wide = wide, .tall = screenTall - top});
+    nx::ui::PanelPainter painter =
+        screen.inside({.x = panelX, .y = top, .wide = wide, .tall = screenTall - top});
 
-    const auto lineOf = [&](ScoreboardFont font) { return faces[font].atlas->lineHeight(); };
+    const auto lineOf = [&](ScoreboardFont font) {
+        return faces[font].atlas->lineHeight();
+    };
     const auto widthIn = [&](ScoreboardFont font, std::string_view text) {
         return nx::ui::widthOf(*faces[font].atlas, text);
     };
     const auto write = [&](ScoreboardFont font, std::string_view text, nx::Pixels x, nx::Pixels y,
                            nx::render::ScreenColor color) {
-        std::ignore = painter.text(faces[font], text, {.x = x, .y = y}, color); // where its pen ends is no matter
+        std::ignore =
+            painter.text(faces[font], text, {.x = x, .y = y}, color); // where its pen ends is no matter
     };
     const auto writeEndingAt = [&](ScoreboardFont font, std::string_view text, nx::Pixels end, nx::Pixels y,
                                    nx::render::ScreenColor color) {
@@ -324,7 +337,8 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const Faces&
     painter.fill({.wide = px(kAccentWide), .tall = headerTall}, kInkSoft);
     const nx::Pixels titleX = px(kInset);
     if (view.map.empty()) {
-        write(ScoreboardFont::Title, view.hostname, titleX, middleOf(ScoreboardFont::Title, {}, headerTall), kInk);
+        write(ScoreboardFont::Title, view.hostname, titleX, middleOf(ScoreboardFont::Title, {}, headerTall),
+              kInk);
     } else {
         write(ScoreboardFont::Title, view.hostname, titleX, px(kTitleTop), kInk);
         write(ScoreboardFont::Subtitle, view.map, titleX, px(kTitleTop) + lineOf(ScoreboardFont::Title),
@@ -342,17 +356,15 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const Faces&
                 middleOf(ScoreboardFont::Subtitle, chip.y, chip.tall), kInk);
 
     // The teams, side by side; their rows as close as they must be to fit on the screen.
-    const std::vector<ScoreTeam> teams = scoreTeamsOf(view.rows, view.wins);
+    const std::vector<ScoreTeam> teams = scoreTeamsOf(view.rows, view.wins, view.ownTeam);
     const nx::Pixels halfWide = (wide - px(kHalvesGap)) / kHalf;
     const nx::Pixels bannerY = headerTall + px(kGap);
     const nx::Pixels bannerTall = px(kBannerTall);
     const nx::Pixels tableY = bannerY + bannerTall + px(kGap);
     const nx::Pixels headTall = px(kHeadTall);
     const nx::Pixels rowsY = tableY + headTall;
-    const std::size_t mostRows =
-        std::max<std::size_t>(std::ranges::max(teams, {}, [](const ScoreTeam& team) { return team.rows.size(); })
-                                  .rows.size(),
-                              1);
+    const std::size_t mostRows = std::max<std::size_t>(
+        std::ranges::max(teams, {}, [](const ScoreTeam& team) { return team.rows.size(); }).rows.size(), 1);
     const nx::Pixels room = screenTall - top - rowsY - px(kBottomMargin);
     const nx::Pixels pitch =
         std::clamp(room / nx::narrow<std::int32_t>(mostRows), px(kLeastRowPitch), px(kRowPitch));
@@ -366,13 +378,17 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const Faces&
         // Its banner: its name, how many of it live, its wins.
         painter.fill({.x = left, .y = bannerY, .wide = halfWide, .tall = bannerTall}, look.banner);
         painter.fill({.x = left, .y = bannerY, .wide = px(kAccentWide), .tall = bannerTall}, look.accent);
-        painter.fill({.x = left, .y = bannerY + bannerTall - px(kAccentTall), .wide = halfWide, .tall = px(kAccentTall)},
+        painter.fill({.x = left,
+                      .y = bannerY + bannerTall - px(kAccentTall),
+                      .wide = halfWide,
+                      .tall = px(kAccentTall)},
                      look.accent);
         nx::Pixels bannerX = left + px(kAccentWide) + px(kInset);
         if (const std::optional<nx::render::ScreenImage>& emblem = emblemImages[team.team]) {
             // As tall as the banner leaves it, as wide as its picture is for that, smoothed.
             const nx::Pixels emblemTall = bannerTall - (px(kEmblemInset) * kBothSides);
-            const auto emblemWide = static_cast<float>(emblemTall.value()) * static_cast<float>(emblem->width()) /
+            const auto emblemWide = static_cast<float>(emblemTall.value()) *
+                                    static_cast<float>(emblem->width()) /
                                     static_cast<float>(emblem->height());
             quads.push_back({.image = &*emblem,
                              .source = {.width = emblem->width(), .height = emblem->height()},
@@ -403,7 +419,8 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const Faces&
         const nx::Pixels nameEnd =
             (hasEconomy ? healthMiddle - (px(kHealthWide) / kHalf) : killsStart) - px(kColumnGap);
 
-        const nx::Pixels shownRows = pitch * nx::narrow<std::int32_t>(std::max<std::size_t>(team.rows.size(), 1));
+        const nx::Pixels shownRows =
+            pitch * nx::narrow<std::int32_t>(std::max<std::size_t>(team.rows.size(), 1));
         painter.fill({.x = left, .y = tableY, .wide = halfWide, .tall = headTall + shownRows}, kTableColor);
         painter.fill({.x = left, .y = tableY, .wide = halfWide, .tall = headTall}, kHeadRowColor);
         const nx::Pixels headY = middleOf(ScoreboardFont::Head, tableY, headTall);
@@ -442,8 +459,10 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const Faces&
             if (row.isDead) {
                 const nx::Pixels tagX = hasEconomy ? healthMiddle - (tagWide / kHalf)
                                                    : nameX + widthIn(ScoreboardFont::Row, name) + px(kTagGap);
-                const nx::ui::PixelRect tag{
-                    .x = tagX, .y = rowY + ((rowTall - px(kTagTall)) / kHalf), .wide = tagWide, .tall = px(kTagTall)};
+                const nx::ui::PixelRect tag{.x = tagX,
+                                            .y = rowY + ((rowTall - px(kTagTall)) / kHalf),
+                                            .wide = tagWide,
+                                            .tall = px(kTagTall)};
                 painter.fill(tag, kHeadRowColor);
                 paintMenuOutline(painter, tag, kLineColor);
                 writeAround(ScoreboardFont::Tag, texts.dead, tag.x + (tagWide / kHalf),
@@ -472,8 +491,8 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const Faces&
                 }
             }
             if (row.money) {
-                writeEndingAt(ScoreboardFont::Row, std::format("${}", moneyDigits(*row.money)), moneyEnd, textY,
-                              kMoneyColor);
+                writeEndingAt(ScoreboardFont::Row, std::format("${}", moneyDigits(*row.money)), moneyEnd,
+                              textY, kMoneyColor);
             }
             writeAround(ScoreboardFont::Row, std::to_string(row.score.frags), killsMiddle, textY, kInk);
             writeAround(ScoreboardFont::Row, std::to_string(row.score.deaths), deathsMiddle, textY, kInkSoft);

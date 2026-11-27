@@ -35,7 +35,8 @@ constexpr std::uint32_t kFirstGrenadeMaker = 4096;
 constexpr float kBlastLift = 1.0F;
 
 /// A grenade's sound `sound` at `position`, heard by every player there.
-void soundAt(GameState& game, const LiveGrenade& grenade, const std::optional<GameSound>& sound, nx::Vec3 position) {
+void soundAt(GameState& game, const LiveGrenade& grenade, const std::optional<GameSound>& sound,
+             nx::Vec3 position) {
     if (!sound) {
         return;
     }
@@ -94,13 +95,14 @@ void flash(GameState& game, const LiveGrenade& grenade, const WeaponThrow& throw
         const nx::Vec3 eye = eyeOf(victim.movement);
         // Seen: nothing but the victim between the flash and its eye.
         nx::game::ServerTrace way = nx::game::hullTrace(nx::collision::Hull::Point, source, eye);
-        const nx::game::SolidHit seen = nx::game::traceSolidsHit(game.world, game.map.hulls(), solidsNow(game), way);
+        const nx::game::SolidHit seen =
+            nx::game::traceSolidsHit(game.world, game.map.hulls(), solidsNow(game), way);
         if (seen.trace.fraction < 1.0F && seen.entity != victim.body) {
             continue;
         }
         const nx::Vec3 forward = nx::angleVectors(victim.view).forward;
-        if (const std::optional<Blinding> blinded = blindingOf(source, eye, forward, throwing.damage.value(),
-                                                               throwing.radius.value())) {
+        if (const std::optional<Blinding> blinded =
+                blindingOf(source, eye, forward, throwing.damage.value(), throwing.radius.value())) {
             // A flash on one blinded already: the longer and the whiter of them.
             if (victim.blinding) {
                 victim.blinding->fade = std::max(victim.blinding->fade, blinded->fade);
@@ -132,7 +134,8 @@ void goOff(GameState& game, const LiveGrenade& grenade) {
     game.events.grenadeBlasts.push_back(GrenadeBlast{.kind = throwing.kind, .position = grenade.origin});
 }
 
-/// One tick of `grenade` flying, of `throwing`, `delta` long (SV_Physics_Toss for MOVETYPE_BOUNCE, BounceTouch).
+/// One tick of `grenade` flying, of `throwing`, `delta` long (SV_Physics_Toss for MOVETYPE_BOUNCE,
+/// BounceTouch).
 void fly(GameState& game, LiveGrenade& grenade, const WeaponThrow& throwing, float delta) {
     if (grenade.isResting) {
         return;
@@ -143,7 +146,8 @@ void fly(GameState& game, LiveGrenade& grenade, const WeaponThrow& throwing, flo
     if (const Player* const thrower = throwerOf(game, grenade)) {
         way.ignored = thrower->body; // its thrower it does not touch
     }
-    const nx::game::SolidHit hit = nx::game::traceSolidsHit(game.world, game.map.hulls(), solidsNow(game), way);
+    const nx::game::SolidHit hit =
+        nx::game::traceSolidsHit(game.world, game.map.hulls(), solidsNow(game), way);
     grenade.origin = hit.trace.end;
     if (hit.trace.fraction >= 1.0F) {
         return;
@@ -181,10 +185,19 @@ auto blindingOf(nx::Vec3 source, nx::Vec3 eye, nx::Vec3 forward, float damage, f
     // In front of the view or behind it: the sign of the dot alone.
     constexpr std::uint8_t kInFront = 255;
     constexpr std::uint8_t kBehind = 200;
+    // Behind: held the strength over 3.5 seconds, faded 1.75 times it; in front, over 1.5 and 3 times it.
+    constexpr float kHoldBehind = 3.5F;
+    constexpr float kFadeBehind = 1.75F;
+    constexpr float kHoldInFront = 1.5F;
+    constexpr float kFadeInFront = 3.0F;
     if (nx::dot(source - eye, forward) < 0.0F) {
-        return Blinding{.hold = nx::Seconds{adjusted / 3.5F}, .fade = nx::Seconds{adjusted * 1.75F}, .alpha = kBehind};
+        return Blinding{.hold = nx::Seconds{adjusted / kHoldBehind},
+                        .fade = nx::Seconds{adjusted * kFadeBehind},
+                        .alpha = kBehind};
     }
-    return Blinding{.hold = nx::Seconds{adjusted / 1.5F}, .fade = nx::Seconds{adjusted * 3.0F}, .alpha = kInFront};
+    return Blinding{.hold = nx::Seconds{adjusted / kHoldInFront},
+                    .fade = nx::Seconds{adjusted * kFadeInFront},
+                    .alpha = kInFront};
 }
 
 void throwGrenade(GameState& game, const Player& thrower, const Throw& thrown) {
@@ -206,8 +219,8 @@ void thinkGrenades(GameState& game) {
         const WeaponThrow& throwing = *game.content.weapons.weapon(grenade.weapon).throwing;
         fly(game, grenade, throwing, delta);
         // A smoke grenade goes off once it lies still too (SG_TumbleThink).
-        const bool isDue = time.now >= grenade.goesOffAt &&
-                           (throwing.kind != GrenadeKind::Smoke || grenade.isResting);
+        const bool isDue =
+            time.now >= grenade.goesOffAt && (throwing.kind != GrenadeKind::Smoke || grenade.isResting);
         if (isDue) {
             goOff(game, grenade);
         }

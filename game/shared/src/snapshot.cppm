@@ -301,7 +301,7 @@ struct PlayerSnapshot {
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};
     EntityStates entities{};
-    MapLightStyles lightStyles{}; ///< The server's current patterns, evaluated by the client.
+    MapLightStyles lightStyles{};              ///< The server's current patterns, evaluated by the client.
     std::vector<ShownGrenade> grenades{};      ///< Flying or lying, after the tick.
     std::vector<GrenadeBlast> grenadeBlasts{}; ///< Of the tick, in their order.
     std::optional<Blinding> blinding{};        ///< A flash blinded it in the tick.

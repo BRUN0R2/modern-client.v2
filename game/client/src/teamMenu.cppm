@@ -84,7 +84,8 @@ public:
     /// The row at `index`, from the top.
     [[nodiscard]] auto row(std::size_t index) const noexcept -> nx::ui::PixelRect;
     /// The row of `count` the point at `x`, `y` is over; none when it is over none.
-    [[nodiscard]] auto rowAt(float x, float y, std::size_t count) const noexcept -> std::optional<std::size_t>;
+    [[nodiscard]] auto rowAt(float x, float y, std::size_t count) const noexcept
+        -> std::optional<std::size_t>;
     /// What shows the row selected.
     [[nodiscard]] inline auto detail() const noexcept -> const nx::ui::PixelRect& { return detailRect; }
     /// Where why a team was refused is told: under the rows.
@@ -111,8 +112,8 @@ public:
 
     /// What `event` does to the menu, open, on a screen of `size` with the mouse at `cursor`, whose rows are
     /// those of `rows`: a row's key chooses it, Up and Down select one, Enter and the left button choose the
-    /// one selected, the mouse moved selects the one it is over, and Escape cancels the team menu when it may,
-    /// or auto-selects a character. The menu takes every event while open.
+    /// one selected, the mouse moved selects the one it is over, and Escape cancels the team menu when it
+    /// may, or auto-selects a character. The menu takes every event while open.
     auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                 nx::rhi::Extent2d size, std::span<const TeamMenuRow> rows) -> TeamMenuEffect;
 
