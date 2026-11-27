@@ -88,9 +88,23 @@ auto mapModelsOf(const nx::assets::BspView& map) -> std::vector<MapModel> {
     return models;
 }
 
-auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map) -> MapModels {
+auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map,
+                     std::span<const std::string> props) -> MapModels {
     MapModels read;
     std::map<std::string, std::optional<std::size_t>, std::less<>> files; // by path; none: left out
+    for (const std::string& prop : props) {
+        read.m_props.emplace_back();
+        if (prop.empty()) {
+            continue;
+        }
+        auto animated = readAnimatedModel(vfs, prop, ModelTextures::Read);
+        if (!animated) {
+            read.m_missing.push_back(std::format("{} ({})", prop, nx::describe(animated.error())));
+            continue;
+        }
+        read.m_props.back() = Entity{.model = MapModel{.model = prop}, .file = read.m_files.size()};
+        read.m_files.push_back(std::move(*animated));
+    }
     for (MapModel& model : mapModelsOf(map)) {
         const std::size_t spawn = read.hostagesBySpawn.size();
         if (model.kind == ModelClass::Hostage) {
@@ -163,8 +177,8 @@ auto MapModels::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList&
 }
 
 void MapModels::pose(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
-                     std::span<const ShownHostage> hostages, const ModelFrame& frame,
-                     PosedModels& posed) const {
+                     std::span<const ShownHostage> hostages, const ModelFrame& frame, PosedModels& posed,
+                     std::span<const ShownProp> props) const {
     nx::expects(models.size() == m_files.size(), "MapModels::pose: a model for each file");
     posed.clear();
     posed.bones.clear();
@@ -198,6 +212,17 @@ void MapModels::pose(std::span<const nx::render::StudioModel> models, nx::Second
             appendShown(*hostage, shown.origin, shown.sequence,
                         [this, hostage, &shown] { return hostagePoseOf(*hostage, shown); });
         }
+    }
+    for (const ShownProp& shown : props) {
+        if (shown.prop >= m_props.size() || !m_props[shown.prop]) {
+            continue; // none, or one it could not read, which it listed
+        }
+        const Entity& prop = *m_props[shown.prop];
+        appendShown(prop, shown.origin, nx::assets::SequenceIndex{}, [this, &prop, &shown] {
+            const AnimatedModel& file = m_files[prop.file];
+            return drawnBonesOf(*file.files->view, file.animations[0], nx::assets::SequenceIndex{}, SequenceFrame{},
+                                {}, shown.origin, shown.angles);
+        });
     }
     // The instances point into the bones, which no longer move.
     const std::span<const nx::Mat3x4> bones = posed.bones;

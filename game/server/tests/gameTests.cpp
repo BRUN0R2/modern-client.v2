@@ -295,6 +295,48 @@ TEST_F(GameTest, ATeamFullOrStackedIsRefused) {
     EXPECT_EQ(game().teamOf(second), cs::Team::CounterTerrorists);
 }
 
+TEST_F(GameTest, AGrenadeDroppedAtItsThrowersFeetGoesOffAfterItsFuseHurtingWhoIsNear) {
+    const cs::PlayerIndex attacker = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Attacker");
+    const cs::PlayerIndex victim = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Victim");
+    idle(kPastTheFirstFreeze);
+    const cs::WeaponIndex grenade = *content().weapons.indexOf("hegrenade");
+    game().give(attacker, grenade);
+    EXPECT_EQ(game().snapshotFor(attacker).inventory.reserve("HEGrenade"), 1U) << "a grenade given is one of it";
+    standOff(attacker, victim, "hegrenade");
+    // Looking straight down, it is thrown at no speed: it falls at the thrower's feet.
+    const nx::EulerAngles down{.pitch = nx::Degrees{89.0F}};
+    for (std::uint32_t tick = 0; tick < 60; ++tick) {
+        std::ignore = press(attacker, {cs::Button::Attack}, down);
+    }
+    std::ignore = play(attacker, 1, {}, down);
+    EXPECT_EQ(game().snapshotFor(attacker).grenades.size(), 1U) << "thrown as the button went up";
+    EXPECT_EQ(game().snapshotFor(attacker).inventory.reserve("HEGrenade"), 0U);
+    bool wentOff = false;
+    for (std::uint32_t tick = 0; tick < 200 && !wentOff; ++tick) {
+        std::ignore = play(attacker, 1, {}, down);
+        wentOff = !game().snapshotFor(victim).grenadeBlasts.empty();
+    }
+    ASSERT_TRUE(wentOff) << "within its fuse of 1.5 seconds";
+    EXPECT_TRUE(game().snapshotFor(attacker).grenades.empty());
+    EXPECT_LT(game().snapshotFor(victim).status.health, cs::kSpawnHealth) << "40 units from it, near enough";
+}
+
+TEST_F(GameTest, AFlashBlindsLongerAndWhiterSeenInFrontThanBehindAndNotOutOfItsRadius) {
+    const nx::Vec3 eye{};
+    const nx::Vec3 forward{.x = 1.0F};
+    const std::optional<cs::Blinding> front = cs::blindingOf({.x = 100.0F}, eye, forward, 4.0F, 1500.0F);
+    ASSERT_TRUE(front.has_value());
+    const float adjusted = 4.0F - (100.0F * 4.0F / 1500.0F);
+    EXPECT_EQ(front->alpha, 255U);
+    EXPECT_FLOAT_EQ(front->hold.count(), adjusted / 1.5F);
+    EXPECT_FLOAT_EQ(front->fade.count(), adjusted * 3.0F);
+    const std::optional<cs::Blinding> behind = cs::blindingOf({.x = -100.0F}, eye, forward, 4.0F, 1500.0F);
+    ASSERT_TRUE(behind.has_value());
+    EXPECT_EQ(behind->alpha, 200U);
+    EXPECT_FLOAT_EQ(behind->fade.count(), adjusted * 1.75F);
+    EXPECT_FALSE(cs::blindingOf({.x = 2000.0F}, eye, forward, 4.0F, 1500.0F).has_value());
+}
+
 TEST_F(GameTest, APlayerPlaysByTheNameTheServerGivesItAmongTheOthers) {
     const cs::PlayerIndex first =
         game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, " Bruno ");
@@ -1363,6 +1405,20 @@ TEST_F(GameTest, APlayerBuysAWeaponInABuyZoneDroppingThatOfItsSlotAndPayingForIt
               cs::BuyRefusal::NotSold);
     EXPECT_EQ(game().buyWeapon(player, *content().weapons.indexOf("m4a1")).error().code,
               cs::BuyRefusal::NotForItsTeam);
+}
+
+TEST_F(GameTest, AGrenadeIsBoughtAsManyTimesAsItsKindMayBeCarried) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = play(player, 1);
+    const cs::WeaponIndex flash = *content().weapons.indexOf("flashbang");
+    ASSERT_TRUE(game().buyWeapon(player, flash).has_value());
+    ASSERT_TRUE(game().buyWeapon(player, flash).has_value()) << "two flashbangs";
+    EXPECT_EQ(game().buyWeapon(player, flash).error().code, cs::BuyRefusal::AlreadyOwned);
+    const cs::PlayerSnapshot told = play(player, 1);
+    EXPECT_EQ(told.inventory.reserve("Flashbang"), 2U);
+    EXPECT_EQ(told.status.money, nx::Money{400});
+    EXPECT_TRUE(told.inventory.has(*content().weapons.indexOf("glock18"))) << "a grenade keeps the pistol";
 }
 
 TEST_F(GameTest, AWeaponReplacedIsBoughtAsItsReplacement) {

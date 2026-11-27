@@ -70,7 +70,7 @@ void appendWeapons(std::vector<BuyEntry>& entries, BuyTab tab, const BuyMenuCont
         }
         const Weapon& weapon = weapons.weapon(index);
         const std::optional<BuyItemState> state =
-            itemStateOf(weaponPriceFor(weapon, buyer, view.inventory->has(index)));
+            itemStateOf(weaponPriceFor(weapon, buyer, view.inventory->isFull(index)));
         if (state) {
             const auto teamKey =
                 view.team == Team::CounterTerrorists ? place->counterTerroristKey : place->terroristKey;

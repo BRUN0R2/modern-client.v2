@@ -328,6 +328,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
         player.sounds = std::exchange(player.soundsOfPurchases, {});
         player.hurtFrom.reset();
         player.damageDealt.clear();
+        player.blinding.reset();
     }
     for (const PlayerCommand& command : commands) {
         runCommand(m_state, playerAt(m_state, command.player), command.command);
@@ -354,6 +355,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
             std::ignore = nx::game::attackEntity(m_state.world, strike.target, strike.attack);
         }
     }
+    thinkGrenades(m_state);
     thinkRules(m_state);
     const nx::collision::BrushHulls& hulls = m_state.map.hulls();
     nx::game::runThinks(m_state.world, hulls);

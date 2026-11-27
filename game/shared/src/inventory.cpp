@@ -17,6 +17,17 @@ namespace {
 /// kick, and how far a shot strays.
 constexpr std::string_view kRandomStream = "weapons";
 constexpr std::string_view kSpreadStream = "spread";
+// A grenade's throw (the grenades' PrimaryAttack and WeaponIdle).
+constexpr nx::Seconds kPinPullTime{0.5F};       ///< The pin pulled, it is thrown no sooner.
+constexpr nx::Seconds kAfterThrow{0.5F};        ///< Until the next may be pulled.
+constexpr nx::Seconds kIdleAfterThrow{0.75F};   ///< Until it is drawn again, or put away.
+constexpr float kThrowLift = -10.0F;            ///< Degrees the throw is turned up from the view.
+constexpr float kThrowUpShare = 80.0F / 90.0F;  ///< Of a view up, the throw keeps this.
+constexpr float kThrowDownShare = 100.0F / 90.0F; ///< Of a view down, the throw keeps this.
+constexpr float kRightAngle = 90.0F;
+constexpr float kThrowSpeedPerDegree = 6.0F; ///< Units a second for each degree the throw is under straight down.
+constexpr float kMostThrowSpeed = 750.0F;
+constexpr float kThrowAhead = 16.0F; ///< From the eye along the throw.
 /// The stream a shotgun's pellets stray by, of the command's number.
 constexpr std::string_view kPelletStream = "pellets";
 
@@ -189,6 +200,9 @@ auto Inventory::give(WeaponIndex asked, AutoSwitch autoSwitch, const nx::game::T
     nx::expects(m_catalog->isComplete(weapon), "Inventory::give: a complete weapon");
     const Weapon& given = m_catalog->weapon(weapon);
     const std::uint32_t rounds = given.magazine ? given.magazine->clipSize : 0;
+    if (given.throwing && given.magazine) {
+        std::ignore = giveAmmo(given.magazine->ammo, 1); // a grenade more (its DEFAULT_GIVE)
+    }
     if (const std::optional<std::size_t> owned = find(weapon)) {
         takeRounds(*owned, rounds);
         return false;
@@ -263,6 +277,10 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         }
     }
     const bool isAttacking = command.buttons.test(Button::Attack);
+    if (weapon.throwing) {
+        std::ignore = throwFrame(owned, weapon, isAttacking, shooter, time, random, attacks);
+        return over();
+    }
     // `Attack2` counts for a weapon with an alternate or melee attacks alone (HasSecondaryAttack).
     const bool switches = (weapon.alternate.has_value() || weapon.melee.has_value() || weapon.zoom.has_value()) &&
                           command.buttons.test(Button::Attack2);
@@ -514,6 +532,8 @@ void Inventory::draw(std::size_t index, const nx::game::TickTime& time, nx::Rand
         carried.resumeZoom = 0;
     }
     m_shellReload = 0;
+    owned.isPinPulled = false;
+    owned.hasThrown = false;
     owned.slashes = 0;       // a knife drawn slashes from its first sequence again (CKnife::Deploy)
     const WeaponView& view = viewOf(weapon, owned);
     m_animation = ViewAnimation{
@@ -654,6 +674,70 @@ void Inventory::switchZoom(OwnedWeapon& owned, const Weapon& weapon, const nx::g
     owned.resumeZoom = 0;
     owned.nextSecondary = zoom.switchTime;
     makeSound(zoom.sound, time);
+}
+
+auto Inventory::isFull(WeaponIndex weapon) const -> bool {
+    if (!has(weapon)) {
+        return false;
+    }
+    const Weapon& sold = m_catalog->weapon(weapon);
+    if (!sold.throwing || !sold.magazine) {
+        return true;
+    }
+    const AmmoType* const ammo = m_catalog->findAmmo(sold.magazine->ammo);
+    return ammo == nullptr || reserve(sold.magazine->ammo) >= ammo->maxCarried;
+}
+
+auto Inventory::throwFrame(OwnedWeapon& owned, const Weapon& weapon, bool isAttacking, const Shooter& shooter,
+                           const nx::game::TickTime& time, nx::Random& random, WeaponAttacks& attacks) -> bool {
+    const WeaponThrow& throwing = *weapon.throwing;
+    const std::string& ammo = weapon.magazine->ammo;
+    if (isAttacking) {
+        // PrimaryAttack: the pin pulled, once, while there is one to throw.
+        if (!owned.isPinPulled && !owned.hasThrown && reserve(ammo) > 0 && owned.nextShot <= nx::Seconds{} &&
+            shooter.canAttack) {
+            owned.isPinPulled = true;
+            m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = throwing.pinSequence, .start = time.now};
+            m_nextIdle = kPinPullTime;
+        }
+        return true;
+    }
+    if (m_nextIdle > nx::Seconds{}) {
+        return true;
+    }
+    if (owned.isPinPulled) {
+        // WeaponIdle: thrown along the view turned up, as fast as the view is up (ThrowGrenade).
+        float pitch = (shooter.view.pitch + shooter.punch.pitch).value();
+        pitch = pitch < 0.0F ? kThrowLift + (pitch * kThrowUpShare) : kThrowLift + (pitch * kThrowDownShare);
+        const float speed = std::min((kRightAngle - pitch) * kThrowSpeedPerDegree, kMostThrowSpeed);
+        const nx::Vec3 forward =
+            nx::angleVectors(nx::EulerAngles{.pitch = nx::Degrees{pitch}, .yaw = shooter.view.yaw + shooter.punch.yaw})
+                .forward;
+        attacks.throws.push_back(Throw{.weapon = owned.weapon,
+                                       .origin = shooter.eye + (forward * kThrowAhead),
+                                       .velocity = (forward * speed) + shooter.velocity});
+        attacks.motions.set(HolderMotion::Attacked);
+        m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = throwing.throwSequence, .start = time.now};
+        owned.isPinPulled = false;
+        owned.hasThrown = true;
+        owned.nextShot = kAfterThrow;
+        m_nextIdle = kIdleAfterThrow;
+        --m_reserves[ammo];
+        return true;
+    }
+    if (owned.hasThrown) {
+        owned.hasThrown = false;
+        if (reserve(ammo) == 0) {
+            drop(owned.weapon, time, random); // RetireWeapon: none left to throw
+            return false;
+        }
+        const WeaponView& view = viewOf(weapon, owned);
+        m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = anyOf(view.drawSequences, random), .start = time.now};
+        m_nextIdle = kIdleAfterDraw;
+        return true;
+    }
+    idle(time, random);
+    return true;
 }
 
 auto Inventory::isShellReloaded(const OwnedWeapon& owned, const Weapon& weapon) const -> bool {

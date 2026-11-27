@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The HE grenade (docs/10, section 7.3), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3): its count the rounds of its ammo the player carries.
+
+id = "hegrenade"
+classname = "weapon_hegrenade"
+name = "HE Grenade"
+slot = "grenade"
+position = 1
+weight = 2
+maxSpeed = 250.0
+
+[purchase]
+buyers = "everyone"
+price = 300
+commands = ["hegren"]
+menu = { tab = "equipment", key = 4, picture = "gfx/vgui/hegrenade.tga" }
+
+[magazine] # its count is the rounds of it the player carries
+ammo = "HEGrenade"
+clipSize = 0
+
+[models]
+view = "models/v_hegrenade.mdl"
+player = "models/p_hegrenade.mdl"
+playerAnimation = "grenade"
+viewHand = "left"
+
+[view] # sequences of models/v_hegrenade.mdl
+drawSequences = [3] # deploy
+idles = [{ sequence = 0, wait = 12.5, share = 1.0 }] # idle, 10 to 15 seconds apart
+idlesWhenEmpty = true
+
+[throwing] # Explode3: RadiusDamage of 100, within 3.5 times it
+kind = "explosive"
+fuse = 1.5
+model = "models/w_hegrenade.mdl"
+pinSequence = 1 # pullpin
+throwSequence = 2 # throw
+gravity = 0.55
+friction = 0.7
+damage = 100.0
+radius = 350.0
+bounceSound = { files = ["weapons/he_bounce-1.wav"], channel = "item", volume = 0.25 }
+sound = { files = ["weapons/hegrenade-1.wav", "weapons/hegrenade-2.wav"], channel = "auto", volume = 1.0 }
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.0
+largeFlinch = false

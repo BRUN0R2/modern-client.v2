@@ -35,6 +35,10 @@ auto pathOf(TempSprite sprite, const BloodSprayLook& look) noexcept -> std::stri
     case TempSprite::BloodDrop:
     case TempSprite::Count:
         return look.dropSprite;
+    case TempSprite::Explosion:
+        return "sprites/zerogxplode.spr";
+    case TempSprite::SmokePuff:
+        return "sprites/gas_puff_01.spr";
     }
     std::unreachable();
 }
@@ -108,6 +112,54 @@ void TempEntities::sprayBlood(const BloodSpray& spray, const BloodSprayLook& loo
                                       .color = colorOf(palette, impact - 1),
                                       .amount = look.amount,
                                       .goesAt = now + nx::Seconds{life}});
+    }
+}
+
+void TempEntities::blowUp(nx::Vec3 position, std::optional<std::uint32_t> frames, nx::Seconds now) {
+    if (!frames || *frames == 0) {
+        return;
+    }
+    constexpr float kFramerate = 30.0F;
+    const nx::Seconds lasts{static_cast<float>(*frames) / kFramerate};
+    const auto fireball = [&](nx::Vec3 at, float scale) {
+        entities.push_back(TempEntity{.sprite = TempSprite::Explosion,
+                                      .origin = at,
+                                      .framerate = nx::PerSecond{kFramerate},
+                                      .lastFrame = static_cast<float>(*frames - 1),
+                                      .scale = nx::Scale{scale},
+                                      .color = {.red = 255, .green = 255, .blue = 255},
+                                      .amount = 255,
+                                      .goesAt = now + lasts,
+                                      .mode = nx::render::RenderMode::TransAdd});
+    };
+    // The first 20 over it at 2.5 times its size, the second near it at 3.
+    constexpr float kSpread = 64.0F;
+    fireball(position + nx::Vec3{.z = 20.0F}, 2.5F);
+    fireball(position + nx::Vec3{.x = (static_cast<float>(random.nextUnit()) * 2.0F - 1.0F) * kSpread,
+                                 .y = (static_cast<float>(random.nextUnit()) * 2.0F - 1.0F) * kSpread,
+                                 .z = 30.0F + (static_cast<float>(random.nextUnit()) * 5.0F)},
+             3.0F);
+}
+
+void TempEntities::smokeUp(nx::Vec3 position, nx::Seconds now) {
+    constexpr std::uint32_t kPuffs = 40;
+    constexpr float kRadius = 110.0F;
+    constexpr float kHeight = 90.0F;
+    constexpr nx::Seconds kLasts{20.0F};
+    for (std::uint32_t puff = 0; puff < kPuffs; ++puff) {
+        const float turn = static_cast<float>(random.nextUnit()) * 6.2831853F;
+        const float out = std::sqrt(static_cast<float>(random.nextUnit())) * kRadius;
+        const auto gray = static_cast<std::uint8_t>(150 + random.below(40));
+        entities.push_back(
+            TempEntity{.sprite = TempSprite::SmokePuff,
+                       .origin = position + nx::Vec3{.x = std::cos(turn) * out,
+                                                     .y = std::sin(turn) * out,
+                                                     .z = 16.0F + (static_cast<float>(random.nextUnit()) * kHeight)},
+                       .roll = nx::Degrees{static_cast<float>(random.nextUnit()) * 360.0F},
+                       .scale = nx::Scale{3.0F + (static_cast<float>(random.nextUnit()) * 1.5F)},
+                       .color = {.red = gray, .green = gray, .blue = gray},
+                       .amount = 235,
+                       .goesAt = now + kLasts + nx::Seconds{static_cast<float>(random.nextUnit()) * 2.0F}});
     }
 }
 

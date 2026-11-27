@@ -80,9 +80,16 @@ auto buyBoxes(GameState& game, Player& player, WeaponSlot slot) -> nx::Result<vo
 auto buyWeapon(GameState& game, Player& player, WeaponIndex asked) -> nx::Result<void, BuyRefusal> {
     const WeaponIndex weapon = game.content.weapons.madeFor(asked);
     const Weapon& sold = game.content.weapons.weapon(weapon);
-    auto price = weaponPriceFor(sold, buyerOf(game, player), player.inventory.has(weapon));
+    auto price = weaponPriceFor(sold, buyerOf(game, player), player.inventory.isFull(weapon));
     if (!price) {
         return std::unexpected{std::move(price.error())};
+    }
+    if (sold.throwing && sold.magazine) {
+        // A grenade is one more of its kind, kept with the others (BuyItem's ammo of it).
+        giveWeapon(game, player, weapon); // drawn when it is the first, one more of it either way
+        pay(game, player, *price, game.content.buying.sounds.weapon);
+        remember(game, player);
+        return {};
     }
     const nx::game::TickTime& time = nx::game::tickTimeOf(game.world);
     nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kPurchaseStream};

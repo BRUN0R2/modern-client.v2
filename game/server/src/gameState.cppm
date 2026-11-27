@@ -79,6 +79,19 @@ struct Player {
     CommandNumber randomSeed{};
     HitGroup lastHitGroup = HitGroup::Generic;
     float speedShare = 1.0F;
+    std::optional<Blinding> blinding{}; ///< In the tick: a flash blinded it.
+};
+
+/// A grenade thrown, flying or lying until it goes off.
+struct LiveGrenade {
+    WeaponIndex weapon{};
+    PlayerIndex thrower{};
+    nx::Vec3 origin{};
+    nx::Vec3 velocity{};
+    nx::GameTime goesOffAt{};
+    std::uint32_t bounces = 0;
+    bool isResting = false;
+    std::uint32_t serial = 0;
 };
 
 /// What a tick made, which every client is told of after it.
@@ -91,6 +104,8 @@ struct TickEvents {
     std::vector<BloodStream> bloodStreams{};
     std::vector<StreakSplash> streakSplashes{};
     std::vector<KillNotice> killNotices{};
+    std::vector<GrenadeBlast> grenadeBlasts{};
+    std::vector<PlayerSound> grenadeSounds{}; ///< Heard where they were made.
 
     /// As a tick starts: nothing yet.
     void clear() noexcept;
@@ -152,6 +167,8 @@ struct GameState {
     MapLightStyles lightStyles; ///< Owned by this game; copied into each client's snapshot.
     std::optional<MoveLists> moves{};
     EntityStateLists entityStates{};
+    std::vector<LiveGrenade> grenades{}; ///< Thrown, until they go off.
+    std::uint32_t grenadeSerial = 0;     ///< Of the next grenade thrown.
 };
 
 /// The entities' bodies of `game` as they are now, written if stale, in jobs if given.

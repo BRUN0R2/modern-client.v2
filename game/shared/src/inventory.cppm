@@ -70,6 +70,8 @@ struct OwnedWeapon {
     bool firesLeft{};       ///< Its left hand fires next (WPNSTATE_ELITE_LEFT).
     std::uint32_t zoomLevel{};  ///< Of its sights' fovs, from 1; 0 out of them (m_iFOV).
     std::uint32_t resumeZoom{}; ///< The level a shot took it out of, to look through again (m_iLastZoom).
+    bool isPinPulled{}; ///< A grenade whose pin is pulled, thrown once `+attack` goes up (m_flStartThrow).
+    bool hasThrown{};   ///< A grenade just thrown, drawn again or put away next (m_flReleaseThrow).
 };
 
 /// What a player's view model plays: a sequence of the weapon it holds, since when.
@@ -88,6 +90,7 @@ struct Shooter {
     nx::UnitsPerSecond horizontalSpeed{};
     bool isOnGround{};
     bool isDucked{};
+    nx::Vec3 velocity{}; ///< A grenade it throws goes as fast besides (ThrowGrenade's vecThrow).
     /// Whether `Attack` fires or strikes: not while the round is frozen, as the original's
     /// m_bCanShoot and IsFreezePeriod hold it back (`Attack2` still switches and stabs).
     bool canAttack = true;
@@ -159,9 +162,17 @@ using HolderMotions = nx::Flags<HolderMotion>;
 
 /// What a weapon did in a frame: the shots it fired, the blows it struck, and what its holder's model
 /// plays of it.
+/// A grenade thrown: which, from where, and how fast.
+struct Throw {
+    WeaponIndex weapon{};
+    nx::Vec3 origin{};
+    nx::Vec3 velocity{};
+};
+
 struct WeaponAttacks {
     std::vector<Shot> shots{};
     std::vector<Blow> blows{};
+    std::vector<Throw> throws{};
     HolderMotions motions{};
 };
 
@@ -229,6 +240,8 @@ public:
     }
     /// The player's weapons of `slot`, the newest first, as the original keeps them.
     [[nodiscard]] auto weaponsIn(WeaponSlot slot) const -> std::vector<WeaponIndex>;
+    /// Whether the player has `weapon` and, a grenade, as many of it as it may carry: none more to buy.
+    [[nodiscard]] auto isFull(WeaponIndex weapon) const -> bool;
     /// The rounds of `ammo` the player carries besides the clips.
     [[nodiscard]] auto reserve(std::string_view ammo) const noexcept -> std::uint32_t;
     /// What the player's view model plays; none while it holds no weapon.
@@ -270,6 +283,11 @@ private:
     /// shell's sequence, or puts a shell in, as far as it got.
     void reloadShells(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time,
                       nx::Random& random);
+    /// The held `owned`, a grenade `weapon`, in a frame, `isAttacking` as `+attack` is held: its pin pulled,
+    /// it thrown into `attacks` once the button is up, then drawn again, or put away once none is left.
+    /// Returns whether `owned` is still the player's.
+    auto throwFrame(OwnedWeapon& owned, const Weapon& weapon, bool isAttacking, const Shooter& shooter,
+                    const nx::game::TickTime& time, nx::Random& random, WeaponAttacks& attacks) -> bool;
     /// Whether the weapon `owned`, of `weapon`, is reloaded a shell at a time.
     [[nodiscard]] auto isShellReloaded(const OwnedWeapon& owned, const Weapon& weapon) const -> bool;
     /// The held `owned`, of `weapon`, fires the next of its last shot's follow-up rounds at `time`
